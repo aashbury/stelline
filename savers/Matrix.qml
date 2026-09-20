@@ -60,8 +60,9 @@ Item {
       }
       if (moved && col.head >= 0) {
         col.headGlyph = root.glyph()
-        // Mutate the glyph the head just left so the trail shimmers.
-        if (col.head > 0 && col.head - 1 < root.rows) col.mutate(col.head - 1)
+        // Now and then mutate the glyph the head just left so the trail
+        // shimmers. Every column text change is a relayout, so not every step.
+        if (col.head > 0 && col.head - 1 < root.rows && Math.random() < 0.25) col.mutate(col.head - 1)
       }
     }
   }

@@ -369,6 +369,7 @@ Item {
   }
   Process { id: terminalSpawnProcess; onExited: function(exitCode) { logEvent("process-exit", "terminal-spawn exitCode=" + exitCode) } }
   Process { id: terminalFocusProcess }
+  Process { id: killProcess }
   Timer {
     id: terminalSpawnDeadline
     interval: 5000
@@ -403,6 +404,9 @@ Item {
   // came up for idle counts as the screensaver: dismissing it is activity and
   // cancels the pending lock, exactly as the stock terminal saver does.
   function hideScreensaver(reason) {
+    // A terminal saver is a window; end it the way its own keypress does.
+    // Its closewindow event then cancels the idle cycle exactly as stock.
+    if (root.screensaverWindowCount > 0) runProcess(killProcess, "kill-terminal-saver", "pkill -x ttfx; pkill -f '[o]rg.omarchy.screensaver'; hyprctl eval 'hl.config({ cursor = { invisible = false } })' >/dev/null 2>&1 || hyprctl keyword cursor:invisible false >/dev/null 2>&1 || true")
     if (!root.overlayVisible) return
     var wasIdle = root.overlayReason === "idle"
     root.overlayVisible = false

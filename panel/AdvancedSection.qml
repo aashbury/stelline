@@ -136,6 +136,17 @@ Column {
   // ---- integration ----
   PanelSectionHeader { text: "INTEGRATION"; foreground: root.foreground; fontFamily: root.fontFamily }
 
+  Toggle {
+    width: parent.width
+    label: "System › Screensaver opens Stelline"
+    description: root.menuNote !== "" ? root.menuNote : "Super+Esc › Screensaver previews this saver instead of the stock terminal one (edits ~/.config/omarchy/extensions/omarchy-menu.jsonc)"
+    checked: root.svc ? root.svc.menuOverrideActive === true : false
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    onClicked: if (root.svc) { var r = root.svc.setMenuEntry(!checked); root.menuNote = r === "unparseable" ? "Refused: that file does not parse — fix it or paste the entry by hand" : "" }
+  }
+  property string menuNote: ""
+
   Text {
     width: parent.width
     textFormat: Text.PlainText
@@ -178,4 +189,16 @@ Column {
     }
   }
   readonly property string bindLine: 'o.bind("SUPER + CTRL + S", "Screensaver", "omarchy-shell stelline preview")'
+
+  Button {
+    visible: root.svc ? root.svc.setupDone === true : false
+    text: "Undo setup"
+    iconText: "󰕌"
+    bordered: true
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    fontSize: Style.font.caption
+    tooltipText: "Put the stock StayAwake indicator back and remove the menu entry"
+    onClicked: if (root.svc) root.svc.undoSetup()
+  }
 }

@@ -104,6 +104,7 @@ Column {
     cursorActive = false
     cursorIndex = rowSaverFirst
     if (svc && typeof svc.refreshThemes === "function") svc.refreshThemes()
+    if (svc && typeof svc.probeIpcOwner === "function") svc.probeIpcOwner()
   }
 
   function setEditing(key, on) {
@@ -281,6 +282,14 @@ Column {
         onHovered: function(h) { root.hoverRow(root.rowHero, h) }
       }
     }
+  }
+
+  SetupCard {
+    visible: root.svc ? root.svc.setupPending === true : false
+    width: parent.width
+    svc: root.svc
+    foreground: root.foreground
+    fontFamily: root.fontFamily
   }
 
   Row {
