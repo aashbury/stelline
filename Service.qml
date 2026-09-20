@@ -176,8 +176,9 @@ Item {
     stdout: SplitParser { onRead: function(line) { var t = String(line).trim(); if (t !== "") root.pickedPaths = root.pickedPaths.concat([t]) } }
     onExited: function(exitCode) {
       root.logEvent("pick-exit", root.pickKind + " exitCode=" + exitCode + " picked=" + root.pickedPaths.length)
-      if (exitCode === 0 && root.pickedPaths.length > 0) {
-        var draft = M.isPlainObject(root.importDraft) ? M.cloneJson(root.importDraft) : M.importDefaults()
+      // Only while the Add card is still open: a cancelled Add ignores a late answer.
+      if (exitCode === 0 && root.pickedPaths.length > 0 && M.isPlainObject(root.importDraft)) {
+        var draft = M.cloneJson(root.importDraft)
         draft.source = root.pickKind === "folder" ? "folder" : (root.pickKind === "video" ? "video" : "images")
         draft.paths = root.pickedPaths.slice()
         if (!draft.name || draft.nameAuto !== false) { draft.name = M.suggestName(draft.paths, "New saver"); draft.nameAuto = true }

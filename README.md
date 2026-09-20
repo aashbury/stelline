@@ -237,8 +237,10 @@ the stock service; `status` reports `"clone": "stelline"`.
 - Converting a clip to ASCII runs the stock transcoder once per frame: about a
   minute for 20 seconds of video. It runs in the background.
 - A described saver needs Claude Code (`claude` on the PATH) or
-  `ANTHROPIC_API_KEY`; the Add card hides the option otherwise. What comes back
-  is only as good as the model's drawing that day.
+  `ANTHROPIC_API_KEY`; the Add card hides the option otherwise. The model is
+  asked at low effort on purpose (at the default it deliberates over the grid
+  for minutes); an animation takes a minute or two. What comes back is only as
+  good as the model's drawing that day.
 - Pinned-effect terminal launching on more than one monitor follows the stock
   launcher's sequence but has only been tested on one.
 - Disabling the plugin leaves a harmless `{ "id": "omarchy.idle" }` entry in the

@@ -852,17 +852,19 @@ function importScript(spec, rootDir) {
     var frames = spec.animated ? Math.max(2, Math.min(60, Math.round(Number(spec.frames) || 12))) : 1
     lines.push(
       "prompt=" + q(aiPrompt(spec.prompt, frames)),
-      "out=''",
+      "out=''; why=''",
       "if command -v claude >/dev/null 2>&1; then",
-      "  out=$(timeout 300 claude -p \"$prompt\" --output-format text 2>/dev/null) || out=''",
+      // Low effort on purpose: at the default the model deliberates over the
+      // grid for minutes; at low it draws in seconds. No tools, no session.
+      "  out=$(timeout 600 env -u CLAUDECODE claude -p \"$prompt\" --output-format text --tools '' --no-session-persistence --effort low 2>\"$tmp/err\") || { out=''; why=$(tail -c 160 \"$tmp/err\" | tr -s '\\n ' ' '); }",
       "fi",
       "if [[ -z $out && -n ${ANTHROPIC_API_KEY:-} ]]; then",
-      "  body=$(jq -n --arg p \"$prompt\" '{model:\"claude-opus-5\", max_tokens:16000, fallbacks:\"default\", messages:[{role:\"user\", content:$p}]}')",
-      "  resp=$(curl -s --max-time 300 https://api.anthropic.com/v1/messages -H 'content-type: application/json' -H \"x-api-key: $ANTHROPIC_API_KEY\" -H 'anthropic-version: 2023-06-01' -H 'anthropic-beta: server-side-fallback-2026-07-01' -d \"$body\") || resp=''",
+      "  body=$(jq -n --arg p \"$prompt\" '{model:\"claude-opus-5\", max_tokens:16000, output_config:{effort:\"low\"}, fallbacks:\"default\", messages:[{role:\"user\", content:$p}]}')",
+      "  resp=$(curl -s --max-time 600 https://api.anthropic.com/v1/messages -H 'content-type: application/json' -H \"x-api-key: $ANTHROPIC_API_KEY\" -H 'anthropic-version: 2023-06-01' -H 'anthropic-beta: server-side-fallback-2026-07-01' -d \"$body\") || resp=''",
       "  [[ $(jq -r '.stop_reason // empty' <<<\"$resp\" 2>/dev/null) == refusal ]] && fail 'the model declined that description'",
       "  out=$(jq -r '[.content[]? | select(.type==\"text\") | .text] | join(\"\\n\")' <<<\"$resp\" 2>/dev/null) || out=''",
       "fi",
-      "[[ -n $out ]] || fail 'no model answered — install Claude Code or set ANTHROPIC_API_KEY'",
+      "[[ -n $out ]] || fail \"no model answered${why:+ — $why}\"",
       // Drop code fences, turn marker lines into form feeds, drop empty frames.
       "printf '%s\\n' \"$out\" | sed -e '/^```/d' -e 's/^" + FRAME_MARKER + "$/\\f/' > \"$dir/frames.txt\"",
       "[[ $(tr -d '\\f[:space:]' < \"$dir/frames.txt\" | wc -c) -gt 20 ]] || fail 'the answer had no art in it'",

@@ -28,6 +28,7 @@ BorderSurface {
   readonly property bool editing: nameField.activeFocus || textField.activeFocus || promptField.activeFocus
 
   onStepChanged: { style = "ascii"; animated = true; if (step === "confirm") nameField.text = draft && draft.name ? draft.name : "" }
+  Component.onCompleted: if (step === "confirm") nameField.text = draft && draft.name ? draft.name : ""
 
   function update(patch) {
     if (!svc) return
@@ -195,7 +196,7 @@ BorderSurface {
         width: parent.width
         textFormat: Text.PlainText
         wrapMode: Text.WordWrap
-        text: (root.ai === "cli" ? "Asks Claude Code on this machine" : "Uses your ANTHROPIC_API_KEY") + " — takes a minute; you get a notification when it is ready."
+        text: (root.ai === "cli" ? "Asks Claude Code on this machine" : "Uses your ANTHROPIC_API_KEY") + " — a minute or two; you get a notification when it is ready."
         color: root.dim
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
