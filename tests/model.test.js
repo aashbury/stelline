@@ -2,11 +2,10 @@ const test = require("node:test")
 const assert = require("node:assert/strict")
 const M = require("../StellineModel.js")
 
-test("defaults pick the wordmark and leave every situation disabled", () => {
+test("defaults pick the wordmark with no rules at all", () => {
   const d = M.defaults()
   assert.equal(d.saver, "wordmark")
-  assert.equal(d.situations.length, 3)
-  assert.ok(d.situations.every((s) => s.enabled === false))
+  assert.deepEqual(d.situations, [])
 })
 
 test("findEntry walks bar layout sections and plugins[]", () => {
@@ -160,4 +159,145 @@ test("menu override inserts before the final brace, survives a comment-only temp
   const back = M.menuRemoveOverride(out2)
   assert.ok(!M.menuHasOverride(back))
   assert.equal(M.jsoncParse(back)["system.screensaver"], undefined)
+})
+
+// ---- user savers ----
+
+const scanRow = (dir, json, extra) => JSON.stringify({ dir, json, files: ["saver.json", "001.txt", "002.txt"], folderFiles: [], thumb: "", ...(extra || {}) })
+
+test("parseScan turns saver folders into picker entries and rejects bad ids", () => {
+  const root = "/home/x/.config/omarchy/stelline/savers"
+  const nd = [
+    scanRow(root + "/robot-inc", { name: "Robot Inc.", kind: "ascii", pieces: ["001.txt", "002.txt"], play: "slideshow" }, { thumb: "AB\nCD\f" + "EF" }),
+    scanRow(root + "/dance", { name: "Dance", kind: "ascii", pieces: ["frames.txt"], play: "animation", fps: 12 }, { thumb: "x\n\fy" }),
+    scanRow(root + "/photos", { name: "Photos", kind: "image", folder: "/home/x/Pictures" }, { folderFiles: ["/home/x/Pictures/a.jpg", "/home/x/Pictures/notes.txt", "/home/x/Pictures/b.png"] }),
+    scanRow(root + "/clip", { name: "Clip", kind: "image", pieces: ["clip.gif"] }),
+    scanRow(root + "/half", { name: "Half", kind: "ascii", importing: true }),
+    scanRow(root + "/wordmark", { name: "Nope" }),
+    scanRow(root + "/Bad Id", { name: "Nope" }),
+    "garbage"
+  ].join("\n")
+  const list = M.parseScan(nd)
+  assert.deepEqual(list.map((s) => s.id), ["clip", "dance", "half", "photos", "robot-inc"])
+  const robot = list.find((s) => s.id === "robot-inc")
+  assert.equal(robot.kind, "series")
+  assert.equal(robot.file, "savers/Series.qml")
+  assert.deepEqual(robot.series.pieces, [root + "/robot-inc/001.txt", root + "/robot-inc/002.txt"])
+  assert.equal(robot.series.thumbArt, "AB\nCD")
+  assert.equal(robot.meta, "2 ASCII pieces")
+  const dance = list.find((s) => s.id === "dance")
+  assert.equal(dance.series.play, "animation")
+  assert.equal(dance.series.fps, 12)
+  assert.equal(dance.meta, "ASCII animation")
+  const photos = list.find((s) => s.id === "photos")
+  assert.deepEqual(photos.series.pieces, ["/home/x/Pictures/a.jpg", "/home/x/Pictures/b.png"])
+  assert.equal(photos.series.thumbImage, "/home/x/Pictures/a.jpg")
+  assert.equal(photos.meta, "2 pictures")
+  assert.equal(list.find((s) => s.id === "clip").meta, "animated picture")
+  assert.ok(list.find((s) => s.id === "half").series.importing)
+  // the registry sees them
+  assert.equal(M.saverById("robot-inc", list).name, "Robot Inc.")
+  assert.equal(M.saverFile("robot-inc", list), "savers/Series.qml")
+  assert.equal(M.saverById("robot-inc"), null)
+  assert.deepEqual(M.rotation(M.defaults(), list), ["wordmark", "clock", "matrix", "blank", "clip", "dance", "photos", "robot-inc"])
+  assert.equal(M.mergeSettings({ saver: "robot-inc" }, list).saver, "robot-inc")
+  assert.equal(M.mergeSettings({ saver: "robot-inc" }).saver, "wordmark")
+  assert.equal(M.mergeSettings({ savers: { "robot-inc": { dwellSec: 5 } } }).savers["robot-inc"].dwellSec, 5)
+  // an importing saver is never picked
+  assert.equal(M.pickSaver(M.mergeSettings({ saver: "half" }, list), null, "", 0, list), "wordmark")
+  assert.equal(M.pickSaver(M.defaults(), { saver: "half" }, "", 0, list), "wordmark")
+  assert.equal(M.pickSaver(M.defaults(), { saver: "dance" }, "", 0, list), "dance")
+})
+
+test("names, ids and frames", () => {
+  assert.equal(M.slugify("Robot Inc. (2026)"), "robot-inc-2026")
+  assert.equal(M.slugify("Clock"), "clock-2")
+  assert.equal(M.slugify("   "), "saver")
+  assert.equal(M.uniqueId("dance", ["dance", "dance-2"]), "dance-3")
+  assert.equal(M.suggestName(["/home/x/Pictures/robot_inc-logo.png"]), "Robot Inc Logo")
+  assert.equal(M.suggestName(["/home/x/Pictures/Robot Inc/a.png", "/home/x/Pictures/Robot Inc/b.png"]), "Robot Inc")
+  assert.equal(M.suggestName(["/home/x/Videos/wife-dancing"]), "Wife Dancing")
+  assert.equal(M.suggestName([], "New"), "New")
+  assert.deepEqual(M.splitFrames("a\n\fb\n\n\f\f  \fc"), ["a", "b", "c"])
+  assert.ok(M.isImagePath("/x/y.JPG"))
+  assert.ok(!M.isImagePath("/x/y.txt"))
+  assert.ok(M.isVideoPath("/x/y.mp4"))
+  assert.ok(!M.isVideoPath("/x/y.gif"))
+})
+
+test("import scripts: each source produces a self-contained bash pipeline", () => {
+  const root = "/home/x/.config/omarchy/stelline/savers"
+  const base = { ...M.importDefaults(), id: "robot-inc", name: "Robot Inc." }
+  const imgs = M.importScript({ ...base, source: "images", paths: ["/p/a.png", "/p/it's.png"] }, root)
+  assert.match(imgs, /^#!\/bin\/bash/)
+  assert.match(imgs, /omarchy-transcode-ascii "\$f" "\$dir\/\$n\.txt" --width "\$cols" --height "\$rows" --mode braille/)
+  assert.match(imgs, /'\/p\/it'\\''s\.png'/)
+  assert.match(imgs, /"importing":true/)
+  assert.match(imgs, /\.play="slideshow"/)
+  const asIs = M.importScript({ ...base, source: "folder", paths: ["/p/Robot Inc"], style: "image" }, root)
+  assert.match(asIs, /'\.folder=\$folder'/)
+  assert.doesNotMatch(asIs, /transcode/)
+  const vid = M.importScript({ ...base, source: "video", paths: ["/v/dance.mp4"], fps: 12, seconds: 15 }, root)
+  assert.match(vid, /ffmpeg -v error -y -i "\$src" -t 15 -vf "fps=12/)
+  assert.match(vid, /--no-trim/)
+  assert.match(vid, /\.play="animation" \| \.fps=12/)
+  const gif = M.importScript({ ...base, source: "video", paths: ["/v/dance.mp4"], style: "image" }, root)
+  assert.match(gif, /palettegen/)
+  assert.match(gif, /\.pieces=\["clip\.gif"\]/)
+  const txt = M.importScript({ ...base, source: "text", text: "Robot Inc." }, root)
+  assert.match(txt, /label:"\$text"/)
+  assert.match(txt, /--mode block/)
+  const ai = M.importScript({ ...base, source: "prompt", prompt: "a robot waving", animated: true, frames: 8 }, root)
+  assert.match(ai, /claude -p "\$prompt" --output-format text/)
+  assert.match(ai, /claude-opus-5/)
+  assert.match(ai, /server-side-fallback-2026-07-01/)
+  assert.match(ai, /\.fps=6/)
+  assert.match(M.aiPrompt("a robot waving", 8), /Produce 8 frames/)
+  assert.match(M.aiPrompt("a robot", 1), /Produce one piece/)
+  assert.equal(M.deleteScript("robot-inc", root), "d='/home/x/.config/omarchy/stelline/savers/robot-inc'; root='/home/x/.config/omarchy/stelline/savers'; [[ -d $d && $d == \"$root\"/* ]] && rm -rf -- \"$d\"; touch \"$root/.stamp\"")
+  assert.equal(M.deleteScript("../etc", root), null)
+  assert.equal(M.deleteScript("", root), null)
+  assert.match(M.scanScript(root), /saver\.json/)
+})
+
+test("rules: one per saver, conditions AND together, last one off removes it, labels read naturally", () => {
+  const ctx = { themeName: "nord" }
+  let list = M.setRuleCondition([], "dance", "night", true, ctx)
+  assert.equal(list.length, 1)
+  assert.deepEqual(list[0], { id: "rule-dance", enabled: true, when: { night: { from: "22:00", to: "07:00" } }, saver: "dance" })
+  list = M.setRuleCondition(list, "dance", "battery", true, ctx)
+  assert.deepEqual(Object.keys(list[0].when), ["night", "battery"])
+  assert.ok(M.ruleHas(list[0], "battery"))
+  list = M.patchRuleCondition(list, "dance", "night", { from: "17:00", to: "08:30" })
+  assert.equal(M.situationLabel(list[0]), "Night 17:00–08:30 · On battery")
+  list = M.setRuleCondition(list, "dance", "night", false, ctx)
+  assert.deepEqual(Object.keys(list[0].when), ["battery"])
+  list = M.setRuleCondition(list, "dance", "battery", false, ctx)
+  assert.deepEqual(list, [])
+  // a disabled rule left over from Advanced reads as no conditions; enabling one starts clean
+  const stale = [{ id: "x", enabled: false, when: { theme: { name: "hackerman" }, battery: {} }, saver: "matrix" }]
+  assert.ok(!M.ruleHas(stale[0], "theme"))
+  const on = M.setRuleCondition(stale, "matrix", "night", true, ctx)
+  assert.deepEqual(Object.keys(on[0].when), ["night"])
+  assert.equal(on[0].enabled, true)
+  // second saver's rule appends after the first
+  const two = M.setRuleCondition(list.concat(on), "blank", "battery", true, ctx)
+  assert.equal(two[1].saver, "blank")
+  // labels
+  const cfg = M.mergeSettings({ saver: "blank", situations: on })
+  assert.equal(M.playsLabel(cfg, "blank"), "usually")
+  assert.equal(M.playsLabel(cfg, "matrix"), "night 22:00–07:00")
+  assert.equal(M.playsLabel(cfg, "clock"), "")
+  const both = M.mergeSettings({ saver: "matrix", situations: on })
+  assert.equal(M.playsLabel(both, "matrix"), "usually · night 22:00–07:00")
+  const sh = M.mergeSettings({ shuffle: true, shuffleFrom: ["clock"], situations: on })
+  assert.equal(M.playsLabel(sh, "clock"), "in the shuffle")
+  assert.equal(M.playsLabel(sh, "blank"), "")
+  // forgetting a saver clears every reference
+  const fake = [{ id: "dance", name: "Dance", kind: "series", file: "savers/Series.qml", series: {} }]
+  const patch = M.forgetSaver(M.mergeSettings({ saver: "dance", shuffleFrom: ["dance", "clock"], situations: [{ id: "r", enabled: true, when: { night: {} }, saver: "dance" }, { id: "t", enabled: true, when: { battery: {} }, saver: "dance", screensaver: 60 }], savers: { dance: { fps: 3 } } }, fake), "dance")
+  assert.equal(patch.saver, "wordmark")
+  assert.deepEqual(patch.shuffleFrom, ["clock"])
+  assert.deepEqual(patch.situations, [{ id: "t", enabled: true, when: { battery: {} }, screensaver: 60 }])
+  assert.equal(patch.savers.dance, undefined)
 })

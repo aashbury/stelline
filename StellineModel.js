@@ -14,21 +14,34 @@ var SAVERS = [
   { id: "terminal", name: "Terminal", glyph: "",  meta: "stock ttfx in a terminal", file: "",                   kind: "external" }
 ]
 
-function saverById(id) {
-  for (var i = 0; i < SAVERS.length; i++) if (SAVERS[i].id === id) return SAVERS[i]
+// Every saver the user can pick: the built-ins, then their own (imported
+// pictures, clips, text and generated art — "series"). User savers are
+// passed in explicitly: QML gives each importer of this file its own copy,
+// so module state would not be shared between the service and the panel.
+function allSavers(userSavers) {
+  return SAVERS.concat(Array.isArray(userSavers) ? userSavers : [])
+}
+
+function saverById(id, userSavers) {
+  var list = allSavers(userSavers)
+  for (var i = 0; i < list.length; i++) if (list[i].id === id) return list[i]
   return null
 }
 
-function saverFile(id) {
-  var s = saverById(id)
+function saverFile(id, userSavers) {
+  var s = saverById(id, userSavers)
   return s ? s.file : ""
+}
+
+function isNativeSaver(s) {
+  return !!s && (s.kind === "native" || s.kind === "series")
 }
 
 // The savers the overlay may step through with Right / `n`: the shuffle set
 // when shuffle is on, otherwise every native saver. Terminal is never in the
-// rotation — it lives in its own window.
-function rotation(cfg) {
-  var natives = SAVERS.filter(function(s) { return s.kind === "native" }).map(function(s) { return s.id })
+// rotation — it lives in its own window. Savers still importing are skipped.
+function rotation(cfg, userSavers) {
+  var natives = allSavers(userSavers).filter(function(s) { return isNativeSaver(s) && !(s.series && s.series.importing) }).map(function(s) { return s.id })
   if (cfg && cfg.shuffle && Array.isArray(cfg.shuffleFrom)) {
     var picked = cfg.shuffleFrom.filter(function(id) { return natives.indexOf(id) !== -1 })
     if (picked.length) return picked
@@ -36,8 +49,8 @@ function rotation(cfg) {
   return natives
 }
 
-function nextSaver(cfg, current) {
-  var ids = rotation(cfg)
+function nextSaver(cfg, current, userSavers) {
+  var ids = rotation(cfg, userSavers)
   var at = ids.indexOf(current)
   return ids[(at + 1) % ids.length]
 }
@@ -56,11 +69,7 @@ function defaults() {
       blank: {},
       terminal: { effects: [] }
     },
-    situations: [
-      { id: "on-battery", enabled: false, when: { battery: { below: 100 } }, saver: "blank", screensaver: 90, lock: 180 },
-      { id: "night", enabled: false, when: { night: { from: "22:00", to: "07:00" } }, saver: "clock" },
-      { id: "theme", enabled: false, when: { theme: { name: "hackerman" } }, saver: "matrix" }
-    ],
+    situations: [],
     card: { enabled: true, corner: "bottom-right", detail: "counts", showAgent: true, maxApps: 4 },
     integration: { menuEntry: false },
     setup: { done: false, version: 0, indicatorsItemsBefore: null }
@@ -123,7 +132,7 @@ function coerce(value, fallback) {
 
 // Deep merge of an entry onto the defaults: objects merge one level down
 // (per-saver settings), arrays replace, scalars coerce.
-function mergeSettings(entry) {
+function mergeSettings(entry, userSavers) {
   var out = defaults()
   var src = isPlainObject(entry) ? entry : {}
   for (var key in out) {
@@ -136,6 +145,9 @@ function mergeSettings(entry) {
           var merged = cloneJson(subFallback)
           for (var leaf in src[key][sub]) merged[leaf] = coerce(src[key][sub][leaf], subFallback[leaf])
           fallback[sub] = merged
+        } else if (subFallback === undefined && key === "savers" && isPlainObject(src[key][sub])) {
+          // A user saver's knobs: no static default to coerce against.
+          fallback[sub] = cloneJson(src[key][sub])
         } else {
           fallback[sub] = coerce(src[key][sub], subFallback)
         }
@@ -144,7 +156,9 @@ function mergeSettings(entry) {
       out[key] = coerce(src[key], fallback)
     }
   }
-  if (!saverById(out.saver)) out.saver = "wordmark"
+  // An unknown default saver (typo, or a user saver deleted from disk) falls
+  // back to the wordmark — but only once the user savers are known.
+  if (!saverById(out.saver, userSavers)) out.saver = "wordmark"
   return out
 }
 
@@ -227,21 +241,28 @@ function activeSituation(list, ctx) {
   return null
 }
 
-function situationLabel(s) {
-  if (!isPlainObject(s) || !isPlainObject(s.when)) return ""
-  if (s.when.battery) {
-    var b = s.when.battery.below
+function conditionLabel(key, c) {
+  if (key === "battery") {
+    var b = c && c.below
     return b !== undefined && b !== null && Number(b) < 100 ? "Battery below " + Number(b) + "%" : "On battery"
   }
-  if (s.when.night) return "Night " + (s.when.night.from || "?") + "–" + (s.when.night.to || "?")
-  if (s.when.theme) return "Theme " + (s.when.theme.name || "?")
-  return Object.keys(s.when).join(", ")
+  if (key === "night") return "Night " + ((c && c.from) || "?") + "–" + ((c && c.to) || "?")
+  if (key === "theme") return "Theme " + ((c && c.name) || "?")
+  return key
 }
 
-function situationEffect(s) {
+// Every condition of a rule, joined — they all have to hold.
+function situationLabel(s) {
+  if (!isPlainObject(s) || !isPlainObject(s.when)) return ""
+  var keys = Object.keys(s.when)
+  if (keys.length === 0) return ""
+  return keys.map(function(k) { return conditionLabel(k, s.when[k]) }).join(" · ")
+}
+
+function situationEffect(s, userSavers) {
   if (!isPlainObject(s)) return ""
   var parts = []
-  var saver = s.saver ? saverById(s.saver) : null
+  var saver = s.saver ? saverById(s.saver, userSavers) : null
   if (saver) parts.push(saver.name)
   var hasScr = s.screensaver !== undefined && s.screensaver !== null && s.screensaver !== ""
   var hasLock = s.lock !== undefined && s.lock !== null && s.lock !== ""
@@ -525,15 +546,437 @@ function firstTimeout(eff) {
 
 // Which saver comes up for this activation. A situation override wins; with
 // shuffle on, a random member of the rotation other than the last one shown.
-function pickSaver(cfg, situation, last, random) {
+function pickSaver(cfg, situation, last, random, userSavers) {
   var c = cfg || defaults()
-  if (isPlainObject(situation) && situation.saver && saverById(situation.saver)) return situation.saver
-  if (!c.shuffle) return saverById(c.saver) ? c.saver : "wordmark"
-  var ids = rotation(c)
+  var ready = function(id) { var s = saverById(id, userSavers); return !!s && !(s.series && s.series.importing) }
+  if (isPlainObject(situation) && situation.saver && ready(situation.saver)) return situation.saver
+  if (!c.shuffle) return ready(c.saver) ? c.saver : "wordmark"
+  var ids = rotation(c, userSavers)
   var pool = ids.filter(function(id) { return id !== last })
   if (pool.length === 0) pool = ids
   var r = typeof random === "number" ? random : Math.random()
   return pool[Math.min(pool.length - 1, Math.floor(r * pool.length))]
+}
+
+// ---- user savers ("series") ----------------------------------------------------
+
+// Where the user's own screensavers live, one folder each with a saver.json
+// beside the pieces it plays. A folder is a self-contained bundle: copy it to
+// another machine and it works there.
+var USER_SAVERS_SUBDIR = ".config/omarchy/stelline/savers"
+
+var IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "gif", "svg", "bmp", "avif"]
+var VIDEO_EXTENSIONS = ["mp4", "mov", "mkv", "webm", "avi", "m4v", "gif"]
+
+function extensionOf(path) {
+  var m = /\.([A-Za-z0-9]+)$/.exec(String(path || ""))
+  return m ? m[1].toLowerCase() : ""
+}
+
+function isImagePath(path) { return IMAGE_EXTENSIONS.indexOf(extensionOf(path)) !== -1 }
+function isVideoPath(path) { return VIDEO_EXTENSIONS.indexOf(extensionOf(path)) !== -1 && extensionOf(path) !== "gif" }
+
+function baseName(path) {
+  var s = String(path || "").replace(/\/+$/, "")
+  var at = s.lastIndexOf("/")
+  return at === -1 ? s : s.substring(at + 1)
+}
+
+function stripExtension(name) {
+  return String(name || "").replace(/\.[A-Za-z0-9]+$/, "")
+}
+
+// "Robot Inc. (2026)" → "robot-inc-2026". Built-in ids are reserved.
+function slugify(name) {
+  var s = String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
+  if (s === "") s = "saver"
+  if (SAVERS.some(function(b) { return b.id === s })) s = s + "-2"
+  return s
+}
+
+function uniqueId(base, existingIds) {
+  var taken = Array.isArray(existingIds) ? existingIds : []
+  if (taken.indexOf(base) === -1) return base
+  for (var n = 2; n < 1000; n++) if (taken.indexOf(base + "-" + n) === -1) return base + "-" + n
+  return base + "-" + Date.now().toString(36)
+}
+
+// A name for what was picked: the folder's name, the single file's name, or
+// the common folder of several files.
+function suggestName(paths, fallback) {
+  var list = Array.isArray(paths) ? paths : []
+  if (list.length === 0) return fallback || "New saver"
+  var raw = list.length === 1 ? stripExtension(baseName(list[0])) : baseName(list[0].substring(0, list[0].lastIndexOf("/")))
+  var words = raw.replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim()
+  if (words === "") return fallback || "New saver"
+  return words.split(" ").map(function(w) { return w.charAt(0).toUpperCase() + w.slice(1) }).join(" ")
+}
+
+// Frames inside one piece file are separated by form feeds.
+function splitFrames(text) {
+  var parts = String(text || "").split("\f")
+  var out = []
+  for (var i = 0; i < parts.length; i++) {
+    var t = parts[i].replace(/^\n+/, "").replace(/\s+$/, "")
+    if (t !== "") out.push(t)
+  }
+  return out
+}
+
+// One scanner line → a picker entry, or null when the folder is not a saver.
+// `row` is what the scan script emits: { dir, json, files, folderFiles, thumb }.
+function userSaverFromScan(row) {
+  if (!isPlainObject(row) || !isPlainObject(row.json) || typeof row.dir !== "string") return null
+  var j = row.json
+  var id = baseName(row.dir)
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(id) || SAVERS.some(function(b) { return b.id === id })) return null
+  var kind = j.kind === "image" ? "image" : "ascii"
+  var files = Array.isArray(row.files) ? row.files : []
+  var pieces = []
+  if (kind === "image" && typeof j.folder === "string" && j.folder !== "") {
+    pieces = (Array.isArray(row.folderFiles) ? row.folderFiles : []).filter(isImagePath)
+  } else if (Array.isArray(j.pieces)) {
+    for (var i = 0; i < j.pieces.length; i++) {
+      var pc = String(j.pieces[i] || "")
+      if (pc === "") continue
+      pieces.push(pc.charAt(0) === "/" ? pc : row.dir + "/" + pc)
+    }
+  } else if (kind === "ascii") {
+    pieces = files.filter(function(f) { return /\.txt$/.test(f) }).sort().map(function(f) { return row.dir + "/" + f })
+  }
+  var frames = kind === "ascii" ? splitFrames(row.thumb) : []
+  var name = typeof j.name === "string" && j.name.trim() !== "" ? j.name.trim() : suggestName([row.dir])
+  var importing = j.importing === true
+  var error = typeof j.error === "string" ? j.error : ""
+  var play = j.play === "animation" ? "animation" : "slideshow"
+  var meta
+  if (importing) meta = "importing…"
+  else if (error !== "") meta = "import failed"
+  else if (kind === "image") meta = pieces.length === 1 ? (extensionOf(pieces[0]) === "gif" ? "animated picture" : "one picture") : pieces.length + " pictures"
+  else if (play === "animation") meta = "ASCII animation"
+  else meta = pieces.length === 1 ? "ASCII art" : pieces.length + " ASCII pieces"
+  return {
+    id: id,
+    name: name,
+    glyph: kind === "image" ? "󰋩" : (play === "animation" ? "󰕧" : "󰊄"),
+    meta: meta,
+    file: "savers/Series.qml",
+    kind: "series",
+    series: {
+      dir: row.dir,
+      kind: kind,
+      pieces: pieces,
+      play: play,
+      fps: isFinite(Number(j.fps)) && Number(j.fps) > 0 ? Number(j.fps) : 10,
+      dwellSec: isFinite(Number(j.dwellSec)) && Number(j.dwellSec) > 0 ? Number(j.dwellSec) : 12,
+      importing: importing,
+      error: error,
+      thumbArt: frames.length ? frames[0] : "",
+      thumbImage: kind === "image" && pieces.length ? pieces[0] : "",
+      source: isPlainObject(j.source) ? j.source : {}
+    }
+  }
+}
+
+function parseScan(ndjson) {
+  var out = []
+  var lines = String(ndjson || "").split("\n")
+  for (var i = 0; i < lines.length; i++) {
+    var line = lines[i].trim()
+    if (line === "") continue
+    var row
+    try { row = JSON.parse(line) } catch (e) { continue }
+    var s = userSaverFromScan(row)
+    if (s) out.push(s)
+  }
+  out.sort(function(a, b) { return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : (a.name.toLowerCase() > b.name.toLowerCase() ? 1 : 0) })
+  return out
+}
+
+// The bash that lists every user saver as one JSON line each. `files` and a
+// folder's pictures come along so the panel never has to touch the disk.
+function scanScript(rootDir) {
+  var root = shellQuote(rootDir)
+  return [
+    "root=" + root,
+    "shopt -s nullglob",
+    "for d in \"$root\"/*/; do",
+    "  d=${d%/}; f=\"$d/saver.json\"; [[ -f $f ]] || continue",
+    "  files=$(ls -1 \"$d\" 2>/dev/null | jq -R . | jq -sc .)",
+    "  folder=$(jq -r '.folder // empty' \"$f\" 2>/dev/null)",
+    "  folderFiles='[]'",
+    "  if [[ -n $folder && -d $folder ]]; then folderFiles=$(find \"$folder\" -maxdepth 1 -type f \\( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' -o -iname '*.gif' -o -iname '*.svg' -o -iname '*.bmp' -o -iname '*.avif' \\) 2>/dev/null | sort | jq -R . | jq -sc .); fi",
+    "  thumb=''",
+    "  if [[ $(jq -r '.kind // \"ascii\"' \"$f\") != image ]]; then",
+    "    first=$(jq -r '.pieces[0] // empty' \"$f\" 2>/dev/null); [[ -n $first ]] || first=$(ls -1 \"$d\"/*.txt 2>/dev/null | head -n1)",
+    "    [[ $first == /* ]] || first=\"$d/$first\"",
+    "    [[ -f $first ]] && thumb=$(head -c 12000 \"$first\")",
+    "  fi",
+    "  jq -c --arg dir \"$d\" --argjson files \"$files\" --argjson folderFiles \"$folderFiles\" --arg thumb \"$thumb\" '{dir:$dir, files:$files, folderFiles:$folderFiles, thumb:$thumb, json:.}' \"$f\" 2>/dev/null || echo \"{\\\"dir\\\":$(jq -Rn --arg d \"$d\" '$d'),\\\"json\\\":{\\\"error\\\":\\\"saver.json does not parse\\\"}}\"",
+    "done",
+    ""
+  ].join("\n")
+}
+
+// ---- import -----------------------------------------------------------------------
+
+// What the panel collects before Create. `source`: images | folder | video | text | prompt.
+// `style`: ascii (theme-coloured text art) | image (the pictures as they are).
+function importDefaults() {
+  return { id: "", name: "", source: "images", paths: [], text: "", prompt: "", style: "ascii", fps: 10, seconds: 20, animated: true, frames: 12 }
+}
+
+// Transcoder geometry: braille cells are 2×4 pixels, so 160×64 cells is a
+// 320×256 source — plenty for a screen, cheap to paint.
+var ASCII_COLUMNS = 160
+var ASCII_ROWS = 64
+
+function metaJson(spec, extra) {
+  var j = { name: spec.name, kind: spec.style === "image" ? "image" : "ascii", source: { type: spec.source }, created: Math.floor(Date.now() / 1000) }
+  if (spec.source === "images" || spec.source === "video") j.source.paths = spec.paths
+  if (spec.source === "folder") j.source.paths = spec.paths
+  if (spec.source === "text") j.source.text = spec.text
+  if (spec.source === "prompt") j.source.prompt = spec.prompt
+  for (var k in (extra || {})) j[k] = extra[k]
+  return JSON.stringify(j)
+}
+
+// The prompt for a described saver: frames separated by a marker line, so the
+// answer parses without depending on any one model's formatting habits.
+var FRAME_MARKER = "---FRAME---"
+
+function aiPrompt(description, frames) {
+  var n = Math.max(1, Math.min(60, Math.round(Number(frames) || 1)))
+  var lines = [
+    "Make ASCII art for a screensaver. Subject: " + String(description || "").trim(),
+    "",
+    n > 1
+      ? "Produce " + n + " frames of a looping animation. Every frame must be the same size: the same number of lines, every line padded with spaces to the same width, so the frames line up when swapped in place."
+      : "Produce one piece.",
+    "Use a monospace grid about 60 columns wide and 20 to 28 lines tall. Plain ASCII characters, and Unicode block (█▀▄▌▐░▒▓) and braille (⠁…⣿) characters are all fine; use what draws the subject best.",
+    n > 1 ? "Separate frames with a line containing only " + FRAME_MARKER + "." : "",
+    "Output only the art. No title, no explanation, no code fences."
+  ]
+  return lines.filter(function(l) { return l !== undefined }).join("\n")
+}
+
+// The bash that builds one saver, written by the service to a file and run
+// in the background. Everything lands under `dir`; saver.json is written
+// first with importing:true (the tile appears at once) and rewritten at the
+// end with the pieces, or with an error the panel shows.
+function importScript(spec, rootDir) {
+  var id = String(spec.id)
+  var dir = rootDir + "/" + id
+  var q = shellQuote
+  var notify = function(glyph, text) { return "omarchy-notification-send -g " + q(glyph) + " " + q("Stelline") + " " + q(text) + " >/dev/null 2>&1 || true" }
+  var lines = [
+    "#!/bin/bash",
+    "# Generated by Stelline for one import; safe to delete.",
+    "set -u",
+    "root=" + q(rootDir),
+    "dir=" + q(dir),
+    "mkdir -p \"$dir\" || exit 1",
+    "tmp=$(mktemp -d)",
+    "fail() { printf %s " + q(metaJson(spec, { error: "__MSG__" })).replace("__MSG__", "'\"$1\"'") + " > \"$dir/saver.json\"; touch \"$root/.stamp\"; " + notify("󰀦", "__MSG__").replace("__MSG__", "'\"$1\"'") + "; rm -rf \"$tmp\"; exit 1; }",
+    "trap 'rm -rf \"$tmp\"' EXIT",
+    "printf %s " + q(metaJson(spec, { importing: true })) + " > \"$dir/saver.json\"",
+    "touch \"$root/.stamp\"",
+    "cols=" + ASCII_COLUMNS + "; rows=" + ASCII_ROWS
+  ]
+  var finish = function(extraJq) {
+    return "jq -c " + (extraJq || ".") + " <<<" + q(metaJson(spec, {})) + " > \"$dir/saver.json\" || fail 'could not write saver.json'"
+  }
+  var listTxt = "pieces=$(ls -1 \"$dir\"/*.txt 2>/dev/null | xargs -rn1 basename | jq -R . | jq -sc .); [[ $pieces != '[]' ]] || fail 'nothing could be converted'"
+  var paths = (spec.paths || []).map(q).join(" ")
+  var style = spec.style === "image" ? "image" : "ascii"
+
+  if (spec.source === "images" || spec.source === "folder") {
+    lines.push("srcs=()")
+    if (spec.source === "folder") {
+      lines.push("while IFS= read -r f; do srcs+=(\"$f\"); done < <(find " + paths + " -maxdepth 1 -type f \\( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' -o -iname '*.gif' -o -iname '*.svg' -o -iname '*.bmp' -o -iname '*.avif' \\) 2>/dev/null | sort)")
+    } else {
+      lines.push("for f in " + paths + "; do [[ -f $f ]] && srcs+=(\"$f\"); done")
+    }
+    lines.push("(( ${#srcs[@]} > 0 )) || fail 'no pictures found'")
+    if (style === "image") {
+      if (spec.source === "folder") lines.push(finish("--arg folder " + paths + " '.folder=$folder'"))
+      else lines.push("pieces=$(printf '%s\\n' \"${srcs[@]}\" | jq -R . | jq -sc .)", finish("--argjson pieces \"$pieces\" '.pieces=$pieces'"))
+    } else {
+      lines.push(
+        "i=0",
+        "for f in \"${srcs[@]}\"; do",
+        "  i=$((i+1)); n=$(printf %03d \"$i\")",
+        "  if [[ ${f,,} == *.gif ]]; then magick \"$f[0]\" \"$tmp/$n.png\" 2>/dev/null && f=\"$tmp/$n.png\"; fi",
+        "  omarchy-transcode-ascii \"$f\" \"$dir/$n.txt\" --width \"$cols\" --height \"$rows\" --mode braille >/dev/null 2>&1 || echo \"skipped $f\" >&2",
+        "done",
+        listTxt,
+        finish("--argjson pieces \"$pieces\" '.pieces=$pieces | .play=\"slideshow\"'")
+      )
+    }
+  } else if (spec.source === "video") {
+    var fps = Math.max(2, Math.min(24, Math.round(Number(spec.fps) || 10)))
+    var secs = Math.max(1, Math.min(120, Math.round(Number(spec.seconds) || 20)))
+    lines.push("src=" + paths, "[[ -f $src ]] || fail 'clip not found'")
+    if (style === "image") {
+      lines.push(
+        "ffmpeg -v error -y -i \"$src\" -t " + secs + " -vf \"fps=" + Math.min(fps, 15) + ",scale=960:-2:flags=lanczos,split[a][b];[a]palettegen=max_colors=128[p];[b][p]paletteuse=dither=bayer:bayer_scale=3\" \"$dir/clip.gif\" || fail 'ffmpeg could not read the clip'",
+        finish("'.pieces=[\"clip.gif\"] | .play=\"animation\"'")
+      )
+    } else {
+      lines.push(
+        "ffmpeg -v error -y -i \"$src\" -t " + secs + " -vf \"fps=" + fps + ",scale=$((cols*2)):-2:flags=area\" \"$tmp/f%05d.png\" || fail 'ffmpeg could not read the clip'",
+        "shopt -s nullglob; frames=(\"$tmp\"/f*.png); (( ${#frames[@]} > 0 )) || fail 'no frames in that clip'",
+        ": > \"$dir/frames.txt\"",
+        "for f in \"${frames[@]}\"; do",
+        "  omarchy-transcode-ascii \"$f\" \"$tmp/frame.txt\" --width \"$cols\" --height \"$rows\" --mode braille --no-trim >/dev/null 2>&1 || continue",
+        "  cat \"$tmp/frame.txt\" >> \"$dir/frames.txt\"; printf '\\f' >> \"$dir/frames.txt\"",
+        "done",
+        "[[ -s \"$dir/frames.txt\" ]] || fail 'the frames could not be converted'",
+        finish("'.pieces=[\"frames.txt\"] | .play=\"animation\" | .fps=" + fps + "'")
+      )
+    }
+  } else if (spec.source === "text") {
+    lines.push(
+      "text=" + q(String(spec.text || "").trim()),
+      "[[ -n $text ]] || fail 'no text given'",
+      // Black on white: the transcoder treats dark pixels as the subject.
+      "font=$(magick -list font 2>/dev/null | awk '/^ *Font: /{print $2}' | grep -m1 -iE 'ExtraBold|Black|Heavy|Bold' || true)",
+      "magick -background white -fill black ${font:+-font \"$font\"} -pointsize 220 label:\"$text\" \"$tmp/text.png\" 2>/dev/null || fail 'could not draw the text'",
+      "omarchy-transcode-ascii \"$tmp/text.png\" \"$dir/001.txt\" --width \"$cols\" --height 40 --mode block >/dev/null 2>&1 || fail 'could not convert the text'",
+      finish("'.pieces=[\"001.txt\"] | .play=\"slideshow\"'")
+    )
+  } else if (spec.source === "prompt") {
+    var frames = spec.animated ? Math.max(2, Math.min(60, Math.round(Number(spec.frames) || 12))) : 1
+    lines.push(
+      "prompt=" + q(aiPrompt(spec.prompt, frames)),
+      "out=''",
+      "if command -v claude >/dev/null 2>&1; then",
+      "  out=$(timeout 300 claude -p \"$prompt\" --output-format text 2>/dev/null) || out=''",
+      "fi",
+      "if [[ -z $out && -n ${ANTHROPIC_API_KEY:-} ]]; then",
+      "  body=$(jq -n --arg p \"$prompt\" '{model:\"claude-opus-5\", max_tokens:16000, fallbacks:\"default\", messages:[{role:\"user\", content:$p}]}')",
+      "  resp=$(curl -s --max-time 300 https://api.anthropic.com/v1/messages -H 'content-type: application/json' -H \"x-api-key: $ANTHROPIC_API_KEY\" -H 'anthropic-version: 2023-06-01' -H 'anthropic-beta: server-side-fallback-2026-07-01' -d \"$body\") || resp=''",
+      "  [[ $(jq -r '.stop_reason // empty' <<<\"$resp\" 2>/dev/null) == refusal ]] && fail 'the model declined that description'",
+      "  out=$(jq -r '[.content[]? | select(.type==\"text\") | .text] | join(\"\\n\")' <<<\"$resp\" 2>/dev/null) || out=''",
+      "fi",
+      "[[ -n $out ]] || fail 'no model answered — install Claude Code or set ANTHROPIC_API_KEY'",
+      // Drop code fences, turn marker lines into form feeds, drop empty frames.
+      "printf '%s\\n' \"$out\" | sed -e '/^```/d' -e 's/^" + FRAME_MARKER + "$/\\f/' > \"$dir/frames.txt\"",
+      "[[ $(tr -d '\\f[:space:]' < \"$dir/frames.txt\" | wc -c) -gt 20 ]] || fail 'the answer had no art in it'",
+      finish("'.pieces=[\"frames.txt\"] | .play=" + (frames > 1 ? "\"animation\" | .fps=6" : "\"slideshow\"") + "'")
+    )
+  } else {
+    lines.push("fail 'unknown source'")
+  }
+  lines.push("touch \"$root/.stamp\"", notify("󱄄", String(spec.name || id) + " is ready"), "exit 0", "")
+  return lines.join("\n")
+}
+
+// Remove one user saver's folder. The path is rebuilt from the id here, never
+// taken from the caller, so nothing outside the savers root can be named.
+function deleteScript(id, rootDir) {
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(String(id))) return null
+  var dir = rootDir + "/" + id
+  return "d=" + shellQuote(dir) + "; root=" + shellQuote(rootDir) + "; [[ -d $d && $d == \"$root\"/* ]] && rm -rf -- \"$d\"; touch \"$root/.stamp\""
+}
+
+// ---- per-saver rules ------------------------------------------------------------------
+
+// The tile view of situations: a saver has at most one rule, the first
+// situation that points at it. Its conditions AND together.
+var RULE_KEYS = ["night", "battery", "theme"]
+
+function ruleIndexFor(situations, saverId) {
+  if (!Array.isArray(situations)) return -1
+  for (var i = 0; i < situations.length; i++) if (isPlainObject(situations[i]) && situations[i].saver === saverId) return i
+  return -1
+}
+
+function ruleFor(situations, saverId) {
+  var at = ruleIndexFor(situations, saverId)
+  return at === -1 ? null : situations[at]
+}
+
+function ruleHas(rule, key) {
+  return isPlainObject(rule) && rule.enabled === true && isPlainObject(rule.when) && key in rule.when
+}
+
+function defaultCondition(key, ctx) {
+  if (key === "night") return { from: "22:00", to: "07:00" }
+  if (key === "battery") return { below: 100 }
+  if (key === "theme") return { name: ctx && ctx.themeName ? String(ctx.themeName) : "" }
+  return {}
+}
+
+// Turn one condition on or off for a saver. Turning the last one off removes
+// the rule; turning one on for a saver without a rule appends one (later
+// rules yield to earlier ones — first match wins).
+function setRuleCondition(situations, saverId, key, on, ctx) {
+  var list = Array.isArray(situations) ? cloneJson(situations) : []
+  var at = ruleIndexFor(list, saverId)
+  if (on) {
+    if (at === -1) {
+      list.push({ id: "rule-" + saverId, enabled: true, when: {}, saver: saverId })
+      at = list.length - 1
+    }
+    var s = list[at]
+    if (s.enabled !== true) { s.when = {}; s.enabled = true }
+    if (!isPlainObject(s.when)) s.when = {}
+    if (!(key in s.when)) s.when[key] = defaultCondition(key, ctx)
+  } else {
+    if (at === -1) return list
+    var r = list[at]
+    if (isPlainObject(r.when)) delete r.when[key]
+    if (!isPlainObject(r.when) || Object.keys(r.when).length === 0) list.splice(at, 1)
+  }
+  return list
+}
+
+function patchRuleCondition(situations, saverId, key, patch) {
+  var list = Array.isArray(situations) ? cloneJson(situations) : []
+  var at = ruleIndexFor(list, saverId)
+  if (at === -1) return list
+  var s = list[at]
+  if (!isPlainObject(s.when)) s.when = {}
+  var c = isPlainObject(s.when[key]) ? s.when[key] : {}
+  for (var k in patch) c[k] = patch[k]
+  s.when[key] = c
+  return list
+}
+
+// What a tile says under its name.
+function playsLabel(cfg, saverId, userSavers) {
+  var c = cfg || defaults()
+  var rule = ruleFor(c.situations, saverId)
+  var ruleText = rule && rule.enabled === true ? situationLabel(rule).toLowerCase() : ""
+  if (c.shuffle) {
+    var inSet = Array.isArray(c.shuffleFrom) && c.shuffleFrom.indexOf(saverId) !== -1
+    return ruleText !== "" ? ruleText : (inSet ? "in the shuffle" : "")
+  }
+  if (c.saver === saverId) return ruleText !== "" ? "usually · " + ruleText : "usually"
+  return ruleText
+}
+
+// Drop every reference to a saver that is going away.
+function forgetSaver(cfg, saverId) {
+  var c = cloneJson(cfg)
+  var patch = {}
+  if (c.saver === saverId) patch.saver = "wordmark"
+  if (Array.isArray(c.shuffleFrom) && c.shuffleFrom.indexOf(saverId) !== -1) patch.shuffleFrom = c.shuffleFrom.filter(function(id) { return id !== saverId })
+  if (Array.isArray(c.situations) && c.situations.some(function(s) { return isPlainObject(s) && s.saver === saverId })) {
+    patch.situations = c.situations.map(function(s) {
+      if (!isPlainObject(s) || s.saver !== saverId) return s
+      var t = cloneJson(s); delete t.saver
+      return t
+    }).filter(function(s) {
+      // A rule that only switched savers has nothing left to do.
+      var hasScr = s.screensaver !== undefined && s.screensaver !== null && s.screensaver !== ""
+      var hasLock = s.lock !== undefined && s.lock !== null && s.lock !== ""
+      return s.saver || hasScr || hasLock
+    })
+  }
+  if (isPlainObject(c.savers) && saverId in c.savers) { patch.savers = cloneJson(c.savers); delete patch.savers[saverId] }
+  return patch
 }
 
 if (typeof module !== "undefined") {
@@ -578,6 +1021,39 @@ if (typeof module !== "undefined") {
     menuHasOverride: menuHasOverride,
     menuInsertOverride: menuInsertOverride,
     menuRemoveOverride: menuRemoveOverride,
-    totalCount: totalCount
+    totalCount: totalCount,
+    allSavers: allSavers,
+    isNativeSaver: isNativeSaver,
+    conditionLabel: conditionLabel,
+    USER_SAVERS_SUBDIR: USER_SAVERS_SUBDIR,
+    IMAGE_EXTENSIONS: IMAGE_EXTENSIONS,
+    VIDEO_EXTENSIONS: VIDEO_EXTENSIONS,
+    extensionOf: extensionOf,
+    isImagePath: isImagePath,
+    isVideoPath: isVideoPath,
+    baseName: baseName,
+    slugify: slugify,
+    uniqueId: uniqueId,
+    suggestName: suggestName,
+    splitFrames: splitFrames,
+    userSaverFromScan: userSaverFromScan,
+    parseScan: parseScan,
+    scanScript: scanScript,
+    importDefaults: importDefaults,
+    ASCII_COLUMNS: ASCII_COLUMNS,
+    ASCII_ROWS: ASCII_ROWS,
+    FRAME_MARKER: FRAME_MARKER,
+    aiPrompt: aiPrompt,
+    importScript: importScript,
+    deleteScript: deleteScript,
+    RULE_KEYS: RULE_KEYS,
+    ruleIndexFor: ruleIndexFor,
+    ruleFor: ruleFor,
+    ruleHas: ruleHas,
+    defaultCondition: defaultCondition,
+    setRuleCondition: setRuleCondition,
+    patchRuleCondition: patchRuleCondition,
+    playsLabel: playsLabel,
+    forgetSaver: forgetSaver
   }
 }

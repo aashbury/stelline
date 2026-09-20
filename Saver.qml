@@ -37,12 +37,16 @@ Item {
       id: loader
       anchors.fill: parent
       active: stage.running && stage.saverId !== ""
-      source: stage.saverId !== "" ? M.saverFile(stage.saverId) : ""
+      source: stage.saverId !== "" ? M.saverFile(stage.saverId, host.service ? host.service.userSavers : []) : ""
       onLoaded: {
         item.service = host.service
         item.settings = Qt.binding(function() {
           var all = host.service ? host.service.cfg.savers : null
           return all && all[stage.saverId] ? all[stage.saverId] : ({})
+        })
+        if ("series" in item) item.series = Qt.binding(function() {
+          var s = M.saverById(stage.saverId, host.service ? host.service.userSavers : [])
+          return s && s.series ? s.series : ({})
         })
         item.active = Qt.binding(function() { return stage.running })
       }

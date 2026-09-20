@@ -29,7 +29,7 @@ Item {
   // shell.shellConfig is updated in memory on every write, so it is the
   // fresher source; the bar's relayed copy only fills in if the host ever
   // stops exposing the config.
-  readonly property var cfg: M.mergeSettings(configEntry || barSettings)
+  readonly property var cfg: M.mergeSettings(configEntry || barSettings, userSavers)
 
   // The native screensaver surface (Saver.qml). `overlayReason` records why
   // it is up: "idle" dismissals cancel the idle cycle, previews do not.
@@ -39,6 +39,164 @@ Item {
   property string lastSaver: ""
   property bool miniVisible: false
   property string miniSaver: ""
+
+  // ---- user savers ("series") ----
+  // One folder each under ~/.config/omarchy/stelline/savers, scanned into the
+  // picker; rescanned when the folder changes (imports touch a .stamp there).
+  readonly property string userSaversDir: home + "/" + M.USER_SAVERS_SUBDIR
+  property var userSavers: []
+  readonly property var userSaverIds: userSavers.map(function(s) { return s.id })
+  property bool scanAgain: false
+  function rescan() { scanDebounce.restart() }
+  Timer {
+    id: scanDebounce
+    interval: 250
+    onTriggered: { if (scanner.running) root.scanAgain = true; else scanner.running = true }
+  }
+  Process {
+    id: scanner
+    command: ["bash", "-c", M.scanScript(root.userSaversDir)]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var next = M.parseScan(String(text || ""))
+        root.userSavers = next
+        root.logEvent("savers-scanned", next.length + " user saver" + (next.length === 1 ? "" : "s"))
+      }
+    }
+    onExited: if (root.scanAgain) { root.scanAgain = false; scanDebounce.restart() }
+  }
+  FileView {
+    id: userDirWatcher
+    path: root.userSaversDir
+    watchChanges: true
+    printErrors: false
+    onFileChanged: root.rescan()
+  }
+  Process {
+    id: userDirSetup
+    command: ["bash", "-c", "mkdir -p " + M.shellQuote(root.userSaversDir)]
+    onExited: { userDirWatcher.reload(); root.rescan() }
+  }
+
+  // ---- import ----
+  // Imports run one at a time in the background as generated bash; the tile
+  // shows up at once (saver.json is written first) and fills in when done.
+  property var importQueue: []
+  property var importingIds: []
+  readonly property string runtimeDir: Quickshell.env("XDG_RUNTIME_DIR") || "/tmp"
+  // The panel's in-progress "Add": kept here so it survives the panel closing
+  // while the file chooser is up.
+  property var importDraft: null
+
+  function importSaver(spec) {
+    if (!M.isPlainObject(spec)) return "bad-spec"
+    var next = M.cloneJson(spec)
+    var name = String(next.name || "").trim()
+    if (name === "") name = M.suggestName(next.paths, next.source === "text" ? String(next.text || "").trim() : (next.source === "prompt" ? "Described" : "New saver"))
+    next.name = name
+    var taken = root.userSaverIds.concat(root.importQueue.map(function(q) { return q.id })).concat(root.importingIds)
+    next.id = M.uniqueId(M.slugify(name), taken)
+    root.importQueue = root.importQueue.concat([next])
+    root.importDraft = null
+    runNextImport()
+    return next.id
+  }
+
+  function runNextImport() {
+    if (importer.running || root.importQueue.length === 0) return
+    var spec = root.importQueue[0]
+    root.importQueue = root.importQueue.slice(1)
+    var script = M.importScript(spec, root.userSaversDir)
+    var path = root.runtimeDir + "/stelline-import-" + spec.id + ".sh"
+    root.importingIds = root.importingIds.concat([spec.id])
+    importer.currentId = spec.id
+    importer.command = ["bash", "-lc",
+      "mkdir -p " + M.shellQuote(root.userSaversDir) + " && printf %s " + M.shellQuote(script) + " > " + M.shellQuote(path)
+      + " && chmod 700 " + M.shellQuote(path) + " && bash " + M.shellQuote(path) + "; rc=$?; rm -f " + M.shellQuote(path) + "; exit $rc"]
+    logEvent("import-start", spec.id + " " + spec.source + "/" + spec.style)
+    importer.running = true
+  }
+
+  Process {
+    id: importer
+    property string currentId: ""
+    stderr: SplitParser { onRead: function(line) { root.logEvent("import", importer.currentId + ": " + String(line).trim()) } }
+    onExited: function(exitCode) {
+      root.logEvent("import-exit", importer.currentId + " exitCode=" + exitCode)
+      var done = importer.currentId
+      root.importingIds = root.importingIds.filter(function(i) { return i !== done })
+      root.rescan()
+      root.runNextImport()
+    }
+  }
+
+  // Remove a user saver: its folder goes, and every setting that named it.
+  function deleteSaver(id) {
+    var s = M.saverById(id, root.userSavers)
+    if (!s || s.kind !== "series") return "unknown-saver"
+    var script = M.deleteScript(id, root.userSaversDir)
+    if (!script) return "bad-id"
+    if (root.overlayVisible && root.overlaySaver === id) hideScreensaver("deleted")
+    if (root.miniVisible && root.miniSaver === id) root.miniVisible = false
+    var patch = M.forgetSaver(root.cfg, id)
+    if (Object.keys(patch).length) writeSettings(patch)
+    runProcess(deleter, "delete-saver " + id, script)
+    return "ok"
+  }
+  Process { id: deleter; onExited: root.rescan() }
+
+  // Per-saver rules: the tile's "plays when" conditions.
+  function setRuleCondition(saverId, key, on) {
+    return writeSettings({ situations: M.setRuleCondition(root.cfg.situations, saverId, key, !!on, root.situationContext) })
+  }
+  function patchRuleCondition(saverId, key, patch) {
+    return writeSettings({ situations: M.patchRuleCondition(root.cfg.situations, saverId, key, patch) })
+  }
+
+  // The desktop file chooser (a portal dialog, so the panel loses focus and
+  // closes); when it answers, the draft gets the paths and the panel is
+  // summoned back to finish.
+  property string pickKind: ""
+  property var pickedPaths: []
+  function pickFiles(kind) {
+    if (picker.running) return "busy"
+    var argv = ["omarchy-file-select", "--title"]
+    if (kind === "folder") argv = argv.concat(["Pick a folder of pictures", "--directory"])
+    else if (kind === "video") argv = argv.concat(["Pick a video or GIF", "--extensions", M.VIDEO_EXTENSIONS.join(" ")])
+    else argv = argv.concat(["Pick pictures", "--multiple", "--extensions", M.IMAGE_EXTENSIONS.join(" ")])
+    root.pickKind = kind
+    root.pickedPaths = []
+    picker.command = argv
+    picker.running = true
+    logEvent("pick-start", kind)
+    return "ok"
+  }
+  Process {
+    id: picker
+    stdout: SplitParser { onRead: function(line) { var t = String(line).trim(); if (t !== "") root.pickedPaths = root.pickedPaths.concat([t]) } }
+    onExited: function(exitCode) {
+      root.logEvent("pick-exit", root.pickKind + " exitCode=" + exitCode + " picked=" + root.pickedPaths.length)
+      if (exitCode === 0 && root.pickedPaths.length > 0) {
+        var draft = M.isPlainObject(root.importDraft) ? M.cloneJson(root.importDraft) : M.importDefaults()
+        draft.source = root.pickKind === "folder" ? "folder" : (root.pickKind === "video" ? "video" : "images")
+        draft.paths = root.pickedPaths.slice()
+        if (!draft.name || draft.nameAuto !== false) { draft.name = M.suggestName(draft.paths, "New saver"); draft.nameAuto = true }
+        draft.step = "confirm"
+        root.importDraft = draft
+        root.summonPanel()
+      }
+      root.pickKind = ""
+    }
+  }
+  function summonPanel() { Quickshell.execDetached(["omarchy-shell", "shell", "summon", root.pluginId, "{}"]) }
+
+  // Whether "Describe it" has a model to talk to: Claude Code's CLI, or an API key.
+  property string aiProvider: ""
+  Process {
+    id: aiProbe
+    command: ["bash", "-lc", "if command -v claude >/dev/null 2>&1; then echo cli; elif [[ -n ${ANTHROPIC_API_KEY:-} ]]; then echo api; else echo none; fi"]
+    stdout: SplitParser { onRead: function(line) { var t = String(line).trim(); root.aiProvider = t === "none" ? "" : t } }
+  }
 
   readonly property string home: Quickshell.env("HOME")
   readonly property string stayAwakeStateDir: home + "/.local/state/omarchy/indicators"
@@ -306,7 +464,7 @@ Item {
     screensaverLaunchGraceTimer.restart()
     if (root.locked) { logEvent("screensaver-skip", "session locked"); return }
     if (root.screensaverOff) { logEvent("screensaver-skip", "screensaver-off toggle"); return }
-    var id = M.pickSaver(root.cfg, root.situation, root.lastSaver)
+    var id = M.pickSaver(root.cfg, root.situation, root.lastSaver, undefined, root.userSavers)
     if (id === "terminal") { launchTerminal(); return }
     showOverlay(id, "idle")
   }
@@ -382,9 +540,10 @@ Item {
   }
 
   function showOverlay(id, reason) {
-    var saver = M.saverById(id)
+    var saver = M.saverById(id, root.userSavers)
     if (!saver) return "unknown-saver"
-    if (saver.kind !== "native") {
+    if (saver.series && saver.series.importing) return "importing"
+    if (!M.isNativeSaver(saver)) {
       // Terminal previews go through the same path as idle, bypassing the
       // screensaver-off toggle the way the stock menu entry does.
       var effects = root.cfg.savers && root.cfg.savers.terminal ? root.cfg.savers.terminal.effects : []
@@ -417,7 +576,7 @@ Item {
 
   function nextSaver() {
     if (!root.overlayVisible) return
-    root.overlaySaver = M.nextSaver(root.cfg, root.overlaySaver)
+    root.overlaySaver = M.nextSaver(root.cfg, root.overlaySaver, root.userSavers)
     root.lastSaver = root.overlaySaver
     logEvent("overlay-next", root.overlaySaver)
   }
@@ -564,6 +723,11 @@ Item {
       card: { visible: root.cardVisible, dnd: root.dnd, agent: root.agentState, groups: root.cardGroups.length },
       setup: { done: root.setupDone, pending: root.setupPending, stayAwakeIndicatorShown: root.stayAwakeIndicatorShown, staleIdleOwner: root.staleIdleOwner, menuOverride: root.menuOverrideActive },
       terminal: root.terminalId,
+      userSavers: root.userSaverIds,
+      importing: root.importingIds,
+      queued: root.importQueue.length,
+      ai: root.aiProvider,
+      draft: root.importDraft ? (root.importDraft.step || "start") : null,
       situation: root.situation ? root.situation.id : null,
       situationSaver: root.situation && root.situation.saver ? root.situation.saver : null,
       context: root.situationContext,
@@ -816,6 +980,8 @@ Item {
     refreshScreensaverOff()
     refreshThemes()
     terminalIdProbe.running = true
+    userDirSetup.running = true
+    aiProbe.running = true
   }
 
   Saver {
@@ -852,7 +1018,7 @@ Item {
     }
 
     function setSaver(saverId: string): string {
-      if (!M.saverById(saverId)) return "unknown-saver"
+      if (!M.saverById(saverId, root.userSavers)) return "unknown-saver"
       return root.writeSettings({ saver: saverId }) ? "ok" : "failed"
     }
 
@@ -894,8 +1060,8 @@ Item {
 
     function mini(saverId: string): string {
       var id = saverId && saverId !== "" ? saverId : root.cfg.saver
-      var saver = M.saverById(id)
-      if (!saver || saver.kind !== "native") return "unknown-saver"
+      var saver = M.saverById(id, root.userSavers)
+      if (!saver || !M.isNativeSaver(saver)) return "unknown-saver"
       root.miniSaver = id
       root.miniVisible = true
       return "ok"
@@ -935,9 +1101,26 @@ Item {
     }
 
     function list(): string {
-      return JSON.stringify(M.SAVERS.map(function(s) {
-        return { id: s.id, name: s.name, kind: s.kind, current: s.id === root.cfg.saver }
+      return JSON.stringify(M.allSavers(root.userSavers).map(function(s) {
+        return { id: s.id, name: s.name, kind: s.kind, current: s.id === root.cfg.saver, plays: M.playsLabel(root.cfg, s.id, root.userSavers),
+          importing: !!(s.series && s.series.importing), error: s.series ? s.series.error : "" }
       }))
+    }
+
+    // Imports: the spec is JSON (see StellineModel.importDefaults), base64 so
+    // it survives `qs ipc` splitting arguments on commas.
+    function import64(base64Json: string): string {
+      var spec
+      try { spec = JSON.parse(Qt.atob(base64Json)) } catch (e) { return "bad-json" }
+      return root.importSaver(spec)
+    }
+    function deleteSaver(saverId: string): string { return root.deleteSaver(saverId) }
+    function rescan(): string { root.rescan(); return "ok" }
+    function pick(kind: string): string { return root.pickFiles(kind) }
+    function setRule(saverId: string, key: string, on: string): string {
+      if (M.RULE_KEYS.indexOf(key) === -1) return "unknown-condition"
+      if (!M.saverById(saverId, root.userSavers)) return "unknown-saver"
+      return root.setRuleCondition(saverId, key, String(on) === "true" || String(on) === "on") ? "ok" : "failed"
     }
   }
 
