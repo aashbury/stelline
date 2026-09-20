@@ -645,6 +645,7 @@ function userSaverFromScan(row) {
     pieces = files.filter(function(f) { return /\.txt$/.test(f) }).sort().map(function(f) { return row.dir + "/" + f })
   }
   var frames = kind === "ascii" ? splitFrames(row.thumb) : []
+  var frameCount = kind === "image" ? pieces.length : Math.max(1, Number(row.frameCount) || pieces.length)
   var name = typeof j.name === "string" && j.name.trim() !== "" ? j.name.trim() : suggestName([row.dir])
   var importing = j.importing === true
   var error = typeof j.error === "string" ? j.error : ""
@@ -669,6 +670,7 @@ function userSaverFromScan(row) {
       play: play,
       fps: isFinite(Number(j.fps)) && Number(j.fps) > 0 ? Number(j.fps) : 10,
       dwellSec: isFinite(Number(j.dwellSec)) && Number(j.dwellSec) > 0 ? Number(j.dwellSec) : 12,
+      frameCount: frameCount,
       importing: importing,
       error: error,
       thumbArt: frames.length ? frames[0] : "",
@@ -706,13 +708,14 @@ function scanScript(rootDir) {
     "  folder=$(jq -r '.folder // empty' \"$f\" 2>/dev/null)",
     "  folderFiles='[]'",
     "  if [[ -n $folder && -d $folder ]]; then folderFiles=$(find \"$folder\" -maxdepth 1 -type f \\( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' -o -iname '*.gif' -o -iname '*.svg' -o -iname '*.bmp' -o -iname '*.avif' \\) 2>/dev/null | sort | jq -R . | jq -sc .); fi",
-    "  thumb=''",
+    "  thumb=''; frameCount=0",
     "  if [[ $(jq -r '.kind // \"ascii\"' \"$f\") != image ]]; then",
     "    first=$(jq -r '.pieces[0] // empty' \"$f\" 2>/dev/null); [[ -n $first ]] || first=$(ls -1 \"$d\"/*.txt 2>/dev/null | head -n1)",
     "    [[ $first == /* ]] || first=\"$d/$first\"",
     "    [[ -f $first ]] && thumb=$(head -c 12000 \"$first\")",
+    "    frameCount=$(cat \"$d\"/*.txt 2>/dev/null | awk 'BEGIN{RS=\"\\f\"} /[^[:space:]]/{n++} END{print n+0}')",
     "  fi",
-    "  jq -c --arg dir \"$d\" --argjson files \"$files\" --argjson folderFiles \"$folderFiles\" --arg thumb \"$thumb\" '{dir:$dir, files:$files, folderFiles:$folderFiles, thumb:$thumb, json:.}' \"$f\" 2>/dev/null || echo \"{\\\"dir\\\":$(jq -Rn --arg d \"$d\" '$d'),\\\"json\\\":{\\\"error\\\":\\\"saver.json does not parse\\\"}}\"",
+    "  jq -c --arg dir \"$d\" --argjson files \"$files\" --argjson folderFiles \"$folderFiles\" --arg thumb \"$thumb\" --argjson frameCount \"${frameCount:-0}\" '{dir:$dir, files:$files, folderFiles:$folderFiles, thumb:$thumb, frameCount:$frameCount, json:.}' \"$f\" 2>/dev/null || echo \"{\\\"dir\\\":$(jq -Rn --arg d \"$d\" '$d'),\\\"json\\\":{\\\"error\\\":\\\"saver.json does not parse\\\"}}\"",
     "done",
     ""
   ].join("\n")

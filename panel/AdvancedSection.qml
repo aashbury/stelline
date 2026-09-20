@@ -25,11 +25,11 @@ Column {
   Row {
     width: parent.width
     spacing: Style.space(8)
-    PanelSectionHeader { text: "SITUATIONS"; foreground: root.foreground; fontFamily: root.fontFamily }
+    PanelSectionHeader { text: "RULES"; foreground: root.foreground; fontFamily: root.fontFamily }
     Text {
       anchors.baseline: parent.children[0].baseline
       textFormat: Text.PlainText
-      text: "first match wins"
+      text: "every tile's rule, in priority order — the first that holds wins"
       color: root.dim
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
@@ -49,6 +49,7 @@ Column {
         required property int index
         width: parent.width
         situation: root.cfg.situations[index] || ({})
+        userSavers: root.svc ? root.svc.userSavers : []
         themeNames: root.svc ? root.svc.themeNames : []
         bar: root.bar
         foreground: root.foreground
@@ -67,7 +68,7 @@ Column {
     Text {
       visible: root.cfg.situations.length === 0
       textFormat: Text.PlainText
-      text: "No situations — the usual saver and timings always apply."
+      text: "No rules yet — the usual saver and timings always apply. Open a tile's gear to give it one."
       color: root.dim
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
@@ -76,6 +77,14 @@ Column {
 
   Row {
     spacing: Style.space(6)
+    Text {
+      anchors.verticalCenter: parent.verticalCenter
+      textFormat: Text.PlainText
+      text: "A rule with no saver only changes the timings:"
+      color: root.dim
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+    }
     Button { text: "+ On battery"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: if (root.body) root.body.addSituation("battery") }
     Button { text: "+ Night"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: if (root.body) root.body.addSituation("night") }
     Button { text: "+ Theme"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: if (root.body) root.body.addSituation("theme") }

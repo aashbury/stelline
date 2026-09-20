@@ -3,9 +3,10 @@ import qs.Commons
 import qs.Ui
 import "../StellineModel.js" as M
 
-// The panel body. Level 1: hero + preview, the saver picker, timings and stay
-// awake. Level 2: a gear per saver opens its settings inline. Level 3: the
-// Advanced section — situations, the status card, integration.
+// The panel body. Level 1: hero + preview, the saver grid (click a tile = that
+// one plays), timings and stay awake. Level 2: a tile's gear opens it below
+// the grid — when it plays, how it looks, delete. Level 3: the Advanced
+// section — every rule in priority order, the status card, integration.
 //
 // One cursor, shared by keyboard and mouse: rows bind `hasCursor` to
 // `cursorActive && cursorIndex === <row>` and never read hover themselves.
@@ -16,6 +17,7 @@ Column {
 
   property var svc: null
   property var bar: null
+  property bool live: false
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
   readonly property color dim: Qt.darker(foreground, 1.4)
@@ -31,11 +33,39 @@ Column {
   signal closeRequested()
   signal ensureVisible(real y, real h)
 
+  readonly property var cfg: svc ? svc.cfg : M.defaults()
+  readonly property var userSavers: svc ? svc.userSavers : []
+  readonly property var savers: M.allSavers(userSavers)
+  readonly property var saver: M.saverById(cfg.saver, userSavers) || M.SAVERS[0]
+  readonly property bool serviceOk: !!svc
+  readonly property bool stayAwake: svc ? svc.stayAwake === true : false
+  readonly property int screensaverSeconds: svc ? svc.screensaverTimeoutSeconds : 150
+  readonly property int lockSeconds: svc ? svc.lockTimeoutSeconds : 300
+  readonly property bool adding: !!(svc && svc.importDraft)
+  readonly property var openSaver: openSettings !== "" ? M.saverById(openSettings, userSavers) : null
+  readonly property int columns: 3
+  readonly property int tileGap: Style.space(6)
+  readonly property int tileWidth: Math.floor((width - tileGap * (columns - 1)) / columns)
+
+  // Cursor rows, in visual order. Tiles are one row each; the add tile is
+  // the last of them. Situations follow Advanced when it is open.
+  readonly property int rowHero: 0
+  readonly property int rowPreview: 1
+  readonly property int rowTileFirst: 2
+  readonly property int tileCount: savers.length + 1
+  readonly property int rowShuffle: rowTileFirst + tileCount
+  readonly property int rowScreensaver: rowShuffle + 1
+  readonly property int rowLock: rowShuffle + 2
+  readonly property int rowStayAwake: rowShuffle + 3
+  readonly property int rowAdvanced: rowShuffle + 4
+  readonly property int rowSituationFirst: rowAdvanced + 1
+  readonly property int rowCount: rowSituationFirst + (advancedOpen ? cfg.situations.length : 0)
+
   // The item that owns a cursor row, for scrolling it into view.
   function rowItem(index) {
     if (index === rowHero) return hero
     if (index === rowPreview) return previewButton
-    if (index >= rowSaverFirst && index < rowShuffle) return saverRepeater.itemAt(index - rowSaverFirst)
+    if (index >= rowTileFirst && index < rowShuffle) return tileRepeater.itemAt(index - rowTileFirst)
     if (index === rowShuffle) return shuffleToggle
     if (index === rowScreensaver) return screensaverRow
     if (index === rowLock) return lockRow
@@ -52,25 +82,26 @@ Column {
     ensureVisible(p.y, item.height)
   }
   onCursorIndexChanged: if (cursorActive) scrollToRow(cursorIndex)
-  // An editor opening makes its row taller; bring the whole row back into view.
+
+  // An editor opening below the grid, or a situation's editor, should come
+  // into view whole.
   onExpandedSituationChanged: if (expandedSituation >= 0) revealEditor.restart()
   onOpenSettingsChanged: if (openSettings !== "") revealEditor.restart()
+  onAddingChanged: if (adding) revealEditor.restart()
   Timer {
     id: revealEditor
     interval: 60
     onTriggered: {
       var item = null
       if (root.expandedSituation >= 0) item = root.rowItem(root.rowSituationFirst + root.expandedSituation)
-      else if (root.openSettings !== "") {
-        for (var i = 0; i < M.SAVERS.length; i++) if (M.SAVERS[i].id === root.openSettings) item = saverRepeater.itemAt(i)
-      }
+      else if (root.adding) item = addCard
+      else if (root.openSettings !== "") item = inspector
       if (!item) return
       var p = item.mapToItem(root, 0, 0)
       root.ensureVisible(p.y, item.height)
     }
   }
 
-  // Opening Advanced reveals the section, not just its button.
   onAdvancedOpenChanged: if (advancedOpen) revealAdvanced.restart()
   Timer {
     id: revealAdvanced
@@ -81,30 +112,12 @@ Column {
     }
   }
 
-  readonly property var cfg: svc ? svc.cfg : M.defaults()
-  readonly property var saver: M.saverById(cfg.saver) || M.SAVERS[0]
-  readonly property bool serviceOk: !!svc
-  readonly property bool stayAwake: svc ? svc.stayAwake === true : false
-  readonly property int screensaverSeconds: svc ? svc.screensaverTimeoutSeconds : 150
-  readonly property int lockSeconds: svc ? svc.lockTimeoutSeconds : 300
-
-  // Cursor rows, in visual order. Situations follow Advanced when it is open.
-  readonly property int rowHero: 0
-  readonly property int rowPreview: 1
-  readonly property int rowSaverFirst: 2
-  readonly property int rowShuffle: rowSaverFirst + M.SAVERS.length
-  readonly property int rowScreensaver: rowShuffle + 1
-  readonly property int rowLock: rowShuffle + 2
-  readonly property int rowStayAwake: rowShuffle + 3
-  readonly property int rowAdvanced: rowShuffle + 4
-  readonly property int rowSituationFirst: rowAdvanced + 1
-  readonly property int rowCount: rowSituationFirst + (advancedOpen ? cfg.situations.length : 0)
-
   function reset() {
     cursorActive = false
-    cursorIndex = rowSaverFirst
+    cursorIndex = rowTileFirst
     if (svc && typeof svc.refreshThemes === "function") svc.refreshThemes()
     if (svc && typeof svc.probeIpcOwner === "function") svc.probeIpcOwner()
+    if (svc && typeof svc.rescan === "function") svc.rescan()
   }
 
   function setEditing(key, on) {
@@ -120,21 +133,33 @@ Column {
     cursorIndex = index
   }
 
+  function inTiles(index) { return index >= rowTileFirst && index < rowShuffle }
+
   function move(dx, dy) {
     if (!cursorActive) { cursorActive = true; return }
     if (dy !== 0) {
-      cursorIndex = Math.max(0, Math.min(rowCount - 1, cursorIndex + (dy > 0 ? 1 : -1)))
+      var next
+      if (inTiles(cursorIndex)) {
+        next = cursorIndex + (dy > 0 ? columns : -columns)
+        if (next >= rowShuffle) next = rowShuffle
+        else if (next < rowTileFirst) next = rowPreview
+      } else if (cursorIndex === rowPreview && dy > 0) next = rowTileFirst
+      else if (cursorIndex === rowShuffle && dy < 0) next = rowShuffle - 1
+      else next = cursorIndex + (dy > 0 ? 1 : -1)
+      cursorIndex = Math.max(0, Math.min(rowCount - 1, next))
       return
     }
     if (dx !== 0) {
-      if (cursorIndex === rowScreensaver) screensaverRow.nudge(dx > 0 ? 1 : -1)
+      if (inTiles(cursorIndex)) cursorIndex = Math.max(rowTileFirst, Math.min(rowShuffle - 1, cursorIndex + (dx > 0 ? 1 : -1)))
+      else if (cursorIndex === rowScreensaver) screensaverRow.nudge(dx > 0 ? 1 : -1)
       else if (cursorIndex === rowLock) lockRow.nudge(dx > 0 ? 1 : -1)
     }
   }
 
   function cursorSaverId() {
-    if (cursorIndex < rowSaverFirst || cursorIndex >= rowShuffle) return ""
-    return M.SAVERS[cursorIndex - rowSaverFirst].id
+    if (!inTiles(cursorIndex)) return ""
+    var at = cursorIndex - rowTileFirst
+    return at < savers.length ? savers[at].id : ""
   }
 
   function activate() {
@@ -142,7 +167,7 @@ Column {
     if (!svc) return
     if (cursorIndex === rowHero) setStage("screensaverEnabled", !cfg.screensaverEnabled)
     else if (cursorIndex === rowPreview) preview("")
-    else if (cursorIndex >= rowSaverFirst && cursorIndex < rowShuffle) chooseSaver(cursorSaverId())
+    else if (inTiles(cursorIndex)) { var id = cursorSaverId(); if (id === "") startAdd(); else chooseSaver(id) }
     else if (cursorIndex === rowShuffle) toggleShuffle()
     else if (cursorIndex === rowLock) setStage("lockEnabled", !cfg.lockEnabled)
     else if (cursorIndex === rowStayAwake) toggleStayAwake()
@@ -150,15 +175,24 @@ Column {
     else if (cursorIndex >= rowSituationFirst) toggleSituationEditor(cursorIndex - rowSituationFirst)
   }
 
+  // Delete: a user saver under the cursor opens its inspector with Delete
+  // armed; the second press deletes. Situations delete at once, as before.
   function remove() {
-    if (cursorActive && cursorIndex >= rowSituationFirst) removeSituation(cursorIndex - rowSituationFirst)
+    if (!cursorActive) return
+    if (cursorIndex >= rowSituationFirst) { removeSituation(cursorIndex - rowSituationFirst); return }
+    var id = cursorSaverId()
+    var s = id !== "" ? M.saverById(id, userSavers) : null
+    if (!s || s.kind !== "series") return
+    if (openSettings === id && inspector.deleteArmed) deleteSaver(id)
+    else { openSettings = id; inspector.armDelete() }
   }
 
   function hotkey(text) {
     if (text === "p") preview(cursorSaverId())
     else if (text === "s") toggleShuffle()
     else if (text === "a") advancedOpen = !advancedOpen
-    else if (text === "g") { var id = cursorSaverId(); if (id !== "" && id !== "blank") toggleSettings(id) }
+    else if (text === "n" || text === "+") startAdd()
+    else if (text === "g") { var id = cursorSaverId(); if (id !== "") toggleSettings(id) }
   }
 
   // ---- actions (all through the service) ----
@@ -167,6 +201,8 @@ Column {
   }
   function chooseSaver(id) {
     if (!svc) return
+    var s = M.saverById(id, userSavers)
+    if (s && s.series && (s.series.importing || s.series.error)) { toggleSettings(id); return }
     if (cfg.shuffle) {
       var set = (cfg.shuffleFrom || []).slice()
       var at = set.indexOf(id)
@@ -176,7 +212,23 @@ Column {
       svc.writeSettings({ saver: id })
     }
   }
-  function toggleSettings(id) { openSettings = openSettings === id ? "" : id }
+  function toggleSettings(id) {
+    if (svc && svc.importDraft) svc.importDraft = null
+    openSettings = openSettings === id ? "" : id
+  }
+  function startAdd() {
+    if (!svc) return
+    openSettings = ""
+    var d = M.importDefaults()
+    d.step = "start"
+    svc.importDraft = d
+  }
+  function deleteSaver(id) {
+    if (!svc) return
+    if (openSettings === id) openSettings = ""
+    svc.deleteSaver(id)
+    if (cursorIndex >= rowCount) cursorIndex = Math.max(0, rowCount - 1)
+  }
   function toggleShuffle() { if (svc) svc.writeSettings({ shuffle: !cfg.shuffle }) }
   function setStage(key, on) { if (svc) { var p = {}; p[key] = !!on; svc.writeSettings(p) } }
   function toggleStayAwake() { if (svc) svc.setIdleEnabled(stayAwake) }
@@ -202,11 +254,10 @@ Column {
 
   function addSituation(kind) {
     var list = M.cloneJson(cfg.situations)
-    var n = list.length + 1
     var s = { id: kind + "-" + Date.now().toString(36), enabled: true, when: {} }
-    if (kind === "battery") { s.when.battery = { below: 100 }; s.saver = "blank" }
-    else if (kind === "night") { s.when.night = { from: "22:00", to: "07:00" }; s.saver = "clock" }
-    else { s.when.theme = { name: svc && svc.themeName ? svc.themeName : "" }; s.saver = "matrix" }
+    if (kind === "battery") { s.when.battery = { below: 100 }; s.screensaver = 90; s.lock = 180 }
+    else if (kind === "night") s.when.night = { from: "22:00", to: "07:00" }
+    else s.when.theme = { name: svc && svc.themeName ? svc.themeName : "" }
     list.push(s)
     writeSituations(list)
     advancedOpen = true
@@ -310,58 +361,85 @@ Column {
   PanelSeparator { width: parent.width; foreground: root.foreground }
 
   // ---- savers ----
-  PanelSectionHeader { text: "SAVERS"; foreground: root.foreground; fontFamily: root.fontFamily }
-
-  Column {
+  Row {
     width: parent.width
-    spacing: Style.space(2)
+    spacing: Style.space(8)
+    PanelSectionHeader { text: "SAVERS"; foreground: root.foreground; fontFamily: root.fontFamily }
+    Text {
+      anchors.baseline: parent.children[0].baseline
+      textFormat: Text.PlainText
+      text: root.cfg.shuffle ? "check the ones to shuffle between" : "click one to make it the usual saver"
+      color: root.dim
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+    }
+  }
+
+  Grid {
+    id: grid
+    width: parent.width
+    columns: root.columns
+    columnSpacing: root.tileGap
+    rowSpacing: root.tileGap
 
     Repeater {
-      id: saverRepeater
-      model: M.SAVERS
+      id: tileRepeater
+      model: root.tileCount
 
-      Column {
-        required property var modelData
+      SaverTile {
         required property int index
-        width: parent.width
-        spacing: Style.space(2)
-
-        SaverRow {
-          width: parent.width
-          saver: modelData
-          selected: root.cfg.saver === modelData.id
-          shuffleMode: root.cfg.shuffle
-          inRotation: (root.cfg.shuffleFrom || []).indexOf(modelData.id) !== -1
-          hasSettings: modelData.id !== "blank"
-          expanded: root.openSettings === modelData.id
-          foreground: root.foreground
-          fontFamily: root.fontFamily
-          hasCursor: root.cursorActive && root.cursorIndex === root.rowSaverFirst + index
-          onClicked: root.chooseSaver(modelData.id)
-          onPreviewRequested: root.preview(modelData.id)
-          onSettingsRequested: root.toggleSettings(modelData.id)
-          onHovered: function(h) { root.hoverRow(root.rowSaverFirst + index, h) }
-        }
-
-        SaverSettings {
-          visible: root.openSettings === modelData.id
-          width: parent.width
-          saverId: modelData.id
-          settings: root.cfg.savers[modelData.id] || ({})
-          bar: root.bar
-          foreground: root.foreground
-          fontFamily: root.fontFamily
-          onPatched: function(patch) { root.writeSaverSettings(modelData.id, patch) }
-        }
+        readonly property bool isAdd: index >= root.savers.length
+        readonly property var entry: isAdd ? ({}) : root.savers[index]
+        width: root.tileWidth
+        saver: entry
+        svc: root.svc
+        live: root.live
+        addTile: isAdd
+        selected: !isAdd && root.cfg.saver === entry.id
+        shuffleMode: root.cfg.shuffle
+        inRotation: !isAdd && (root.cfg.shuffleFrom || []).indexOf(entry.id) !== -1
+        open: !isAdd && root.openSettings === entry.id
+        caption: isAdd ? "" : M.playsLabel(root.cfg, entry.id, root.userSavers)
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        hasCursor: root.cursorActive && root.cursorIndex === root.rowTileFirst + index
+        onClicked: if (isAdd) root.startAdd(); else root.chooseSaver(entry.id)
+        onPreviewRequested: root.preview(entry.id)
+        onSettingsRequested: root.toggleSettings(entry.id)
+        onHovered: function(h) { root.hoverRow(root.rowTileFirst + index, h) }
       }
     }
+  }
+
+  Inspector {
+    id: inspector
+    visible: !root.adding && !!root.openSaver
+    width: parent.width
+    saver: root.openSaver || ({})
+    svc: root.svc
+    body: root
+    bar: root.bar
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    onEditingChanged: root.setEditing("inspector", editing)
+  }
+
+  AddCard {
+    id: addCard
+    visible: root.adding
+    width: parent.width
+    svc: root.svc
+    body: root
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    onEditingChanged: root.setEditing("add", editing)
   }
 
   Toggle {
     id: shuffleToggle
     width: parent.width
     label: "Shuffle"
-    description: root.cfg.shuffle ? "A different checked saver each time" : "Always the selected saver"
+    description: root.cfg.shuffle ? "A different checked saver each time" : "Always the usual saver"
     checked: root.cfg.shuffle
     foreground: root.foreground
     fontFamily: root.fontFamily

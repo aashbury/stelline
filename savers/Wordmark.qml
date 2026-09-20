@@ -2,6 +2,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.Commons
+import "Effects.js" as E
 
 // The stock screensaver's subject, drawn natively: the branding ASCII art from
 // ~/.config/omarchy/branding/screensaver.txt in the theme's colours, sized to
@@ -22,15 +23,22 @@ Item {
   readonly property string artPath: Quickshell.env("HOME") + "/.config/omarchy/branding/screensaver.txt"
   property string art: ""
 
-  // `cycle` (the default) rotates through `effects` every `holdSec`. Burn-in
-  // drift is a small jump every half minute, always on.
-  readonly property var effectList: settings && Array.isArray(settings.effects) && settings.effects.length ? settings.effects : ["reveal", "typewriter", "pulse"]
+  // `cycle` (the default) plays a different effect every `holdSec`, drawn at
+  // random from `effects` (all of them unless pinned) the way the stock saver
+  // draws from ttfx. Burn-in drift is a small jump every half minute.
+  readonly property var effectList: settings && Array.isArray(settings.effects) && settings.effects.length ? settings.effects : E.EFFECTS
   readonly property string effectSetting: settings && settings.effect ? String(settings.effect) : "cycle"
   readonly property int holdSec: settings && Number(settings.holdSec) > 0 ? Number(settings.holdSec) : 15
-  property int cycleIndex: 0
-  readonly property string effect: thumbnail ? "none" : (effectSetting === "cycle" ? effectList[cycleIndex % effectList.length] : effectSetting)
+  property string cycled: ""
+  readonly property string effect: thumbnail ? "none" : (effectSetting === "cycle" ? cycled : effectSetting)
   property real driftX: 0
   property real driftY: 0
+
+  function nextEffect() {
+    var next = E.pick(root.effectList)
+    if (next === root.cycled && root.effectList.length > 1) next = E.pick(root.effectList)
+    root.cycled = next
+  }
 
   FileView {
     path: root.artPath
@@ -41,13 +49,14 @@ Item {
     onLoadFailed: root.art = ""
   }
 
-  onActiveChanged: if (active) { cycleIndex = 0; driftX = 0; driftY = 0 }
+  onActiveChanged: if (active) { driftX = 0; driftY = 0; nextEffect() }
+  Component.onCompleted: nextEffect()
 
   Timer {
     interval: root.holdSec * 1000
     repeat: true
-    running: root.active && !root.thumbnail && root.effectSetting === "cycle" && root.effectList.length > 1
-    onTriggered: root.cycleIndex = (root.cycleIndex + 1) % root.effectList.length
+    running: root.active && !root.thumbnail && root.effectSetting === "cycle"
+    onTriggered: root.nextEffect()
   }
 
   Timer {

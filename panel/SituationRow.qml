@@ -11,6 +11,7 @@ Column {
   property bool hasCursor: false
   property bool expanded: false
   property var themeNames: []
+  property var userSavers: []
   property var bar: null
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
@@ -73,7 +74,7 @@ Column {
       Text {
         width: parent.width
         textFormat: Text.PlainText
-        text: "→ " + (M.situationEffect(root.situation) || "no change")
+        text: "→ " + (M.situationEffect(root.situation, root.userSavers) || "no change")
         color: root.dim
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
@@ -175,7 +176,7 @@ Column {
     Dropdown {
       width: Style.space(220)
       label: "Show"
-      options: [{ value: "", label: "the usual saver" }].concat(M.SAVERS.filter(function(s) { return s.kind === "native" }).map(function(s) { return { value: s.id, label: s.name } }))
+      options: [{ value: "", label: "the usual saver" }].concat(M.allSavers(root.userSavers).filter(function(s) { return M.isNativeSaver(s) }).map(function(s) { return { value: s.id, label: s.name } }))
       value: root.situation.saver ? String(root.situation.saver) : ""
       foreground: root.foreground
       fontFamily: root.fontFamily

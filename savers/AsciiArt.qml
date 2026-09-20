@@ -18,15 +18,19 @@ Item {
   // How much of the surface the art may take.
   property real fitWidth: 0.8
   property real fitHeight: 0.6
-  // Partial reveals: -1 shows everything.
-  property int visibleLines: -1
-  property int visibleChars: -1
+  // Progressive: nothing shows until `resolve()` names the cells that have
+  // arrived (an entrance effect feeds it a few per frame). Off: everything.
+  property bool progressive: false
   // 0 = all foreground, 1 = all accent. The accent layer only exists while
   // `pulse` is on, so a plain show never paints twice.
   property real pulseMix: 0
   property bool pulse: false
   property real driftX: 0
   property real driftY: 0
+  // Where the grid sits, for an overlay that wants to line up with it.
+  readonly property real artX: canvasHost.x
+  readonly property real artY: canvasHost.y
+  readonly property real advance: pixelSize * advanceAt100 / 100
 
   readonly property var lines: art === "" ? [] : art.replace(/\s+$/, "").split("\n")
   readonly property int columns: {
@@ -60,8 +64,21 @@ Item {
   readonly property int cellH: Math.max(1, Math.round(root.pixelSize * root.lineHeightAt100 / 100))
   readonly property int artW: root.columns * root.cellW
   readonly property int artH: root.lines.length * root.cellH
-  readonly property int shownLines: visibleLines < 0 ? lines.length : Math.min(visibleLines, lines.length)
-  readonly property int shownChars: visibleChars < 0 ? totalChars : Math.min(visibleChars, totalChars)
+
+  // The cells resolved so far, in arrival order; each canvas remembers how
+  // many of them it has painted.
+  property var pending: []
+  function reset() {
+    root.pending = []
+    fgCanvas.painted = 0
+    accentCanvas.painted = 0
+    invalidate()
+  }
+  function resolve(list) {
+    if (!list || list.length === 0) return
+    root.pending = root.pending.concat(list)
+    repaint()
+  }
 
   // Cell painter. Returns true when the character was drawn as geometry.
   function paintCell(ctx, ch, x, y, w, h) {
@@ -112,37 +129,37 @@ Item {
     return false
   }
 
-  // Incremental: a canvas keeps what it has, so a reveal or typewriter step
-  // paints only the cells that appeared since the last step (a dense braille
-  // piece is tens of thousands of dots — painting it whole every 50 ms would
-  // eat half a core). Anything else changing — the art, a colour, the size —
-  // marks the layer dirty for one full repaint.
+  // Incremental: a canvas keeps what it has, so an effect step paints only
+  // the cells that arrived since the last step (a dense braille piece is tens
+  // of thousands of dots — painting it whole every frame would eat half a
+  // core). Anything else changing — the art, a colour, the size — marks the
+  // layer dirty for one full repaint.
   function paintArt(canvas, ctx, colour) {
-    var shrank = root.shownLines < canvas.paintedLines || root.shownChars < canvas.paintedChars
-    if (canvas.dirty || shrank) {
-      ctx.clearRect(0, 0, root.artW, root.artH)
-      canvas.paintedLines = 0
-      canvas.paintedChars = 0
-      canvas.dirty = false
-    }
     ctx.fillStyle = colour
     ctx.font = root.pixelSize + "px " + root.fontFamily
     ctx.textBaseline = "top"
-    var consumed = 0
-    for (var row = 0; row < root.lines.length && row < root.shownLines; row++) {
-      var line = root.lines[row]
-      for (var col = 0; col < line.length; col++) {
-        var idx = consumed + col
-        if (idx >= root.shownChars) break
-        if (row < canvas.paintedLines && idx < canvas.paintedChars) continue
-        var ch = line.charAt(col)
-        var x = col * root.cellW, y = row * root.cellH
-        if (!paintCell(ctx, ch, x, y, root.cellW, root.cellH)) ctx.fillText(ch, x, y)
+    if (canvas.dirty) {
+      ctx.clearRect(0, 0, root.artW, root.artH)
+      canvas.dirty = false
+      canvas.painted = 0
+      if (!root.progressive) {
+        for (var row = 0; row < root.lines.length; row++) {
+          var line = root.lines[row]
+          for (var col = 0; col < line.length; col++) {
+            var ch = line.charAt(col)
+            if (!paintCell(ctx, ch, col * root.cellW, row * root.cellH, root.cellW, root.cellH)) ctx.fillText(ch, col * root.cellW, row * root.cellH)
+          }
+        }
+        return
       }
-      consumed += line.length + 1
     }
-    canvas.paintedLines = root.shownLines
-    canvas.paintedChars = root.shownChars
+    if (!root.progressive) return
+    var list = root.pending
+    for (var i = canvas.painted; i < list.length; i++) {
+      var cell = list[i]
+      if (!paintCell(ctx, cell.ch, cell.c * root.cellW, cell.r * root.cellH, root.cellW, root.cellH)) ctx.fillText(cell.ch, cell.c * root.cellW, cell.r * root.cellH)
+    }
+    canvas.painted = list.length
   }
 
   function repaint() {
@@ -173,8 +190,7 @@ Item {
       id: fgCanvas
       anchors.fill: parent
       property bool dirty: true
-      property int paintedLines: 0
-      property int paintedChars: 0
+      property int painted: 0
       antialiasing: false
       smooth: false
       renderStrategy: Canvas.Cooperative
@@ -189,8 +205,7 @@ Item {
       id: accentCanvas
       anchors.fill: parent
       property bool dirty: true
-      property int paintedLines: 0
-      property int paintedChars: 0
+      property int painted: 0
       antialiasing: false
       smooth: false
       renderStrategy: Canvas.Cooperative
@@ -204,8 +219,7 @@ Item {
   }
 
   onArtChanged: invalidate()
-  onShownLinesChanged: repaint()
-  onShownCharsChanged: repaint()
+  onProgressiveChanged: invalidate()
   onFgChanged: { fgCanvas.dirty = true; fgCanvas.requestPaint() }
   onAccentChanged: { accentCanvas.dirty = true; if (accentCanvas.visible) accentCanvas.requestPaint() }
   onArtWChanged: invalidate()

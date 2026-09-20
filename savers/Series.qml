@@ -3,6 +3,7 @@ import Quickshell
 import Quickshell.Io
 import qs.Commons
 import "../StellineModel.js" as M
+import "Effects.js" as E
 
 // A user saver: the pieces in one folder under ~/.config/omarchy/stelline/savers.
 // ASCII pieces play as a slideshow (each with a quiet effect) or, frame by
@@ -40,9 +41,14 @@ Item {
   // ---- ASCII: the frames of every piece, in order ----
   property var frames: []
   property int index: 0
-  property int effectIndex: 0
-  readonly property var effectList: ["reveal", "typewriter", "pulse"]
-  readonly property string effect: effectSetting === "cycle" ? effectList[effectIndex % effectList.length] : effectSetting
+  readonly property var effectList: settings && Array.isArray(settings.effects) && settings.effects.length ? settings.effects : E.EFFECTS
+  property string cycled: ""
+  readonly property string effect: effectSetting === "cycle" ? cycled : effectSetting
+  function nextEffect() {
+    var next = E.pick(root.effectList)
+    if (next === root.cycled && root.effectList.length > 1) next = E.pick(root.effectList)
+    root.cycled = next
+  }
   readonly property int frameCount: frames.length
   readonly property string frame: frameCount > 0 ? frames[Math.min(index, frameCount - 1)] : ""
   readonly property bool animating: play === "animation" && frameCount > 1
@@ -74,12 +80,12 @@ Item {
   }
 
   onActiveChanged: {
-    if (active) { index = 0; effectIndex = 0; driftX = 0; driftY = 0; loadFrames(); pictureIndex = 0; if (kind === "image") showPicture(0, false) }
+    if (active) { index = 0; nextEffect(); driftX = 0; driftY = 0; loadFrames(); pictureIndex = 0; if (kind === "image") showPicture(0, false) }
     else if (!thumbnail) frames = []
   }
   onThumbnailChanged: if (active) loadFrames()
   onSeriesChanged: if (active) { loadFrames(); if (kind === "image") showPicture(0, false) }
-  Component.onCompleted: if (active) { loadFrames(); if (kind === "image") showPicture(0, false) }
+  Component.onCompleted: { nextEffect(); if (active) { loadFrames(); if (kind === "image") showPicture(0, false) } }
 
   // Slideshow: every piece for dwellSec, a different effect each time.
   Timer {
@@ -88,7 +94,7 @@ Item {
     running: root.running && root.kind === "ascii" && !root.animating && root.frameCount > 1
     onTriggered: {
       root.index = root.nextIndex(root.frameCount)
-      root.effectIndex += 1
+      root.nextEffect()
     }
   }
 

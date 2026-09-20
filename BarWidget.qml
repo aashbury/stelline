@@ -64,7 +64,7 @@ Panel {
     bar: root.bar
     open: root.opened
     focusTarget: keyCatcher
-    contentWidth: panel.fittedContentWidth(Style.space(420))
+    contentWidth: panel.fittedContentWidth(Style.space(470))
     contentHeight: panel.fittedContentHeight(body.implicitHeight, Style.space(720))
 
     PanelKeyCatcher {
@@ -94,6 +94,7 @@ Panel {
           width: flick.width
           svc: root.svc
           bar: root.bar
+          live: root.opened
           foreground: root.foreground
           fontFamily: root.fontFamily
           onCloseRequested: root.close()

@@ -2,11 +2,14 @@
   "schemaVersion": 1,
   "id": "io.github.aashbury.stelline",
   "name": "Stelline",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": "aashbury",
   "license": "MIT",
-  "description": "A native screensaver manager: your Omarchy branding in theme colours, a picker, battery, night-time and theme rules, and a status card for notifications and agents. Takes over the idle service and keeps its timings, lock, and stay-awake.",
-  "kinds": ["service", "bar-widget"],
+  "description": "A native screensaver manager: a grid of savers — your branding, a clock, matrix rain, and your own from pictures, folders, clips, text or a description — with ttfx-style effects in theme colours, per-saver rules (night, battery, theme), and a status card for notifications and agents. Takes over the idle service and keeps its timings, lock, and stay-awake.",
+  "kinds": [
+    "service",
+    "bar-widget"
+  ],
   "keepLoaded": true,
   "entryPoints": {
     "service": "Service.qml",
@@ -19,7 +22,12 @@
     "displayName": "Stelline",
     "description": "Screensaver picker, timings, and stay awake. Left-click opens the panel, right-click toggles stay awake, middle-click previews.",
     "category": "Status",
-    "aliases": ["screensaver", "idle", "stay-awake", "coffee"],
+    "aliases": [
+      "screensaver",
+      "idle",
+      "stay-awake",
+      "coffee"
+    ],
     "allowMultiple": false,
     "defaultSection": "center",
     "defaults": {
@@ -31,9 +39,9 @@
     "schema": [
       {
         "key": "saver",
-        "type": "enum",
+        "type": "string",
         "label": "Screensaver",
-        "options": ["wordmark", "clock", "matrix", "blank", "terminal"]
+        "description": "A built-in id (wordmark, clock, matrix, blank, terminal) or one of your own savers"
       },
       {
         "key": "shuffle",
