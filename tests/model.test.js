@@ -92,7 +92,7 @@ test("situations: battery, night (wrapping midnight) and theme; first enabled ma
   assert.equal(M.situationLabel(list[1]), "Battery below 30%")
   assert.equal(M.situationLabel(list[2]), "Night 22:00–07:00")
   assert.equal(M.situationEffect({ saver: "blank", screensaver: 90, lock: 180 }), "Blank · 1:30 / 3:00")
-  assert.equal(M.situationEffect({ saver: "clock" }), "Clock · keep timings")
+  assert.equal(M.situationEffect({ saver: "clock" }), "Clock")
   assert.equal(M.TTFX_EFFECTS.length, 37)
 })
 

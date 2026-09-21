@@ -187,7 +187,7 @@ Column {
       spacing: Style.space(8)
       NumberField {
         id: screensaverField
-        label: "Screensaver after (s, 0 = keep)"
+        label: "Screensaver after (seconds)"
         value: isFinite(Number(root.situation.screensaver)) && root.situation.screensaver !== null && root.situation.screensaver !== "" ? Number(root.situation.screensaver) : 0
         from: 0
         to: 3600
@@ -198,7 +198,7 @@ Column {
       }
       NumberField {
         id: lockField
-        label: "Lock after (s, 0 = keep)"
+        label: "Lock after (seconds)"
         enabled: root.situation.lock !== "never"
         value: root.situation.lock !== "never" && isFinite(Number(root.situation.lock)) && root.situation.lock !== null && root.situation.lock !== "" ? Number(root.situation.lock) : 0
         from: 0
@@ -210,9 +210,10 @@ Column {
       }
     }
 
+    Text { textFormat: Text.PlainText; text: "0 keeps the usual timing"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
     Toggle {
       width: parent.width - parent.leftPadding - parent.rightPadding
-      label: "Never lock in this situation"
+      label: "Don't lock at those times"
       checked: root.situation.lock === "never"
       foreground: root.foreground
       fontFamily: root.fontFamily

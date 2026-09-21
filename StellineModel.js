@@ -270,8 +270,6 @@ function situationEffect(s, userSavers) {
     var scr = hasScr ? mmss(s.screensaver) : "—"
     var lock = hasLock ? (s.lock === "never" ? "never" : mmss(s.lock)) : "—"
     parts.push(scr + " / " + lock)
-  } else if (parts.length) {
-    parts.push("keep timings")
   }
   return parts.join(" · ")
 }

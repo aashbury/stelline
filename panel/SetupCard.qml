@@ -46,7 +46,7 @@ BorderSurface {
       wrapMode: Text.WordWrap
       text: root.stale
         ? "The stock idle service still answers until the shell restarts; the bar blinks once."
-        : "The coffee cup already in your bar only works with the original screensaver. Finish setup swaps it for this icon — same cup, same Super+Ctrl+I. More › Put the old coffee cup back undoes it."
+        : "The coffee cup already in your bar only works with the original screensaver. Finish setup swaps it for this icon — same cup, same Super+Ctrl+I. Shortcuts › Put the old one back undoes it."
       color: root.dim
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption

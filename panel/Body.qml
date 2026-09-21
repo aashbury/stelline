@@ -6,8 +6,9 @@ import "../StellineModel.js" as M
 // The panel body. Level 1: hero, stay awake (the coffee cup — changed often,
 // so it sits at the top), preview, the saver grid (click a tile = that one
 // plays), timings. Level 2: a tile's gear opens it below the grid — when it
-// plays, how it looks, delete. Level 3: More — every rule in order, the
-// while-you're-away note, shortcuts.
+// plays, how it looks, delete. Level 3: three rows that say what they are
+// set to — rules in order, the while-you're-away note, shortcuts — one open
+// at a time.
 //
 // One cursor, shared by keyboard and mouse: rows bind `hasCursor` to
 // `cursorActive && cursorIndex === <row>` and never read hover themselves.
@@ -27,7 +28,7 @@ Column {
   readonly property bool editing: Object.keys(editingKeys).length > 0
   property bool cursorActive: false
   property int cursorIndex: 0
-  property bool advancedOpen: false
+  property string openSection: ""
   property string openSettings: ""
   property int expandedSituation: -1
 
@@ -49,7 +50,7 @@ Column {
   readonly property int tileWidth: Math.floor((width - tileGap * (columns - 1)) / columns)
 
   // Cursor rows, in visual order. Tiles are one row each; the add tile is
-  // the last of them. Rules follow More when it is open.
+  // the last of them. Rule rows follow the Rules row while it is open.
   readonly property int rowHero: 0
   readonly property int rowStayAwake: 1
   readonly property int rowPreview: 2
@@ -58,9 +59,11 @@ Column {
   readonly property int rowShuffle: rowTileFirst + tileCount
   readonly property int rowScreensaver: rowShuffle + 1
   readonly property int rowLock: rowShuffle + 2
-  readonly property int rowAdvanced: rowShuffle + 3
-  readonly property int rowSituationFirst: rowAdvanced + 1
-  readonly property int rowCount: rowSituationFirst + (advancedOpen ? cfg.situations.length : 0)
+  readonly property int rowRules: rowShuffle + 3
+  readonly property int rowSituationFirst: rowRules + 1
+  readonly property int rowAway: rowSituationFirst + (openSection === "rules" ? cfg.situations.length : 0)
+  readonly property int rowShortcuts: rowAway + 1
+  readonly property int rowCount: rowShortcuts + 1
 
   // The item that owns a cursor row, for scrolling it into view.
   function rowItem(index) {
@@ -71,8 +74,10 @@ Column {
     if (index === rowShuffle) return shuffleToggle
     if (index === rowScreensaver) return screensaverRow
     if (index === rowLock) return lockRow
-    if (index === rowAdvanced) return advancedButton
-    if (index >= rowSituationFirst) return advanced.situationItem(index - rowSituationFirst)
+    if (index === rowRules) return advanced.children[0]
+    if (index === rowAway) return advanced.children[1]
+    if (index === rowShortcuts) return advanced.children[2]
+    if (index >= rowSituationFirst && index < rowAway) return advanced.situationItem(index - rowSituationFirst)
     return null
   }
 
@@ -103,14 +108,20 @@ Column {
     }
   }
 
-  onAdvancedOpenChanged: if (advancedOpen) revealAdvanced.restart()
+  onOpenSectionChanged: if (openSection !== "") revealSection.restart()
   Timer {
-    id: revealAdvanced
+    id: revealSection
     interval: 60
     onTriggered: {
-      var p = advancedButton.mapToItem(root, 0, 0)
-      root.ensureVisible(p.y, advancedButton.height + Style.space(10) + Math.min(advanced.implicitHeight, Style.space(420)))
+      var item = root.rowItem(root.openSection === "rules" ? root.rowRules : (root.openSection === "away" ? root.rowAway : root.rowShortcuts))
+      if (!item) return
+      var p = item.mapToItem(root, 0, 0)
+      root.ensureVisible(p.y, Math.min(item.height, Style.space(420)))
     }
+  }
+  function toggleSection(name) {
+    openSection = openSection === name ? "" : name
+    if (openSection !== "rules") expandedSituation = -1
   }
 
   function reset() {
@@ -173,15 +184,17 @@ Column {
     else if (inTiles(cursorIndex)) { var id = cursorSaverId(); if (id === "") startAdd(); else chooseSaver(id) }
     else if (cursorIndex === rowShuffle) toggleShuffle()
     else if (cursorIndex === rowLock) setStage("lockEnabled", !cfg.lockEnabled)
-    else if (cursorIndex === rowAdvanced) advancedOpen = !advancedOpen
-    else if (cursorIndex >= rowSituationFirst) toggleSituationEditor(cursorIndex - rowSituationFirst)
+    else if (cursorIndex === rowRules) toggleSection("rules")
+    else if (cursorIndex === rowAway) toggleSection("away")
+    else if (cursorIndex === rowShortcuts) toggleSection("shortcuts")
+    else if (cursorIndex >= rowSituationFirst && cursorIndex < rowAway) toggleSituationEditor(cursorIndex - rowSituationFirst)
   }
 
   // Delete: a user saver under the cursor opens its inspector with Delete
   // armed; the second press deletes. Situations delete at once, as before.
   function remove() {
     if (!cursorActive) return
-    if (cursorIndex >= rowSituationFirst) { removeSituation(cursorIndex - rowSituationFirst); return }
+    if (cursorIndex >= rowSituationFirst && cursorIndex < rowAway) { removeSituation(cursorIndex - rowSituationFirst); return }
     var id = cursorSaverId()
     var s = id !== "" ? M.saverById(id, userSavers) : null
     if (!s || s.kind !== "series") return
@@ -192,7 +205,6 @@ Column {
   function hotkey(text) {
     if (text === "p") preview(cursorSaverId())
     else if (text === "s") toggleShuffle()
-    else if (text === "a") advancedOpen = !advancedOpen
     else if (text === "n" || text === "+") startAdd()
     else if (text === "g") { var id = cursorSaverId(); if (id !== "") toggleSettings(id) }
   }
@@ -262,7 +274,7 @@ Column {
     else s.when.theme = { name: svc && svc.themeName ? svc.themeName : "" }
     list.push(s)
     writeSituations(list)
-    advancedOpen = true
+    openSection = "rules"
     expandedSituation = list.length - 1
   }
 
@@ -518,22 +530,9 @@ Column {
 
   PanelSeparator { width: parent.width; foreground: root.foreground }
 
-  // ---- more ----
-  Button {
-    id: advancedButton
-    text: "More"
-    iconText: root.advancedOpen ? "󰅀" : "󰅂"
-    leftAlign: true
-    foreground: root.foreground
-    fontFamily: root.fontFamily
-    hasCursor: root.cursorActive && root.cursorIndex === root.rowAdvanced
-    onClicked: root.advancedOpen = !root.advancedOpen
-    onHovered: function(h) { root.hoverRow(root.rowAdvanced, h) }
-  }
-
+  // ---- rules · while you're away · shortcuts ----
   AdvancedSection {
     id: advanced
-    visible: root.advancedOpen
     width: parent.width
     body: root
     svc: root.svc
