@@ -184,3 +184,30 @@ test("on battery the whole-canvas effects stand down", () => {
   assert.deepEqual(E.onlyCheap(["storm", "cascade"]), ["reveal"])
   assert.ok(E.onlyCheap([]).length > 0)
 })
+
+test("every frame carries offsets, and a padded frame's glyphs land on their own cells", () => {
+  // Regression: a stale layersOf without offsets once shadowed the real one,
+  // and everything with a margin drew padC cells to the right.
+  const wide = ["  ████████  ", " ██      ██ ", "████████████", "██        ██"]
+  const check = (f, label) => {
+    assert.ok(Array.isArray(f.offset) && f.offset.length === 3, label + " has no offsets")
+    for (const [i, key] of [[0, "dim"], [1, "overlay"], [2, "hot"]]) {
+      const layer = f[key]; if (!layer) continue
+      layer.split("\n").forEach((line, row) => {
+        for (let j = 0; j < line.length; j++) {
+          const ch = line[j]; if (ch === " " || ch === "─" || ch === "·") continue
+          const r = row - (f.padR ?? 0), c = f.offset[i] + j
+          // only glyphs that are the art's own letters must sit on the art
+          if (E.CIPHER.includes(ch) || "░▒▓█╲".includes(ch)) continue   // weather, not letters
+          assert.equal((wide[r] || "")[c], ch, `${label} ${key} r${r} c${c}`)
+        }
+      })
+    }
+  }
+  const amb = E.planAmbient("scan", wide, 2)
+  for (let t = 0; t < 6000; t += 60) { const f = E.ambientFrame(amb, t); f.padR = amb.padR; check(f, "scan@" + t) }
+  const st = E.plan("storm", wide, 2)
+  for (let t = 0; t < st.duration; t += 90) { const f = E.frame(st, t); f.padR = st.padR; check(f, "storm@" + t) }
+  const ex = E.planExit("dissolve", wide, 2)
+  const f0 = E.frame(ex, 0); f0.padR = ex.padR; check(f0, "dissolve@0")
+})
