@@ -333,3 +333,42 @@ test("the clipboard scripts are one self-contained bash script each", () => {
   // Nothing outside the staging folder is ever removed.
   assert.equal(paste.split("rm -rf").length - 1, 1)
 })
+
+test("saverType decides how a saver is configured, and a typed word is a wordmark", () => {
+  const byId = id => M.SAVERS.find(s => s.id === id)
+  assert.equal(M.saverType(byId("terminal")), "original")
+  assert.equal(M.saverType(byId("wordmark")), "wordmark")
+  assert.equal(M.saverType(byId("clock")), "clock")
+  assert.equal(M.saverType(byId("blank")), "blank")
+  const series = (kind, source, play) => ({ id: "x", kind: "series", series: { kind, play, source } })
+  // made from typed text, so it is a wordmark and gets a Text field like the built-in
+  assert.equal(M.saverType(series("ascii", { type: "text", text: "Acme" })), "wordmark")
+  assert.equal(M.saverType(series("image", { type: "images" })), "pictures")
+  assert.equal(M.saverType(series("ascii", { type: "video" }, "animation")), "animation")
+  assert.equal(M.saverType(series("ascii", { type: "images" })), "art")
+  assert.equal(M.saverType(null), "")
+})
+
+test("a wordmark's word: the setting, then what it was made from, then the default", () => {
+  const builtin = M.SAVERS.find(s => s.id === "wordmark")
+  assert.equal(M.wordmarkText(builtin, {}), M.DEFAULT_WORDMARK)
+  assert.equal(M.wordmarkText(builtin, { text: "Acme" }), "Acme")
+  // cleared on purpose is not "unset": it means the shared Omarchy artwork
+  assert.equal(M.wordmarkText(builtin, { text: "" }), "")
+  const made = { id: "a", kind: "series", series: { kind: "ascii", source: { type: "text", text: "Acme" } } }
+  assert.equal(M.wordmarkText(made, {}), "Acme")
+  assert.equal(M.wordmarkText(made, { text: "Kubaicle" }), "Kubaicle")
+  assert.equal(M.wordmarkText({ id: "p", kind: "series", series: {} }, {}), "")
+})
+
+test("wordmarkScript draws a word and refuses an empty one", () => {
+  const sh = M.wordmarkScript("Acme Co.", "/home/you/art.txt")
+  assert.match(sh, /label:"\$text"/)
+  assert.match(sh, /omarchy-transcode-ascii/)
+  assert.match(sh, /'\/home\/you\/art\.txt'/)
+  // nothing is written until the art exists, so a failed run leaves the old art
+  assert.match(sh, /\[\[ -s \$tmp\/art\.txt \]\] \|\| exit 1\nmv /)
+  assert.match(M.wordmarkScript("  ", "/tmp/x"), /\[\[ -n \$text \]\] \|\| exit 1/)
+  // a word with a quote in it cannot break out of the script
+  assert.match(M.wordmarkScript("it's", "/tmp/x"), /text='it'\\''s'/)
+})

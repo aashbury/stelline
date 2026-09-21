@@ -45,6 +45,34 @@ function saverFile(id, userSavers) {
   return s ? s.file : ""
 }
 
+// What kind of thing a saver is, which is what decides how it is configured:
+// two savers of the same type get the same settings, whether they shipped
+// with Stelline or you made one. Derived, never stored — a saver made from
+// typed text is a wordmark because its source says so.
+function saverType(saver) {
+  if (!isPlainObject(saver)) return ""
+  if (saver.kind === "external") return "original"
+  if (saver.kind === "native") return saver.id
+  var series = isPlainObject(saver.series) ? saver.series : {}
+  var source = isPlainObject(series.source) ? series.source : {}
+  if (source.type === "text") return "wordmark"
+  if (series.kind === "image") return "pictures"
+  return series.play === "animation" ? "animation" : "art"
+}
+
+// What a wordmark says. The setting wins, then whatever it was made from,
+// then Stelline's own name for the built-in one — a default, not a hardcoding:
+// type over it and it is yours.
+var DEFAULT_WORDMARK = "Stelline"
+
+function wordmarkText(saver, settings) {
+  if (isPlainObject(settings) && typeof settings.text === "string") return settings.text
+  var series = saver && isPlainObject(saver.series) ? saver.series : null
+  var source = series && isPlainObject(series.source) ? series.source : null
+  if (source && typeof source.text === "string") return source.text
+  return saver && saver.id === "wordmark" ? DEFAULT_WORDMARK : ""
+}
+
 function isNativeSaver(s) {
   return !!s && (s.kind === "native" || s.kind === "series")
 }
@@ -75,8 +103,9 @@ function defaults() {
     screensaverEnabled: true,
     lockEnabled: true,
     savers: {
-      // The quiet set, which is also a named mood: a fresh panel reads "Calm".
-      wordmark: { effect: "cycle", effects: ["reveal", "wipe", "typewriter", "slit", "pulse"], holdSec: 15, background: "theme" },
+      // A default, not a hardcoding: type over the text and it is yours. The
+      // quiet effects are also a named mood, so a fresh panel reads "Calm".
+      wordmark: { text: DEFAULT_WORDMARK, effect: "cycle", effects: ["reveal", "wipe", "typewriter", "slit", "pulse"], holdSec: 15, background: "theme" },
       clock: { format: "HH:mm", showDate: true, showSeconds: false },
       blank: {},
       terminal: { effects: [] }
@@ -415,6 +444,27 @@ function terminalArgv(terminalId, omarchyPath, loopPath) {
   if (id.indexOf("foot") !== -1) return ["foot", "--app-id=org.omarchy.screensaver", "--config=" + base + "/default/foot/screensaver.ini", "bash", loopPath]
   if (id.indexOf("kitty") !== -1) return ["kitty", "--class=org.omarchy.screensaver", "--override", "font_size=18", "--override", "window_padding_width=0", "-e", "bash", loopPath]
   return null
+}
+
+// A word into block art, the same way the Add card's typed text has always
+// been made — one picture of the text, transcoded. Used whenever a wordmark's
+// text changes, built-in or your own, so both stay one pipeline.
+function wordmarkScript(text, outPath) {
+  var q = shellQuote
+  return [
+    "set -u",
+    "text=" + q(String(text || "").trim()),
+    "[[ -n $text ]] || exit 1",
+    "out=" + q(String(outPath)),
+    "dir=$(dirname \"$out\"); mkdir -p \"$dir\" || exit 1",
+    "tmp=$(mktemp -d); trap 'rm -rf \"$tmp\"' EXIT",
+    // Black on white: the transcoder treats dark pixels as the subject.
+    "font=$(magick -list font 2>/dev/null | awk '/^ *Font: /{print $2}' | grep -m1 -iE 'ExtraBold|Black|Heavy|Bold' || true)",
+    "magick -background white -fill black ${font:+-font \"$font\"} -pointsize 220 label:\"$text\" \"$tmp/text.png\" 2>/dev/null || exit 1",
+    "omarchy-transcode-ascii \"$tmp/text.png\" \"$tmp/art.txt\" --width " + ASCII_COLUMNS + " --height 40 --mode block >/dev/null 2>&1 || exit 1",
+    "[[ -s $tmp/art.txt ]] || exit 1",
+    "mv \"$tmp/art.txt\" \"$out\""
+  ].join("\n")
 }
 
 function shellQuote(arg) {
@@ -1192,6 +1242,10 @@ if (typeof module !== "undefined") {
     totalCount: totalCount,
     allSavers: allSavers,
     isNativeSaver: isNativeSaver,
+    saverType: saverType,
+    wordmarkText: wordmarkText,
+    wordmarkScript: wordmarkScript,
+    DEFAULT_WORDMARK: DEFAULT_WORDMARK,
     conditionLabel: conditionLabel,
     USER_SAVERS_SUBDIR: USER_SAVERS_SUBDIR,
     IMAGE_EXTENSIONS: IMAGE_EXTENSIONS,

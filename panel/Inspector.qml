@@ -25,7 +25,9 @@ BorderSurface {
   readonly property bool hasRule: !!rule && rule.enabled === true
   readonly property var when: rule && rule.when ? rule.when : ({})
   readonly property bool usual: cfg.saver === saverId && !cfg.shuffle
-  readonly property bool showsBranding: saverId === "wordmark" || saverId === "terminal"
+  // The shared Omarchy artwork is the Original's subject; a wordmark has a
+  // word of its own instead, and shows this file only when that word is empty.
+  readonly property bool showsBranding: saverId === "terminal"
   property bool timingsOpen: false
   property bool deleteArmed: false
 
@@ -311,7 +313,7 @@ BorderSurface {
         width: parent.width
         textFormat: Text.PlainText
         wrapMode: Text.WordWrap
-        text: "Original shows it as it is. Wordmark shows Stelline's own art until you set yours."
+        text: "A wordmark with its text cleared shows this too."
         color: root.dim
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
@@ -327,6 +329,7 @@ BorderSurface {
       saverId: root.saverId
       saver: root.saver
       settings: root.cfg.savers[root.saverId] || ({})
+      svc: root.svc
       bar: root.bar
       foreground: root.foreground
       fontFamily: root.fontFamily

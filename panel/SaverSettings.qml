@@ -26,7 +26,13 @@ Column {
   readonly property string play: settings && settings.play ? String(settings.play) : (series && series.play ? String(series.play) : "slideshow")
   readonly property bool animation: isAscii && play === "animation" && frameCount > 1
   readonly property bool hasKnobs: saverId !== "" && saverId !== "blank" && !(isImage && frameCount === 1 && M.extensionOf(series.pieces[0] || "") === "gif")
-  readonly property bool editing: false
+  // What this saver is decides what it is configured with. A wordmark has a
+  // word, whether it shipped with Stelline or you typed it into Add.
+  readonly property string type: M.saverType(root.saver)
+  readonly property bool isWordmark: type === "wordmark"
+  readonly property string word: M.wordmarkText(root.saver, root.settings)
+  property var svc: null
+  readonly property bool editing: wordField.activeFocus
   readonly property var pinned: Array.isArray(settings.effects) ? settings.effects : []
 
   signal patched(var patch)
@@ -41,9 +47,44 @@ Column {
   rightPadding: Style.space(8)
   bottomPadding: Style.space(6)
 
-  // ---- effects: for the wordmark and ASCII slideshows ----
+  // ---- the word, for anything of the wordmark type ----
   Column {
-    visible: root.saverId === "wordmark" || (root.isAscii && !root.animation)
+    visible: root.isWordmark
+    width: parent.width - root.leftPadding - root.rightPadding
+    spacing: Style.space(3)
+    Text {
+      textFormat: Text.PlainText
+      text: "Text"
+      color: root.dim
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+    }
+    TextField {
+      id: wordField
+      width: Style.space(260)
+      text: root.word
+      placeholderText: root.saverId === "wordmark" ? "Omarchy's artwork" : "A word"
+      foreground: root.foreground
+      font.family: root.fontFamily
+      onEditingFinished: if (text !== root.word && root.svc) root.svc.setWordmarkText(root.saverId, text)
+      onAccepted: if (root.svc) root.svc.setWordmarkText(root.saverId, text)
+    }
+    Text {
+      width: parent.width
+      textFormat: Text.PlainText
+      wrapMode: Text.WordWrap
+      text: root.saverId === "wordmark"
+        ? "Drawn as block letters. Leave it empty to show Omarchy's artwork instead, the same as the Original."
+        : "Drawn as block letters."
+      color: root.dim
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+    }
+  }
+
+  // ---- effects: for wordmarks and ASCII slideshows ----
+  Column {
+    visible: root.isWordmark || (root.isAscii && !root.animation)
     width: parent.width - root.leftPadding - root.rightPadding
     spacing: Style.space(6)
 
@@ -60,7 +101,7 @@ Column {
     SliderRow {
       width: parent.width
       bar: root.bar
-      label: root.isSeries ? "Each piece stays" : "Each effect stays"
+      label: root.isSeries && !root.isWordmark ? "Each piece stays" : "Each effect stays"
       value: root.isSeries ? (Number(root.settings.dwellSec) || Number(root.series.dwellSec) || 12) : (Number(root.settings.holdSec) || 15)
       minimum: 5
       maximum: 60
@@ -161,7 +202,7 @@ Column {
 
   // ---- background: wordmark and every series ----
   Column {
-    visible: root.saverId === "wordmark" || root.isSeries
+    visible: root.isWordmark || root.isSeries
     width: parent.width - root.leftPadding - root.rightPadding
     spacing: Style.space(3)
     Text { textFormat: Text.PlainText; text: "Background"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
@@ -177,7 +218,7 @@ Column {
 
   // ---- clock ----
   Column {
-    visible: root.saverId === "clock"
+    visible: root.type === "clock"
     width: parent.width - root.leftPadding - root.rightPadding
     spacing: Style.space(4)
     Toggle {
@@ -209,7 +250,7 @@ Column {
 
   // ---- terminal ----
   Column {
-    visible: root.saverId === "terminal"
+    visible: root.type === "original"
     width: parent.width - root.leftPadding - root.rightPadding
     spacing: Style.space(8)
     MoodPicker {

@@ -203,6 +203,78 @@ Item {
   }
   function summonPanel() { Quickshell.execDetached(["omarchy-shell", "shell", "summon", root.pluginId, "{}"]) }
 
+  // ---- wordmarks -----------------------------------------------------------
+  //
+  // A wordmark is a saver whose content is a word you typed, so changing it is
+  // typing a different word. The text is the setting; the block art beside it
+  // is a cache, rebuilt whenever the text changes. A built-in one caches here;
+  // one of your own caches in its own folder, so the folder stays portable.
+  readonly property string wordmarkDir: home + "/.config/omarchy/stelline/wordmarks"
+  property var renderingWordmarks: []
+
+  function wordmarkArtPath(id) {
+    var saver = M.saverById(id, root.userSavers)
+    if (saver && saver.series && saver.series.dir) {
+      var pieces = saver.series.pieces || []
+      return pieces.length ? String(pieces[0]) : saver.series.dir + "/001.txt"
+    }
+    return root.wordmarkDir + "/" + id + ".txt"
+  }
+
+  function writeSaverSetting(id, patch) {
+    var savers = M.cloneJson(root.cfg.savers)
+    var current = savers[id] || {}
+    for (var k in patch) current[k] = patch[k]
+    savers[id] = current
+    return writeSettings({ savers: savers })
+  }
+
+  // Empty text is not a failure: a built-in wordmark falls back to the shared
+  // Omarchy artwork, which is what the Original plays.
+  function setWordmarkText(id, text) {
+    var saver = M.saverById(id, root.userSavers)
+    if (!saver || M.saverType(saver) !== "wordmark") return "not-a-wordmark"
+    var want = String(text === undefined || text === null ? "" : text)
+    if (!writeSaverSetting(id, { text: want })) return "failed"
+    if (want.trim() === "") return "ok"
+    renderWordmark(id, want)
+    return "ok"
+  }
+
+  function renderWordmark(id, text) {
+    if (root.renderingWordmarks.indexOf(id) !== -1) return
+    root.renderingWordmarks = root.renderingWordmarks.concat([id])
+    var path = root.runtimeDir + "/stelline-wordmark-" + id + ".sh"
+    wordmarkWriter.pending = { id: id, path: path }
+    runProcess(wordmarkWriter, "wordmark-write " + id,
+      "printf %s " + M.shellQuote(M.wordmarkScript(text, root.wordmarkArtPath(id))) + " > " + M.shellQuote(path))
+  }
+  Process {
+    id: wordmarkWriter
+    property var pending: null
+    onExited: function(exitCode) {
+      var job = wordmarkWriter.pending
+      wordmarkWriter.pending = null
+      if (exitCode !== 0 || !job) { root.finishWordmark(job ? job.id : "") ; return }
+      wordmarkRunner.jobId = job.id
+      root.runProcess(wordmarkRunner, "wordmark " + job.id, "bash " + M.shellQuote(job.path) + "; rm -f " + M.shellQuote(job.path))
+    }
+  }
+  Process {
+    id: wordmarkRunner
+    property string jobId: ""
+    onExited: function(exitCode) {
+      root.logEvent("wordmark", wordmarkRunner.jobId + " exitCode=" + exitCode)
+      // A saver of your own keeps its art in its folder; nudge the scan so the
+      // tile and the screensaver pick the new art up.
+      root.rescan()
+      root.finishWordmark(wordmarkRunner.jobId)
+    }
+  }
+  function finishWordmark(id) {
+    root.renderingWordmarks = root.renderingWordmarks.filter(function(i) { return i !== id })
+  }
+
   // The clipboard as a source. `clipboardHas` is "image" (bytes), "paths"
   // (files or a folder) or "" — the Add card only offers Paste when there is
   // something to paste, so the button never disappoints.
@@ -1250,6 +1322,15 @@ Item {
     function pick(kind: string): string { return root.pickFiles(kind) }
     function paste(): string { root.refreshClipboard(); return root.pasteClipboard() }
     function clipboard(): string { root.refreshClipboard(); return root.clipboardHas }
+    // `qs ipc` splits arguments on commas, so a word with one goes base64.
+    function setText(saverId: string, text: string): string { return root.setWordmarkText(saverId, text) }
+    function setText64(saverId: string, base64Text: string): string {
+      var t
+      try { t = Qt.atob(base64Text) } catch (e) { return "bad-base64" }
+      return root.setWordmarkText(saverId, t)
+    }
+    function wordmarkArt(saverId: string): string { return root.wordmarkArtPath(saverId) }
+
     function setRule(saverId: string, key: string, on: string): string {
       if (M.RULE_KEYS.indexOf(key) === -1) return "unknown-condition"
       if (!M.saverById(saverId, root.userSavers)) return "unknown-saver"

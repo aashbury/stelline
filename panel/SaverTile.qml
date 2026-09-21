@@ -84,6 +84,9 @@ CursorSurface {
           if ("thumbnail" in item) item.thumbnail = true
           if ("fallbackArt" in item && root.saver && root.saver.fallbackArt)
             item.fallbackArt = String(Qt.resolvedUrl("../" + root.saver.fallbackArt)).replace(/^file:\/\//, "")
+          // Only the wordmark entry names itself; the Original borrows this
+          // renderer for its thumbnail and wants the branding file as it is.
+          if ("wordmarkId" in item && root.saver && M.saverType(root.saver) === "wordmark") item.wordmarkId = String(root.saver.id)
           item.settings = Qt.binding(function() {
             var all = root.svc ? root.svc.cfg.savers : null
             return all && all[root.saver.id] ? all[root.saver.id] : ({})

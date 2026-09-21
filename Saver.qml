@@ -43,6 +43,7 @@ Item {
         var def = M.saverById(stage.saverId, host.service ? host.service.userSavers : [])
         if ("fallbackArt" in item && def && def.fallbackArt)
           item.fallbackArt = String(Qt.resolvedUrl(def.fallbackArt)).replace(/^file:\/\//, "")
+        if ("wordmarkId" in item && def && M.saverType(def) === "wordmark") item.wordmarkId = String(def.id)
         item.settings = Qt.binding(function() {
           var all = host.service ? host.service.cfg.savers : null
           return all && all[stage.saverId] ? all[stage.saverId] : ({})

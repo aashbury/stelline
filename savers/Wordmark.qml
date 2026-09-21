@@ -4,10 +4,12 @@ import Quickshell.Io
 import qs.Commons
 import "Effects.js" as E
 
-// The stock screensaver's subject, drawn natively: the branding ASCII art from
-// ~/.config/omarchy/branding/screensaver.txt in the theme's colours, sized to
-// the screen, with a few quiet reveal effects. Edits made through
-// Style > Screensaver show up live.
+// A wordmark: a word, drawn big in the theme's colours with a reveal effect.
+// The word is a setting — type another one in the saver's gear — and the
+// block art beside it is a cache the service rebuilds. Clear the word and it
+// falls back to Omarchy's shared artwork, the same file the Original plays,
+// so nothing that lived in Style > Screensaver is lost. Edits either way show
+// up live.
 Item {
   id: root
 
@@ -20,20 +22,20 @@ Item {
   readonly property color bg: settings && settings.background === "black" ? "black" : Color.background
   readonly property color accent: Color.accent
 
-  // Until the branding file has been changed from the stock logo, the
-  // Wordmark draws Stelline's own art (`fallbackArt`, set by the tile and the
-  // full-screen surface for this saver only) — otherwise it would be the
-  // Omarchy logo twice over, here and on the Original, which always shows the
-  // branding file because that is what the stock saver plays. Set your own
-  // art (the ⚙ ARTWORK row, or Style › Screensaver) and it shows that instead.
+  // The host names which wordmark this is; the art cache is derived from it.
+  // Empty (the Original's tile borrows this renderer) means: just the branding.
+  property string wordmarkId: ""
   property string fallbackArt: ""
+  readonly property string word: wordmarkId === "" ? "" : String(settings && settings.text !== undefined ? settings.text : "Stelline")
+  readonly property bool usesText: word.trim() !== ""
   readonly property string brandingPath: Quickshell.env("HOME") + "/.config/omarchy/branding/screensaver.txt"
-  readonly property string logoPath: (service && service.omarchyPath ? String(service.omarchyPath) : (Quickshell.env("OMARCHY_PATH") || "/usr/share/omarchy")) + "/logo.txt"
+  readonly property string textArtPath: usesText ? Quickshell.env("HOME") + "/.config/omarchy/stelline/wordmarks/" + wordmarkId + ".txt" : ""
   property string branding: ""
-  property string logo: ""
+  property string textArt: ""
   property string ownArt: ""
-  readonly property bool brandingIsStock: branding.trim() === "" || (logo.trim() !== "" && branding.trim() === logo.trim())
-  readonly property string art: fallbackArt !== "" && brandingIsStock ? ownArt : branding
+  // The word, once it has been drawn; Stelline's own art until then, so a
+  // fresh install shows its name without waiting on anything.
+  readonly property string art: usesText ? (textArt.trim() !== "" ? textArt : ownArt) : branding
 
   // `cycle` (the default) plays a different effect every `holdSec`, drawn at
   // random from `effects` (all of them unless pinned) the way the stock saver
@@ -61,10 +63,12 @@ Item {
     onLoadFailed: root.branding = ""
   }
   FileView {
-    path: root.logoPath
+    path: root.textArtPath
+    watchChanges: true
     printErrors: false
-    onLoaded: root.logo = text()
-    onLoadFailed: root.logo = ""
+    onLoaded: root.textArt = text()
+    onFileChanged: reload()
+    onLoadFailed: root.textArt = ""
   }
   FileView {
     path: root.fallbackArt

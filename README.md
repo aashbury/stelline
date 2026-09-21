@@ -95,12 +95,20 @@ that does not parse, and the toggle removes exactly those lines again.
 | | |
 |---|---|
 | **Original** | Omarchy's own screensaver, exactly as it ships and the default: `ttfx` in your terminal, cycling through its 37 effects at random. Choose a subset in ⚙ — with a choice, Stelline starts the terminal itself running a copy of Omarchy's loop with `--include-effects`; without, it runs the stock launcher untouched. Its ⚙ also has the same three artwork edits as *Style › Screensaver* (a picture, the text, back to the logo). |
-| **Wordmark** | The same text as the Original, drawn by Stelline instead of `ttfx`: whole-pixel cells in the theme's foreground colour, with one of **fourteen animations of Stelline's own** every few seconds — `decrypt`, `rain`, `beams`, `scatter`, `wipe`, `typewriter`, `reveal`, `pulse`, and six that assemble the art rather than fade it in: `scanline` (a bright bar sweeps down), `grid` (a lattice snaps in, then fills), `shockwave` (an expanding ring), `slit` (opens from one column and widens), `glitch` (bands tear sideways and lock back), `dust` (particles drift in and converge). They are not Omarchy's 37 — those run only inside `ttfx`, so only the Original has them. What you get instead is the cost: almost nothing, against several cores. Until the branding file has been changed from the stock logo it says *Stelline*; edit the text (⚙, or *Style › Screensaver*) and both savers say what you wrote. |
+| **Wordmark** | A word you type — **Text** in its ⚙, `Stelline` to begin with — drawn by Stelline instead of `ttfx`: whole-pixel cells in the theme's foreground colour, with one of **fourteen animations of Stelline's own** every few seconds — `decrypt`, `rain`, `beams`, `scatter`, `wipe`, `typewriter`, `reveal`, `pulse`, and six that assemble the art rather than fade it in: `scanline` (a bright bar sweeps down), `grid` (a lattice snaps in, then fills), `shockwave` (an expanding ring), `slit` (opens from one column and widens), `glitch` (bands tear sideways and lock back), `dust` (particles drift in and converge). They are not Omarchy's 37 — those run only inside `ttfx`, so only the Original has them. What you get instead is the cost: almost nothing, against several cores. Clear the field and it shows Omarchy's shared artwork instead, the same file the Original plays. |
 | **Clock** | Seven-segment digits built from block characters, the colon blinking in the accent, the date in small wide-tracked capitals beneath. Repaints only when the text changes. |
 | **Blank** | Black. Exists so a battery rule has somewhere free to point. |
 
 Every saver drifts a few pixels every half minute. Colours follow the theme
 live; the font is the shell's monospace font.
+
+**A saver's settings follow its type**, so two savers of the same kind are
+configured the same way whether they shipped with Stelline or you made them.
+A **wordmark** — the built-in one, or anything you make from *Add › Some text*
+— has a **Text** field: type a different word and it is redrawn. **Pictures**
+get a fit and a crossfade, an **animation** gets a frame rate, the **Original**
+gets Omarchy's effects. Nothing is hardcoded; the built-in wordmark is simply
+defaulted to `Stelline` so there is something to look at on day one.
 
 **Which animations play** is one control in a saver's ⚙, for Stelline's
 fourteen and Omarchy's thirty-seven alike: **Everything**, or a mood —
@@ -119,7 +127,7 @@ The **Add** tile makes a saver from:
 | **Pictures** | one or more files (the desktop file chooser) | ASCII art in theme colours, one piece per picture, played as a slideshow with the effects above — or the pictures as they are, crossfading |
 | **A folder of pictures** | a folder | the same, and a folder shown as-is is read live: drop a picture in, it joins |
 | **A video or GIF** | one file | an ASCII animation, frame by frame (the first 20 s at 10 fps) — or the clip as it is, as an animated picture |
-| **Some text** | you type it | big letters as block art — a wordmark of your own |
+| **Some text** | you type it | big letters as block art — a wordmark of your own, with the same **Text** field in its ⚙ afterwards |
 | **A description** | you describe it | ASCII art, still or an animation loop, drawn by your **default coding agent** (`omarchy default agent` — Claude Code, Codex, Gemini, OpenCode, Copilot, Crush, Pi, Oh My Pi or Grok), each in its one-shot mode with tools off or read-only where it has such a switch. Claude Code if no default is set; the Claude API with `ANTHROPIC_API_KEY` as a last resort. Shown only when one of those is there. |
 
 Imports run in the background — the tile appears at once and fills in; a
