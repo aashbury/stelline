@@ -74,7 +74,7 @@ BorderSurface {
         Text {
           width: parent.width
           textFormat: Text.PlainText
-          text: root.failed ? "Import failed: " + root.saver.series.error : (root.saver && root.saver.meta ? root.saver.meta : "")
+          text: root.failed ? "Import failed: " + root.saver.series.error : (root.saver && root.saver.about ? root.saver.about : (root.saver && root.saver.meta ? root.saver.meta : ""))
           color: root.failed ? Color.urgent : root.dim
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption

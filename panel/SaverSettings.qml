@@ -52,7 +52,9 @@ Column {
       Text {
         anchors.verticalCenter: parent.verticalCenter
         textFormat: Text.PlainText
-        text: root.pinned.length === 0 ? "All the effects, in turn — click the ones you want" : root.pinned.length + " of " + E.EFFECTS.length + " effects chosen"
+        text: root.pinned.length === 0
+          ? (root.saverId === "wordmark" ? "All " + E.EFFECTS.length + " of Stelline's own effects, in turn — click the ones you want" : "All the effects, in turn — click the ones you want")
+          : root.pinned.length + " of " + (root.saverId === "wordmark" ? "Stelline's " : "") + E.EFFECTS.length + " effects chosen"
         color: root.dim
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption

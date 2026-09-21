@@ -14,10 +14,16 @@ var PLUGIN_ID = "io.github.aashbury.stelline"
 // the Original always shows the branding file, since that is what it plays.
 var DEFAULT_SAVER = "terminal"
 var SAVERS = [
-  { id: "terminal", name: "Original", glyph: "󰆍", meta: "Omarchy's own", file: "", thumb: "savers/Wordmark.qml", kind: "external" },
-  { id: "wordmark", name: "Wordmark", glyph: "󰊄", meta: "your art, redrawn", file: "savers/Wordmark.qml", fallbackArt: "savers/stelline.txt", kind: "native" },
-  { id: "clock",    name: "Clock",    glyph: "󰥔", meta: "time and date", file: "savers/Clock.qml",    kind: "native" },
-  { id: "blank",    name: "Blank",    glyph: "󰹏", meta: "black, saves power", file: "savers/Blank.qml",  kind: "native" }
+  // `about` is the sentence under the name when a tile is open: what this
+  // one is, and — for the two that share the text — which animations it has.
+  { id: "terminal", name: "Original", glyph: "󰆍", meta: "Omarchy's own", file: "", thumb: "savers/Wordmark.qml", kind: "external",
+    about: "Omarchy's own screensaver, untouched: your text with Omarchy's 37 animations, in a terminal. The full stock experience; it uses several CPU cores while it runs." },
+  { id: "wordmark", name: "Wordmark", glyph: "󰊄", meta: "drawn by Stelline", file: "savers/Wordmark.qml", fallbackArt: "savers/stelline.txt", kind: "native",
+    about: "The same text, drawn by Stelline: theme colours, eight animations of its own, almost no CPU. Omarchy's animations only play in the Original." },
+  { id: "clock",    name: "Clock",    glyph: "󰥔", meta: "time and date", file: "savers/Clock.qml",    kind: "native",
+    about: "Seven-segment digits in text, the colon blinking in the accent, the date beneath." },
+  { id: "blank",    name: "Blank",    glyph: "󰹏", meta: "black, saves power", file: "savers/Blank.qml",  kind: "native",
+    about: "Nothing at all. Give it to a battery rule." }
 ]
 
 // Every saver the user can pick: the built-ins, then their own (imported
