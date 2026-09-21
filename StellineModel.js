@@ -63,7 +63,7 @@ function saverType(saver) {
 // What a wordmark says. The setting wins, then whatever it was made from,
 // then Stelline's own name for the built-in one — a default, not a hardcoding:
 // type over it and it is yours.
-var DEFAULT_WORDMARK = "Stelline"
+var DEFAULT_WORDMARK = "stelline"
 
 function wordmarkText(saver, settings) {
   if (isPlainObject(settings) && typeof settings.text === "string") return settings.text

@@ -14,6 +14,9 @@ Item {
   property string art: ""
   property color fg: Color.foreground
   property color accent: Color.accent
+  property color muted: Color.muted
+  // A pulse toward an accent identical to the foreground is no pulse at all.
+  readonly property color pulseTo: Math.abs(accent.r - fg.r) + Math.abs(accent.g - fg.g) + Math.abs(accent.b - fg.b) > 0.12 ? accent : muted
   property string fontFamily: Style.font.family
   // How much of the surface the art may take.
   property real fitWidth: 0.8
@@ -216,7 +219,7 @@ Item {
       smooth: false
       renderStrategy: Canvas.Cooperative
       visible: root.pulse
-      onPaint: root.paintArt(accentCanvas, getContext("2d"), root.accent)
+      onPaint: root.paintArt(accentCanvas, getContext("2d"), root.pulseTo)
       opacity: root.pulseMix
       onVisibleChanged: if (visible) { dirty = true; requestPaint() }
       onWidthChanged: dirty = true
@@ -227,7 +230,7 @@ Item {
   onArtChanged: invalidate()
   onProgressiveChanged: invalidate()
   onFgChanged: { fgCanvas.dirty = true; fgCanvas.requestPaint() }
-  onAccentChanged: { accentCanvas.dirty = true; if (accentCanvas.visible) accentCanvas.requestPaint() }
+  onPulseToChanged: { accentCanvas.dirty = true; if (accentCanvas.visible) accentCanvas.requestPaint() }
   onArtWChanged: invalidate()
   onArtHChanged: invalidate()
   onFontFamilyChanged: invalidate()

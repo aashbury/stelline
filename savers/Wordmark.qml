@@ -26,7 +26,7 @@ Item {
   // Empty (the Original's tile borrows this renderer) means: just the branding.
   property string wordmarkId: ""
   property string fallbackArt: ""
-  readonly property string word: wordmarkId === "" ? "" : String(settings && settings.text !== undefined ? settings.text : "Stelline")
+  readonly property string word: wordmarkId === "" ? "" : String(settings && settings.text !== undefined ? settings.text : "stelline")
   readonly property bool usesText: word.trim() !== ""
   readonly property string brandingPath: Quickshell.env("HOME") + "/.config/omarchy/branding/screensaver.txt"
   readonly property string textArtPath: usesText ? Quickshell.env("HOME") + "/.config/omarchy/stelline/wordmarks/" + wordmarkId + ".txt" : ""
@@ -37,12 +37,15 @@ Item {
   // fresh install shows its name without waiting on anything.
   readonly property string art: usesText ? (textArt.trim() !== "" ? textArt : ownArt) : branding
 
-  // `cycle` (the default) plays a different effect every `holdSec`, drawn at
-  // random from `effects` (all of them unless pinned) the way the stock saver
-  // draws from ttfx. Burn-in drift is a small jump every half minute.
+  // `cycle` (the default) draws a different effect at random from `effects`
+  // (all of them unless pinned) the way the stock saver draws from ttfx. It
+  // is a screensaver, so the next one starts `holdSec` after the last one
+  // lands rather than on a fixed clock — 0 means the art never sits still.
+  // Each run lands in a slightly new spot, which is the burn-in drift too.
   readonly property var effectList: settings && Array.isArray(settings.effects) && settings.effects.length ? settings.effects : E.EFFECTS
   readonly property string effectSetting: settings && settings.effect ? String(settings.effect) : "cycle"
-  readonly property int holdSec: settings && Number(settings.holdSec) > 0 ? Number(settings.holdSec) : 15
+  readonly property int holdSec: settings && settings.holdSec !== undefined && Number(settings.holdSec) >= 0 ? Number(settings.holdSec) : 4
+  readonly property bool cycling: active && !thumbnail && effectSetting === "cycle"
   property string cycled: ""
   readonly property string effect: thumbnail ? "none" : (effectSetting === "cycle" ? cycled : effectSetting)
   property real driftX: 0
@@ -52,6 +55,13 @@ Item {
     var next = E.pick(root.effectList)
     if (next === root.cycled && root.effectList.length > 1) next = E.pick(root.effectList)
     root.cycled = next
+    // `pulse` has nothing to animate, so it never "lands"; give the timer a
+    // chance to see that and keep the cycle turning either way.
+    Qt.callLater(root.scheduleNext)
+    if (!root.thumbnail) {
+      root.driftX = Math.round((Math.random() * 2 - 1) * root.width * 0.03)
+      root.driftY = Math.round((Math.random() * 2 - 1) * root.height * 0.03)
+    }
   }
 
   FileView {
@@ -77,28 +87,24 @@ Item {
     onLoadFailed: root.ownArt = ""
   }
 
-  onActiveChanged: if (active) { driftX = 0; driftY = 0; nextEffect() }
+  onActiveChanged: if (active) nextEffect()
   Component.onCompleted: nextEffect()
 
-  Timer {
-    interval: root.holdSec * 1000
-    repeat: true
-    running: root.active && !root.thumbnail && root.effectSetting === "cycle"
-    onTriggered: root.nextEffect()
-  }
+  // Started when an effect lands, so the rest is between animations rather
+  // than shared with them: a long effect no longer means a short pause.
+  function scheduleNext() { if (root.cycling && !show.running) rest.restart() }
 
   Timer {
-    interval: 30000
-    repeat: true
-    running: root.active && !root.thumbnail
-    onTriggered: {
-      root.driftX = Math.round((Math.random() * 2 - 1) * root.width * 0.03)
-      root.driftY = Math.round((Math.random() * 2 - 1) * root.height * 0.03)
-    }
+    id: rest
+    interval: Math.max(120, root.holdSec * 1000)
+    running: false
+    onTriggered: if (root.cycling) root.nextEffect()
   }
 
   AsciiShow {
+    id: show
     anchors.fill: parent
+    onRunningChanged: if (!running) root.scheduleNext()
     art: root.art
     effect: root.effect
     active: root.active && !root.thumbnail

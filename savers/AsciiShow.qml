@@ -6,9 +6,13 @@ import "Effects.js" as E
 // ttfx screensaver: decrypt, rain, beams, scatter, wipe, typewriter, reveal;
 // `pulse` shows it at once and breathes the colour toward the accent; `none`
 // just shows it. Resolved cells are painted once into the cached canvas; the
-// glyphs still in flight are one text overlay in the accent colour, aligned
-// to the same grid — so a frame is a few thousand array writes and one text
+// glyphs still in flight are one text overlay in a second colour, aligned to
+// the same grid — so a frame is a few thousand array writes and one text
 // layout, and once the effect lands the piece costs nothing at all.
+//
+// That second colour is the theme's accent, except that plenty of Omarchy
+// themes set the accent to the foreground — on those the motion would be one
+// flat colour, so the muted tone stands in and the animation still reads.
 Item {
   id: root
 
@@ -23,6 +27,10 @@ Item {
   property real driftX: 0
   property real driftY: 0
   property int fps: 15
+
+  property color muted: Color.muted
+  readonly property bool accentShows: Math.abs(accent.r - fg.r) + Math.abs(accent.g - fg.g) + Math.abs(accent.b - fg.b) > 0.12
+  readonly property color trail: accentShows ? accent : muted
 
   readonly property bool entrance: E.EFFECTS.indexOf(effect) !== -1 && effect !== "pulse"
   property var plan: null
@@ -104,7 +112,7 @@ Item {
     textFormat: Text.PlainText
     renderType: Text.NativeRendering
     text: root.overlay
-    color: root.accent
+    color: root.trail
     font.family: root.fontFamily
     font.pixelSize: view.pixelSize
     font.letterSpacing: view.cellW - view.advance

@@ -95,12 +95,21 @@ that does not parse, and the toggle removes exactly those lines again.
 | | |
 |---|---|
 | **Original** | Omarchy's own screensaver, exactly as it ships and the default: `ttfx` in your terminal, cycling through its 37 effects at random. Choose a subset in ⚙ — with a choice, Stelline starts the terminal itself running a copy of Omarchy's loop with `--include-effects`; without, it runs the stock launcher untouched. Its ⚙ also has the same three artwork edits as *Style › Screensaver* (a picture, the text, back to the logo). |
-| **Wordmark** | A word you type — **Text** in its ⚙, `Stelline` to begin with — drawn by Stelline instead of `ttfx`: whole-pixel cells in the theme's foreground colour, with one of **fourteen animations of Stelline's own** every few seconds — `decrypt`, `rain`, `beams`, `scatter`, `wipe`, `typewriter`, `reveal`, `pulse`, and six that assemble the art rather than fade it in: `scanline` (a bright bar sweeps down), `grid` (a lattice snaps in, then fills), `shockwave` (an expanding ring), `slit` (opens from one column and widens), `glitch` (bands tear sideways and lock back), `dust` (particles drift in and converge). They are not Omarchy's 37 — those run only inside `ttfx`, so only the Original has them. What you get instead is the cost: almost nothing, against several cores. Clear the field and it shows Omarchy's shared artwork instead, the same file the Original plays. |
+| **Wordmark** | A word you type — **Text** in its ⚙, `stelline` to begin with — drawn by Stelline instead of `ttfx`: whole-pixel cells in the theme's foreground colour, with one of **fourteen animations of Stelline's own** every few seconds — `decrypt`, `rain`, `beams`, `scatter`, `wipe`, `typewriter`, `reveal`, `pulse`, and six that assemble the art rather than fade it in: `scanline` (a bright bar sweeps down), `grid` (a lattice snaps in, then fills), `shockwave` (an expanding ring), `slit` (opens from one column and widens), `glitch` (bands tear sideways and lock back), `dust` (particles drift in and converge). They are not Omarchy's 37 — those run only inside `ttfx`, so only the Original has them. What you get instead is the cost: almost nothing, against several cores. Clear the field and it shows Omarchy's shared artwork instead, the same file the Original plays. |
 | **Clock** | Seven-segment digits built from block characters, the colon blinking in the accent, the date in small wide-tracked capitals beneath. Repaints only when the text changes. |
 | **Blank** | Black. Exists so a battery rule has somewhere free to point. |
 
-Every saver drifts a few pixels every half minute. Colours follow the theme
-live; the font is the shell's monospace font.
+It is a screensaver, so it does not settle and stop: an animation plays, the
+art rests for **Rest between** seconds (four by default, `0` for never still),
+and the next one starts — landing a few pixels off the last, which is the
+burn-in drift as well. A cycle costs about a tenth of a core while it runs and
+nothing while it rests.
+
+Colours are the theme's, never invented: settled art in the foreground colour,
+the glyphs still in flight in the accent, and `pulse` breathing between the
+two. Plenty of Omarchy themes set the accent *to* the foreground, which would
+leave the motion one flat colour — on those the muted tone stands in, so an
+animation always reads as an animation. The font is the shell's monospace font.
 
 **A saver's settings follow its type**, so two savers of the same kind are
 configured the same way whether they shipped with Stelline or you made them.

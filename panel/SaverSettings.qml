@@ -40,6 +40,8 @@ Column {
   function pct(v) { return Math.round(v) + "%" }
   function fps(v) { return Math.round(v) + " fps" }
   function secs(v) { return Math.round(v) + " s" }
+  // 0 is not "no time": it means the next animation starts the moment the last lands.
+  function rest(v) { return Math.round(v) === 0 ? "never still" : Math.round(v) + " s" }
   function label(t) { return t.charAt(0).toUpperCase() + t.slice(1) }
 
   spacing: Style.space(8)
@@ -101,15 +103,17 @@ Column {
     SliderRow {
       width: parent.width
       bar: root.bar
-      label: root.isSeries && !root.isWordmark ? "Each piece stays" : "Each effect stays"
-      value: root.isSeries ? (Number(root.settings.dwellSec) || Number(root.series.dwellSec) || 12) : (Number(root.settings.holdSec) || 15)
-      minimum: 5
-      maximum: 60
-      step: 5
-      format: root.secs
+      label: root.isSeries && !root.isWordmark ? "Each piece stays" : "Rest between"
+      value: root.isSeries && !root.isWordmark
+        ? (Number(root.settings.dwellSec) || Number(root.series.dwellSec) || 12)
+        : (root.settings.holdSec !== undefined && Number(root.settings.holdSec) >= 0 ? Number(root.settings.holdSec) : 4)
+      minimum: root.isWordmark ? 0 : 5
+      maximum: root.isWordmark ? 30 : 60
+      step: root.isWordmark ? 2 : 5
+      format: root.isWordmark ? root.rest : root.secs
       foreground: root.foreground
       fontFamily: root.fontFamily
-      onReleased: function(v) { root.patched(root.isSeries ? { dwellSec: Math.round(v) } : { holdSec: Math.round(v) }) }
+      onReleased: function(v) { root.patched(root.isSeries && !root.isWordmark ? { dwellSec: Math.round(v) } : { holdSec: Math.round(v) }) }
     }
   }
 
