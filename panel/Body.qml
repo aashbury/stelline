@@ -49,17 +49,29 @@ Column {
   readonly property int tileGap: Style.space(6)
   readonly property int tileWidth: Math.floor((width - tileGap * (columns - 1)) / columns)
 
-  // Cursor rows, in visual order. Tiles are one row each; the add tile is
-  // the last of them. Rule rows follow the Rules row while it is open.
+  // The grid is the one part of the panel that grows without limit, and it
+  // sits above the things set once. Past four rows it keeps four and ends in
+  // a "+N / Show all" tile; the panel opens collapsed again each time.
+  property bool gridExpanded: false
+  readonly property int gridCap: columns * 4 - 1
+  readonly property bool gridCapped: !gridExpanded && savers.length > gridCap
+  readonly property var shownSavers: gridCapped ? savers.slice(0, gridCap - 1) : savers
+  readonly property int hiddenCount: savers.length - shownSavers.length
+
+  // Cursor rows, in visual order — most-used first: the master switch, stay
+  // awake, the timings, then the gallery, then what gets set once. Tiles are
+  // one row each and end with "Show all" (when capped) and Add. Rule rows
+  // follow the Rules row while it is open.
   readonly property int rowHero: 0
   readonly property int rowStayAwake: 1
-  readonly property int rowPreview: 2
-  readonly property int rowTileFirst: 3
-  readonly property int tileCount: savers.length + 1
+  readonly property int rowScreensaver: 2
+  readonly property int rowLock: 3
+  readonly property int rowPreview: 4
+  readonly property int rowTileFirst: 5
+  readonly property int tileCount: shownSavers.length + (gridCapped ? 1 : 0) + 1
+  readonly property int rowMore: gridCapped ? rowTileFirst + shownSavers.length : -1
   readonly property int rowShuffle: rowTileFirst + tileCount
-  readonly property int rowScreensaver: rowShuffle + 1
-  readonly property int rowLock: rowShuffle + 2
-  readonly property int rowRules: rowShuffle + 3
+  readonly property int rowRules: rowShuffle + 1
   readonly property int rowSituationFirst: rowRules + 1
   readonly property int rowAway: rowSituationFirst + (openSection === "rules" ? cfg.situations.length : 0)
   readonly property int rowShortcuts: rowAway + 1
@@ -74,6 +86,7 @@ Column {
     if (index === rowShuffle) return shuffleToggle
     if (index === rowScreensaver) return screensaverRow
     if (index === rowLock) return lockRow
+
     if (index === rowRules) return advanced.children[0]
     if (index === rowAway) return advanced.children[1]
     if (index === rowShortcuts) return advanced.children[2]
@@ -127,6 +140,7 @@ Column {
   function reset() {
     cursorActive = false
     cursorIndex = rowTileFirst
+    gridExpanded = false
     if (svc && typeof svc.refreshThemes === "function") svc.refreshThemes()
     if (svc && typeof svc.probeIpcOwner === "function") svc.probeIpcOwner()
     if (svc && typeof svc.rescan === "function") svc.rescan()
@@ -172,7 +186,7 @@ Column {
   function cursorSaverId() {
     if (!inTiles(cursorIndex)) return ""
     var at = cursorIndex - rowTileFirst
-    return at < savers.length ? savers[at].id : ""
+    return at < shownSavers.length ? shownSavers[at].id : ""
   }
 
   function activate() {
@@ -181,6 +195,7 @@ Column {
     if (cursorIndex === rowHero) setStage("screensaverEnabled", !cfg.screensaverEnabled)
     else if (cursorIndex === rowStayAwake) toggleStayAwake()
     else if (cursorIndex === rowPreview) preview("")
+    else if (cursorIndex === rowMore) gridExpanded = true
     else if (inTiles(cursorIndex)) { var id = cursorSaverId(); if (id === "") startAdd(); else chooseSaver(id) }
     else if (cursorIndex === rowShuffle) toggleShuffle()
     else if (cursorIndex === rowLock) setStage("lockEnabled", !cfg.lockEnabled)
@@ -313,7 +328,7 @@ Column {
     return m + ":" + (r < 10 ? "0" : "") + r
   }
 
-  spacing: Style.space(10)
+  spacing: Style.space(8)
 
   // ---- hero ----
   PanelHero {
@@ -369,111 +384,6 @@ Column {
     onHovered: function(h) { root.hoverRow(root.rowStayAwake, h) }
   }
 
-  Row {
-    spacing: Style.space(8)
-    Button {
-      id: previewButton
-      text: "Preview"
-      iconText: "󰐊"
-      bordered: true
-      foreground: root.foreground
-      fontFamily: root.fontFamily
-      hasCursor: root.cursorActive && root.cursorIndex === root.rowPreview
-      onClicked: root.preview("")
-      onHovered: function(h) { root.hoverRow(root.rowPreview, h) }
-    }
-  }
-
-  PanelSeparator { width: parent.width; foreground: root.foreground }
-
-  // ---- savers ----
-  Row {
-    width: parent.width
-    spacing: Style.space(8)
-    PanelSectionHeader { text: "SAVERS"; foreground: root.foreground; fontFamily: root.fontFamily }
-    Text {
-      anchors.baseline: parent.children[0].baseline
-      textFormat: Text.PlainText
-      text: root.cfg.shuffle ? "check the ones to shuffle between" : "click the one that should usually play"
-      color: root.dim
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.caption
-    }
-  }
-
-  Grid {
-    id: grid
-    width: parent.width
-    columns: root.columns
-    columnSpacing: root.tileGap
-    rowSpacing: root.tileGap
-
-    Repeater {
-      id: tileRepeater
-      model: root.tileCount
-
-      SaverTile {
-        required property int index
-        readonly property bool isAdd: index >= root.savers.length
-        readonly property var entry: isAdd ? ({}) : root.savers[index]
-        width: root.tileWidth
-        saver: entry
-        svc: root.svc
-        live: root.live
-        addTile: isAdd
-        selected: !isAdd && root.cfg.saver === entry.id
-        shuffleMode: root.cfg.shuffle
-        inRotation: !isAdd && (root.cfg.shuffleFrom || []).indexOf(entry.id) !== -1
-        open: !isAdd && root.openSettings === entry.id
-        caption: isAdd ? "" : M.playsLabel(root.cfg, entry.id, root.userSavers)
-        foreground: root.foreground
-        fontFamily: root.fontFamily
-        hasCursor: root.cursorActive && root.cursorIndex === root.rowTileFirst + index
-        onClicked: if (isAdd) root.startAdd(); else root.chooseSaver(entry.id)
-        onPreviewRequested: root.preview(entry.id)
-        onSettingsRequested: root.toggleSettings(entry.id)
-        onHovered: function(h) { root.hoverRow(root.rowTileFirst + index, h) }
-      }
-    }
-  }
-
-  Inspector {
-    id: inspector
-    visible: !root.adding && !!root.openSaver
-    width: parent.width
-    saver: root.openSaver || ({})
-    svc: root.svc
-    body: root
-    bar: root.bar
-    foreground: root.foreground
-    fontFamily: root.fontFamily
-    onEditingChanged: root.setEditing("inspector", editing)
-  }
-
-  AddCard {
-    id: addCard
-    visible: root.adding
-    width: parent.width
-    svc: root.svc
-    body: root
-    foreground: root.foreground
-    fontFamily: root.fontFamily
-    onEditingChanged: root.setEditing("add", editing)
-  }
-
-  Toggle {
-    id: shuffleToggle
-    width: parent.width
-    label: "Shuffle"
-    description: root.cfg.shuffle ? "A different checked one each time" : "Always the usual one"
-    checked: root.cfg.shuffle
-    foreground: root.foreground
-    fontFamily: root.fontFamily
-    hasCursor: root.cursorActive && root.cursorIndex === root.rowShuffle
-    onClicked: root.toggleShuffle()
-    onHovered: function(h) { root.hoverRow(root.rowShuffle, h) }
-  }
-
   PanelSeparator { width: parent.width; foreground: root.foreground }
 
   // ---- timings ----
@@ -526,6 +436,128 @@ Column {
     onReleased: function(v) { root.setSeconds("lock", v) }
     onSwitchToggled: root.setStage("lockEnabled", !root.cfg.lockEnabled)
     onHovered: function(h) { root.hoverRow(root.rowLock, h) }
+  }
+
+  PanelSeparator { width: parent.width; foreground: root.foreground }
+
+  // ---- savers ----
+  // Preview rides the header: it plays whichever saver is chosen below, so
+  // this is where you look for it.
+  Item {
+    width: parent.width
+    implicitHeight: Math.max(saversHeading.implicitHeight, previewButton.implicitHeight)
+
+    Row {
+      id: saversHeading
+      anchors.left: parent.left
+      anchors.right: previewButton.left
+      anchors.rightMargin: Style.space(8)
+      anchors.verticalCenter: parent.verticalCenter
+      spacing: Style.space(8)
+      PanelSectionHeader { text: "SAVERS"; foreground: root.foreground; fontFamily: root.fontFamily }
+      Text {
+        anchors.baseline: parent.children[0].baseline
+        textFormat: Text.PlainText
+        text: root.cfg.shuffle ? "check the ones to shuffle between" : "click the one that should usually play"
+        color: root.dim
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.caption
+        elide: Text.ElideRight
+      }
+    }
+
+    Button {
+      id: previewButton
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      text: "Preview"
+      iconText: "󰐊"
+      bordered: true
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      fontSize: Style.font.caption
+      hasCursor: root.cursorActive && root.cursorIndex === root.rowPreview
+      tooltipText: "Show " + (root.saver ? root.saver.name : "it") + " now"
+      onClicked: root.preview("")
+      onHovered: function(h) { root.hoverRow(root.rowPreview, h) }
+    }
+  }
+
+  Grid {
+    id: grid
+    width: parent.width
+    columns: root.columns
+    columnSpacing: root.tileGap
+    rowSpacing: root.tileGap
+
+    Repeater {
+      id: tileRepeater
+      model: root.tileCount
+
+      SaverTile {
+        required property int index
+        readonly property bool isMore: root.gridCapped && index === root.shownSavers.length
+        readonly property bool isAdd: !isMore && index >= root.shownSavers.length
+        readonly property bool isTile: !isMore && !isAdd
+        readonly property var entry: isTile ? root.shownSavers[index] : ({})
+        width: root.tileWidth
+        saver: entry
+        svc: root.svc
+        live: root.live
+        addTile: isAdd
+        moreCount: isMore ? root.hiddenCount : 0
+        selected: isTile && root.cfg.saver === entry.id
+        shuffleMode: root.cfg.shuffle
+        inRotation: isTile && (root.cfg.shuffleFrom || []).indexOf(entry.id) !== -1
+        open: isTile && root.openSettings === entry.id
+        caption: isTile ? M.playsLabel(root.cfg, entry.id, root.userSavers) : ""
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        hasCursor: root.cursorActive && root.cursorIndex === root.rowTileFirst + index
+        onClicked: if (isMore) root.gridExpanded = true; else if (isAdd) root.startAdd(); else root.chooseSaver(entry.id)
+        onPreviewRequested: root.preview(entry.id)
+        onSettingsRequested: root.toggleSettings(entry.id)
+        onHovered: function(h) { root.hoverRow(root.rowTileFirst + index, h) }
+      }
+    }
+  }
+
+  Inspector {
+    id: inspector
+    visible: !root.adding && !!root.openSaver
+    width: parent.width
+    saver: root.openSaver || ({})
+    svc: root.svc
+    body: root
+    bar: root.bar
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    onEditingChanged: root.setEditing("inspector", editing)
+  }
+
+  AddCard {
+    id: addCard
+    visible: root.adding
+    width: parent.width
+    svc: root.svc
+    body: root
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    onEditingChanged: root.setEditing("add", editing)
+  }
+
+  // Set once, so a plain row rather than the emphasis Stay awake gets.
+  SwitchRow {
+    id: shuffleToggle
+    width: parent.width
+    label: "Shuffle"
+    description: root.cfg.shuffle ? "A different checked one each time" : "Always the usual one"
+    checked: root.cfg.shuffle
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    hasCursor: root.cursorActive && root.cursorIndex === root.rowShuffle
+    onClicked: root.toggleShuffle()
+    onHovered: function(h) { root.hoverRow(root.rowShuffle, h) }
   }
 
   PanelSeparator { width: parent.width; foreground: root.foreground }

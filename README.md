@@ -55,6 +55,11 @@ Requires Omarchy 4.x. Stelline's id is `io.github.aashbury.stelline`.
 
 ## Use
 
+The panel is ordered by how often you touch a thing: the master switch and
+**Stay awake** at the top, then the two timings, then the gallery, then the
+rows you set once (Rules, While you're away, Shortcuts) collapsed to one line
+each. A gallery past four rows keeps four and ends in a **Show all** tile.
+
 | Where | Action | Effect |
 |---|---|---|
 | bar icon | left-click | open the panel |

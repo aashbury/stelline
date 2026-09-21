@@ -17,6 +17,12 @@ CursorSurface {
   property bool open: false
   property bool live: false
   property bool addTile: false
+
+  // The tail of a grid that got long: "+7 / Show all". Rendered as the plain
+  // box the Add tile uses, so the row of tiles keeps its rhythm.
+  property int moreCount: 0
+  readonly property bool moreTile: moreCount > 0
+  readonly property bool plainTile: addTile || moreTile
   property string caption: ""
   property string fontFamily: Style.font.family
   readonly property color dim: Qt.darker(foreground, 1.4)
@@ -29,7 +35,7 @@ CursorSurface {
   signal settingsRequested()
   signal hovered(bool isHovered)
 
-  current: selected && !shuffleMode && !addTile
+  current: selected && !shuffleMode && !plainTile
   outline: open
   implicitHeight: column.implicitHeight + padding * 2
   padding: Style.space(6)
@@ -58,17 +64,17 @@ CursorSurface {
 
       Rectangle {
         anchors.fill: parent
-        color: root.addTile ? "transparent" : (loader.item && loader.item.bg !== undefined ? loader.item.bg : Color.background)
-        border.width: root.addTile ? 1 : 0
+        color: root.plainTile ? "transparent" : (loader.item && loader.item.bg !== undefined ? loader.item.bg : Color.background)
+        border.width: root.plainTile ? 1 : 0
         border.color: root.dim
-        radius: root.addTile ? Style.cornerRadius : 0
+        radius: root.plainTile ? Style.cornerRadius : 0
       }
 
       Loader {
         id: loader
         anchors.fill: parent
         readonly property string thumbFile: root.saver ? String(root.saver.thumb || root.saver.file || "") : ""
-        active: root.live && !root.addTile && thumbFile !== "" && !root.importing
+        active: root.live && !root.plainTile && thumbFile !== "" && !root.importing
         source: active ? Qt.resolvedUrl("../" + thumbFile) : ""
         onLoaded: {
           item.service = root.svc
@@ -86,12 +92,12 @@ CursorSurface {
       // tile, and anything still on its way.
       Text {
         anchors.centerIn: parent
-        visible: root.addTile || !(root.saver && (root.saver.file || root.saver.thumb)) || root.importing || root.failed
+        visible: root.plainTile || !(root.saver && (root.saver.file || root.saver.thumb)) || root.importing || root.failed
         textFormat: Text.PlainText
-        text: root.addTile ? "+" : (root.importing ? "󰔟" : (root.failed ? "󰀦" : (root.saver && root.saver.glyph ? root.saver.glyph : "")))
-        color: root.failed ? Color.urgent : (root.addTile ? root.dim : root.foreground)
+        text: root.moreTile ? "+" + root.moreCount : (root.addTile ? "+" : (root.importing ? "󰔟" : (root.failed ? "󰀦" : (root.saver && root.saver.glyph ? root.saver.glyph : ""))))
+        color: root.failed ? Color.urgent : (root.plainTile ? root.dim : root.foreground)
         font.family: root.fontFamily
-        font.pixelSize: root.addTile ? Style.font.display : Style.font.display
+        font.pixelSize: Style.font.display
       }
 
       // Usual-saver marker, or the shuffle checkbox.
@@ -99,7 +105,7 @@ CursorSurface {
         anchors.left: parent.left
         anchors.top: parent.top
         anchors.margins: Style.space(4)
-        visible: !root.addTile && (root.shuffleMode || root.selected)
+        visible: !root.plainTile && (root.shuffleMode || root.selected)
         textFormat: Text.PlainText
         text: root.shuffleMode ? (root.inRotation ? "󰄲" : "󰄱") : "●"
         color: Color.accent
@@ -114,7 +120,7 @@ CursorSurface {
         anchors.top: parent.top
         anchors.margins: Style.space(2)
         spacing: 0
-        visible: root.hot && !root.addTile && !root.importing
+        visible: root.hot && !root.plainTile && !root.importing
         PanelActionButton {
           iconText: "󰐊"
           tooltipText: "Preview"
@@ -138,7 +144,7 @@ CursorSurface {
     Text {
       width: parent.width
       textFormat: Text.PlainText
-      text: root.addTile ? "Add" : (root.saver && root.saver.name ? root.saver.name : "")
+      text: root.moreTile ? "Show all" : (root.addTile ? "Add" : (root.saver && root.saver.name ? root.saver.name : ""))
       color: root.foreground
       font.family: root.fontFamily
       font.pixelSize: Style.font.subtitle
@@ -147,7 +153,7 @@ CursorSurface {
     Text {
       width: parent.width
       textFormat: Text.PlainText
-      text: root.addTile ? "pictures, a clip, text…" : (root.importing ? "importing…" : (root.failed ? "import failed" : root.caption))
+      text: root.moreTile ? root.moreCount + " more" : (root.addTile ? "pictures, a clip, text…" : (root.importing ? "importing…" : (root.failed ? "import failed" : root.caption)))
       color: root.failed ? Color.urgent : (root.caption !== "" && !root.importing ? Color.accent : root.dim)
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
