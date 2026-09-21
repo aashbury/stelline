@@ -5,9 +5,9 @@ import qs.Ui
 import "../StellineModel.js" as M
 
 // Level 3: three rows that say what they are set to and open one at a time —
-// the rules in order, the note shown while you are away, and shortcuts.
-// Everything inside an opened row is a plain row: label on the left, control
-// on the right, no border. The row that is open is the only box.
+// the rules, the note shown while you are away, and shortcuts. Everything
+// inside an opened row is a plain row: label on the left, control on the
+// right, no border. The row that is open is the only box.
 Column {
   id: root
 
@@ -20,7 +20,6 @@ Column {
   readonly property var cfg: body ? body.cfg : M.defaults()
   readonly property var card: cfg.card || {}
   readonly property var userSavers: svc ? svc.userSavers : []
-  property bool addingTimings: false
   property string menuNote: ""
 
   spacing: Style.space(4)
@@ -55,7 +54,7 @@ Column {
   readonly property string shortcutsSummary: svc && svc.menuOverrideActive === true ? "Super+Esc shows this one" : "Super+Esc shows the original"
   readonly property string bindLine: 'o.bind("SUPER + CTRL + S", "Screensaver", "omarchy-shell stelline preview")'
 
-  // ---- rules ----
+  // ---- rules: the list, each one a link to where it is edited ----
   Section {
     id: rulesSection
     title: "Rules"
@@ -66,16 +65,6 @@ Column {
     fontFamily: root.fontFamily
     onClicked: if (root.body) root.body.toggleSection("rules")
     onHovered: function(h) { if (root.body) root.body.hoverRow(root.body.rowRules, h) }
-
-    Text {
-      leftPadding: Style.space(10)
-      textFormat: Text.PlainText
-      text: (root.cfg.situations || []).length > 1 ? "In order — the first one that fits wins." : ""
-      visible: text !== ""
-      color: root.dim
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.caption
-    }
 
     Column {
       width: parent.width - parent.leftPadding - parent.rightPadding
@@ -88,50 +77,25 @@ Column {
           width: parent.width
           situation: root.cfg.situations[index] || ({})
           userSavers: root.userSavers
-          themeNames: root.svc ? root.svc.themeNames : []
-          bar: root.bar
           foreground: root.foreground
           fontFamily: root.fontFamily
           hasCursor: root.cursorOn(root.body ? root.body.rowSituationFirst + index : -1)
           highlighted: !!(root.body && root.body.openSettings !== "" && root.cfg.situations[index] && root.cfg.situations[index].saver === root.body.openSettings)
-          expanded: root.body ? root.body.expandedSituation === index : false
-          onClicked: if (root.body) root.body.toggleSituationEditor(index)
+          onClicked: if (root.body) root.body.openRule(index)
           onToggled: if (root.body) root.body.toggleSituation(index)
           onRemoveRequested: if (root.body) root.body.removeSituation(index)
-          onPatched: function(patch) { if (root.body) root.body.updateSituation(index, patch) }
           onHovered: function(h) { if (root.body) root.body.hoverRow(root.body.rowSituationFirst + index, h) }
-          onEditingChanged: if (root.body) root.body.setEditing("situation-" + index, editing)
         }
       }
       Text {
         visible: (root.cfg.situations || []).length === 0
         leftPadding: Style.space(10)
         textFormat: Text.PlainText
-        text: "None yet. Open a tile's gear to say when it plays."
+        text: "None yet. A tile's gear adds one."
         color: root.dim
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
       }
-    }
-
-    // A rule that only changes the timings has no tile to live on; it is added here.
-    Row {
-      leftPadding: Style.space(10)
-      spacing: Style.space(6)
-      Button {
-        text: root.addingTimings ? "Timings at certain times —" : "Timings at certain times…"
-        iconText: "󰅐"
-        bordered: true
-        foreground: root.foreground
-        fontFamily: root.fontFamily
-        fontSize: Style.font.caption
-        tooltipText: "A shorter screensaver on battery, say, without changing which one plays"
-        onClicked: root.addingTimings = !root.addingTimings
-      }
-      Button { visible: root.addingTimings; text: "on battery"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: { root.addingTimings = false; if (root.body) root.body.addSituation("battery") } }
-      Button { visible: root.addingTimings; text: "at night"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: { root.addingTimings = false; if (root.body) root.body.addSituation("night") } }
-      Button { visible: root.addingTimings; text: "with a theme"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: { root.addingTimings = false; if (root.body) root.body.addSituation("theme") } }
-      Button { visible: root.addingTimings; text: "when docked"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; tooltipText: "On a monitor: starts as never locking"; onClicked: { root.addingTimings = false; if (root.body) root.body.addSituation("docked") } }
     }
   }
 
@@ -148,6 +112,7 @@ Column {
 
     SwitchRow {
       width: parent.width - parent.leftPadding - parent.rightPadding
+      glyph: "󰂚"
       label: "Show what came in"
       description: "Unless Do Not Disturb is on"
       checked: root.card.enabled !== false
@@ -160,7 +125,7 @@ Column {
     Column {
       visible: root.card.enabled !== false
       width: parent.width - parent.leftPadding - parent.rightPadding
-      leftPadding: Style.space(10)
+      leftPadding: Style.space(36)
       spacing: Style.space(6)
       Row {
         spacing: Style.space(10)
@@ -210,8 +175,8 @@ Column {
 
     SwitchRow {
       width: parent.width - parent.leftPadding - parent.rightPadding
+      glyph: "󰚩"
       label: "Show what your coding agent is up to"
-      description: "Working, waiting for you, done, or stuck"
       checked: root.card.showAgent !== false
       foreground: root.foreground
       fontFamily: root.fontFamily
@@ -232,8 +197,9 @@ Column {
 
     SwitchRow {
       width: parent.width - parent.leftPadding - parent.rightPadding
+      glyph: "󰍜"
       label: "Super+Esc › Screensaver shows this one"
-      description: root.menuNote !== "" ? root.menuNote : "Instead of the original"
+      description: root.menuNote
       checked: root.svc ? root.svc.menuOverrideActive === true : false
       foreground: root.foreground
       fontFamily: root.fontFamily
@@ -242,11 +208,12 @@ Column {
 
     ActionRow {
       width: parent.width - parent.leftPadding - parent.rightPadding
-      label: "Super+Ctrl+S starts the screensaver"
-      description: "Paste the line into ~/.config/hypr/bindings.lua — change the keys if you like."
+      glyph: "󰌌"
+      label: "Super+Ctrl+S starts it"
+      description: "A line for your key bindings file"
       buttonText: "Copy the line"
       buttonIcon: "󰆏"
-      tooltipText: root.bindLine
+      tooltipText: "~/.config/hypr/bindings.lua:  " + root.bindLine
       foreground: root.foreground
       fontFamily: root.fontFamily
       onActivated: Quickshell.execDetached(["bash", "-c", 'printf %s "$1" | wl-copy', "_", root.bindLine])
@@ -255,8 +222,9 @@ Column {
     ActionRow {
       visible: root.svc ? root.svc.setupDone === true : false
       width: parent.width - parent.leftPadding - parent.rightPadding
+      glyph: "󰅶"
       label: "The bar's coffee cup"
-      description: "Stelline's now — it opens this panel"
+      description: "Opens this panel now"
       buttonText: "Put the old one back"
       buttonIcon: "󰕌"
       tooltipText: "Undoes Finish setup: the original indicator returns and the menu entry goes"

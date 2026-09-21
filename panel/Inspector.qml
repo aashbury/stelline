@@ -4,8 +4,9 @@ import qs.Ui
 import "../StellineModel.js" as M
 
 // The open tile, below the grid: when this saver plays (its rule), how it
-// looks (its knobs), and what can be done with it. One rule per saver; its
-// conditions all have to hold. Editors only appear for conditions that are on.
+// looks (its knobs), and delete. One rule per saver; its conditions all have
+// to hold, and this is the rule's only editor — Rules lists it and links
+// back here. Editors only appear for conditions that are on.
 BorderSurface {
   id: root
 
@@ -24,19 +25,24 @@ BorderSurface {
   readonly property int ruleIndex: M.ruleIndexFor(cfg.situations, saverId)
   readonly property bool hasRule: !!rule && rule.enabled === true
   readonly property var when: rule && rule.when ? rule.when : ({})
-  readonly property bool usual: cfg.saver === saverId && !cfg.shuffle
   // The shared Omarchy artwork is the Original's subject; a wordmark has a
   // word of its own instead, and shows this file only when that word is empty.
   readonly property bool showsBranding: saverId === "terminal"
-  property bool timingsOpen: false
+  // Its own timings while the rule holds; absent means the usual ones. The
+  // two sliders are the same two as at the top of the panel.
+  readonly property bool ownTimings: hasRule && (M.hasTiming(rule.screensaver) || M.hasTiming(rule.lock))
+  readonly property int usualScreensaver: body ? body.screensaverSeconds : 150
+  readonly property int usualLock: body ? body.lockSeconds : 300
+  readonly property int ruleScreensaver: hasRule && M.hasTiming(rule.screensaver) ? Number(rule.screensaver) : usualScreensaver
+  readonly property bool ruleLocks: !(hasRule && rule.lock === "never")
+  readonly property int ruleLock: hasRule && M.hasTiming(rule.lock) && rule.lock !== "never" ? Number(rule.lock) : usualLock
   property bool deleteArmed: false
 
-  readonly property bool editing: fromField.activeFocus || toField.activeFocus || belowField.field.activeFocus
-    || screensaverField.field.activeFocus || lockField.field.activeFocus || look.editing
+  readonly property bool editing: fromField.activeFocus || toField.activeFocus || belowField.field.activeFocus || look.editing
 
   function armDelete() { deleteArmed = true; disarm.restart() }
   Timer { id: disarm; interval: 4000; onTriggered: root.deleteArmed = false }
-  onSaverIdChanged: { deleteArmed = false; timingsOpen = false }
+  onSaverIdChanged: deleteArmed = false
 
   function condition(key, on) { if (svc) svc.setRuleCondition(saverId, key, on) }
   function patchCondition(key, patch) { if (svc) svc.patchRuleCondition(saverId, key, patch) }
@@ -61,7 +67,7 @@ BorderSurface {
       width: parent.width
       spacing: Style.space(8)
       Column {
-        width: parent.width - actions.width - Style.space(8)
+        width: parent.width - actions.width - (actions.visible ? Style.space(8) : 0)
         spacing: Style.space(1)
         Text {
           width: parent.width
@@ -85,17 +91,8 @@ BorderSurface {
       }
       Row {
         id: actions
+        visible: root.isUser
         spacing: Style.space(4)
-        Button {
-          visible: !root.failed
-          text: "Preview"
-          iconText: "󰐊"
-          bordered: true
-          foreground: root.foreground
-          fontFamily: root.fontFamily
-          fontSize: Style.font.caption
-          onClicked: if (root.body) root.body.preview(root.saverId)
-        }
         Button {
           visible: root.isUser
           text: root.deleteArmed ? "Really delete" : "Delete"
@@ -115,30 +112,16 @@ BorderSurface {
     Column {
       visible: !root.failed
       width: parent.width
-      spacing: Style.space(4)
+      spacing: Style.space(2)
 
-      Row {
-        spacing: Style.space(8)
-        // Naming the saver here is the whole point: every switch below writes
-        // a rule that belongs to it, and that rule shows up in Rules under
-        // this same name.
-        PanelSectionHeader { text: "WHEN " + (root.saver && root.saver.name ? String(root.saver.name).toUpperCase() : "IT") + " PLAYS"; foreground: root.foreground; fontFamily: root.fontFamily }
-        Text {
-          anchors.baseline: parent.children[0].baseline
-          textFormat: Text.PlainText
-          text: root.usual
-            ? (root.hasRule ? "usually, and whenever all of these are true" : "usually — whenever nothing else is due")
-            : (root.hasRule ? "whenever all of these are true" : (root.cfg.shuffle ? "in the shuffle, if checked" : "only if you switch something on below, or click its tile"))
-          color: root.dim
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
-        }
-      }
+      // Naming the saver here is the whole point: every switch below writes
+      // a rule that belongs to it, and Rules lists it under this same name.
+      PanelSectionHeader { text: "WHEN " + (root.saver && root.saver.name ? String(root.saver.name).toUpperCase() : "IT") + " PLAYS"; foreground: root.foreground; fontFamily: root.fontFamily }
 
-      Toggle {
+      SwitchRow {
         width: parent.width
+        glyph: "󰖔"
         label: "At night"
-        description: M.ruleHas(root.rule, "night") ? "" : "Between two times of day, wrapping midnight"
         checked: M.ruleHas(root.rule, "night")
         foreground: root.foreground
         fontFamily: root.fontFamily
@@ -146,7 +129,8 @@ BorderSurface {
       }
       Row {
         visible: M.ruleHas(root.rule, "night")
-        leftPadding: Style.space(12)
+        leftPadding: Style.space(36)
+        bottomPadding: Style.space(6)
         spacing: Style.space(8)
         Column {
           spacing: Style.space(3)
@@ -155,7 +139,7 @@ BorderSurface {
             id: fromField
             width: Style.space(80)
             text: root.when.night ? String(root.when.night.from || "") : ""
-            placeholderText: "17:00"
+            placeholderText: "22:00"
             foreground: root.foreground
             font.family: root.fontFamily
             onEditingFinished: if (M.hhmm(text) >= 0) root.patchCondition("night", { from: text.trim() })
@@ -168,7 +152,7 @@ BorderSurface {
             id: toField
             width: Style.space(80)
             text: root.when.night ? String(root.when.night.to || "") : ""
-            placeholderText: "08:30"
+            placeholderText: "07:00"
             foreground: root.foreground
             font.family: root.fontFamily
             onEditingFinished: if (M.hhmm(text) >= 0) root.patchCondition("night", { to: text.trim() })
@@ -176,10 +160,10 @@ BorderSurface {
         }
       }
 
-      Toggle {
+      SwitchRow {
         width: parent.width
+        glyph: "󰁹"
         label: "On battery"
-        description: M.ruleHas(root.rule, "battery") ? "" : "Unplugged, or below a charge level"
         checked: M.ruleHas(root.rule, "battery")
         foreground: root.foreground
         fontFamily: root.fontFamily
@@ -187,7 +171,8 @@ BorderSurface {
       }
       Row {
         visible: M.ruleHas(root.rule, "battery")
-        leftPadding: Style.space(12)
+        leftPadding: Style.space(36)
+        bottomPadding: Style.space(6)
         spacing: Style.space(8)
         NumberField {
           id: belowField
@@ -202,7 +187,7 @@ BorderSurface {
         }
         Text {
           anchors.bottom: parent.bottom
-          anchors.bottomMargin: Style.space(8)
+          anchors.bottomMargin: Style.space(14)
           textFormat: Text.PlainText
           text: "100 = whenever unplugged"
           color: root.dim
@@ -211,19 +196,20 @@ BorderSurface {
         }
       }
 
-      Toggle {
+      SwitchRow {
         width: parent.width
+        glyph: "󰍹"
         label: "Docked"
-        description: M.ruleHas(root.rule, "docked") ? "" : "A monitor is plugged in"
         checked: M.ruleHas(root.rule, "docked")
         foreground: root.foreground
         fontFamily: root.fontFamily
         onClicked: root.condition("docked", !checked)
       }
-      Toggle {
+
+      SwitchRow {
         width: parent.width
+        glyph: "󰏘"
         label: "With a theme"
-        description: M.ruleHas(root.rule, "theme") ? "" : "While a particular Omarchy theme is set"
         checked: M.ruleHas(root.rule, "theme")
         foreground: root.foreground
         fontFamily: root.fontFamily
@@ -231,7 +217,8 @@ BorderSurface {
       }
       Row {
         visible: M.ruleHas(root.rule, "theme")
-        leftPadding: Style.space(12)
+        leftPadding: Style.space(36)
+        bottomPadding: Style.space(6)
         Dropdown {
           width: Style.space(220)
           label: "Theme"
@@ -243,56 +230,51 @@ BorderSurface {
         }
       }
 
-      // Timings only make sense once there is a rule to hang them on.
-      Button {
+      // Timings only make sense once there is a rule to hang them on. On
+      // starts from the usual values; the sliders take it from there.
+      SwitchRow {
         visible: root.hasRule
-        text: "Different timings at those times"
-        iconText: root.timingsOpen ? "󰅀" : "󰅂"
-        leftAlign: true
+        width: parent.width
+        glyph: "󰅐"
+        label: "Different timings at those times"
+        checked: root.ownTimings
         foreground: root.foreground
         fontFamily: root.fontFamily
-        fontSize: Style.font.caption
-        onClicked: root.timingsOpen = !root.timingsOpen
+        onClicked: root.patchRule(checked ? { screensaver: null, lock: null } : { screensaver: root.usualScreensaver, lock: root.usualLock })
       }
       Column {
-        visible: root.hasRule && root.timingsOpen
+        visible: root.hasRule && root.ownTimings
         width: parent.width
-        leftPadding: Style.space(12)
-        spacing: Style.space(6)
-        Row {
-          spacing: Style.space(8)
-          NumberField {
-            id: screensaverField
-            label: "Screensaver after (seconds)"
-            value: root.rule && isFinite(Number(root.rule.screensaver)) && root.rule.screensaver !== null && root.rule.screensaver !== "" ? Number(root.rule.screensaver) : 0
-            from: 0
-            to: 3600
-            stepSize: 15
-            foreground: root.foreground
-            fontFamily: root.fontFamily
-            onModified: function(v) { root.patchRule({ screensaver: v > 0 ? v : null }) }
-          }
-          NumberField {
-            id: lockField
-            label: "Lock after (seconds)"
-            enabled: !root.rule || root.rule.lock !== "never"
-            value: root.rule && root.rule.lock !== "never" && isFinite(Number(root.rule.lock)) && root.rule.lock !== null && root.rule.lock !== "" ? Number(root.rule.lock) : 0
-            from: 0
-            to: 7200
-            stepSize: 30
-            foreground: root.foreground
-            fontFamily: root.fontFamily
-            onModified: function(v) { root.patchRule({ lock: v > 0 ? v : null }) }
-          }
-        }
-        Text { textFormat: Text.PlainText; text: "0 keeps the usual timing"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
-        Toggle {
+        leftPadding: Style.space(24)
+        spacing: Style.space(2)
+        SliderRow {
           width: parent.width - parent.leftPadding
-          label: "Don't lock at those times"
-          checked: !!root.rule && root.rule.lock === "never"
+          bar: root.bar
+          label: "Screensaver"
+          value: root.ruleScreensaver
+          minimum: 30
+          maximum: 1800
+          step: 30
+          format: function(v) { return M.mmss(v) }
           foreground: root.foreground
           fontFamily: root.fontFamily
-          onClicked: root.patchRule({ lock: checked ? null : "never" })
+          onReleased: function(v) { root.patchRule({ screensaver: Math.round(v) }) }
+        }
+        SliderRow {
+          width: parent.width - parent.leftPadding
+          bar: root.bar
+          label: "Lock"
+          value: root.ruleLock
+          minimum: 60
+          maximum: 3600
+          step: 60
+          format: function(v) { return M.mmss(v) }
+          showSwitch: true
+          switchChecked: root.ruleLocks
+          foreground: root.foreground
+          fontFamily: root.fontFamily
+          onReleased: function(v) { root.patchRule({ lock: Math.round(v) }) }
+          onSwitchToggled: root.patchRule({ lock: root.ruleLocks ? "never" : root.usualLock })
         }
       }
     }
@@ -302,33 +284,13 @@ BorderSurface {
       visible: root.showsBranding
       width: parent.width
       spacing: Style.space(6)
-      Row {
-        spacing: Style.space(8)
-        PanelSectionHeader { text: "ARTWORK"; foreground: root.foreground; fontFamily: root.fontFamily }
-        Text {
-          anchors.baseline: parent.children[0].baseline
-          textFormat: Text.PlainText
-          text: "the same file as Style › Screensaver"
-          color: root.dim
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
-        }
-      }
+      PanelSectionHeader { text: "ARTWORK"; foreground: root.foreground; fontFamily: root.fontFamily }
       Flow {
         width: parent.width
         spacing: Style.space(6)
         Button { text: "Use a picture…"; iconText: "󰋩"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; tooltipText: "A PNG or SVG, turned into text art"; onClicked: if (root.svc) root.svc.brandingImage() }
-        Button { text: "Edit the text…"; iconText: "󰏫"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; tooltipText: "Opens the art in your editor"; onClicked: if (root.svc) root.svc.brandingText() }
+        Button { text: "Edit the text…"; iconText: "󰏫"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; tooltipText: "Opens the art in your editor — the same file as Style › Screensaver"; onClicked: if (root.svc) root.svc.brandingText() }
         Button { text: "Back to the Omarchy logo"; iconText: "󰕌"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: if (root.svc) root.svc.brandingReset() }
-      }
-      Text {
-        width: parent.width
-        textFormat: Text.PlainText
-        wrapMode: Text.WordWrap
-        text: "A wordmark with its text cleared shows this too."
-        color: root.dim
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.caption
       }
     }
 

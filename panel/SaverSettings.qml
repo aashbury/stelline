@@ -71,17 +71,6 @@ Column {
       onEditingFinished: if (text !== root.word && root.svc) root.svc.setWordmarkText(root.saverId, text)
       onAccepted: if (root.svc) root.svc.setWordmarkText(root.saverId, text)
     }
-    Text {
-      width: parent.width
-      textFormat: Text.PlainText
-      wrapMode: Text.WordWrap
-      text: root.saverId === "wordmark"
-        ? "Drawn as block letters. Leave it empty to show Omarchy's artwork instead, the same as the Original."
-        : "Drawn as block letters."
-      color: root.dim
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.caption
-    }
   }
 
   // ---- effects: for wordmarks and ASCII slideshows ----
@@ -160,7 +149,7 @@ Column {
       fontFamily: root.fontFamily
       onReleased: function(v) { root.patched({ dwellSec: Math.round(v) }) }
     }
-    Toggle {
+    SwitchRow {
       visible: !root.animation
       width: parent.width
       label: "Shuffle the order"
@@ -225,7 +214,7 @@ Column {
     visible: root.type === "clock"
     width: parent.width - root.leftPadding - root.rightPadding
     spacing: Style.space(4)
-    Toggle {
+    SwitchRow {
       width: parent.width
       label: "24-hour clock"
       checked: (root.settings.format || "HH:mm") === "HH:mm"
@@ -233,7 +222,7 @@ Column {
       fontFamily: root.fontFamily
       onClicked: root.patched({ format: checked ? "h:mm AP" : "HH:mm" })
     }
-    Toggle {
+    SwitchRow {
       width: parent.width
       label: "Show the date"
       checked: root.settings.showDate !== false
@@ -241,10 +230,9 @@ Column {
       fontFamily: root.fontFamily
       onClicked: root.patched({ showDate: !checked })
     }
-    Toggle {
+    SwitchRow {
       width: parent.width
       label: "Show seconds"
-      description: "Repaints every second instead of every minute"
       checked: root.settings.showSeconds === true
       foreground: root.foreground
       fontFamily: root.fontFamily
@@ -266,15 +254,6 @@ Column {
       foreground: root.foreground
       fontFamily: root.fontFamily
       onChanged: function(list) { root.patched({ effects: list }) }
-    }
-    Text {
-      width: parent.width
-      textFormat: Text.PlainText
-      wrapMode: Text.WordWrap
-      text: "Omarchy's own " + M.TTFX_EFFECTS.length + ", played by ttfx."
-      color: root.dim
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.caption
     }
   }
 }

@@ -56,9 +56,13 @@ Requires Omarchy 4.x. Stelline's id is `io.github.aashbury.stelline`.
 ## Use
 
 The panel is ordered by how often you touch a thing: the master switch and
-**Stay awake** at the top, then the two timings, then the gallery, then the
-rows you set once (Rules, While you're away, Shortcuts) collapsed to one line
-each. A gallery past four rows keeps four and ends in a **Show all** tile.
+**Stay awake** at the top, then the timings, then the gallery, then the rows
+you set once (Rules, While you're away, Shortcuts) collapsed to one line
+each. It opens at the top with nothing unfolded, every time. Rows are plain:
+a glyph, a label, a switch — the only boxes are the one open detail card and
+the Add card, and nothing carries a sentence of explanation, the way Omarchy's
+own panels don't. A gallery past four rows keeps four and ends in a **Show
+all** tile.
 
 | Where | Action | Effect |
 |---|---|---|
@@ -66,8 +70,10 @@ each. A gallery past four rows keeps four and ends in a **Show all** tile.
 | bar icon | right-click | toggle Stay awake (the coffee cup) |
 | bar icon | middle-click | preview the current saver |
 | panel | click a tile | make it the usual saver (with Shuffle on: check it in) |
-| panel | ⚙ on a tile | when it plays, how it looks, delete; for the Original also the artwork. The tile that plays keeps its ⚙ visible; every other tile shows it on hover |
+| panel | ⚙ on a tile | when it plays (its rule, and its own timings while the rule holds), how it looks, delete; for the Original also the artwork. ▶ and ⚙ appear while the pointer or the keyboard cursor is on a tile |
 | panel | click another tile while a ⚙ panel is open | the panel follows to that tile |
+| panel | a row in **Rules** | goes to where that rule is edited: the saver's ⚙, or its switch under Timings |
+| panel | **Different timings on battery**, **Never lock while docked** | laptops only; each is an ordinary rule underneath |
 | panel | 󰅶 Stay awake | the coffee cup — top of the panel, same as Super+Ctrl+I |
 | panel | ▶ on a tile | preview it |
 | panel | the **Add** tile | a new saver from the clipboard, pictures, a folder, a clip, text or a description |
@@ -189,7 +195,9 @@ with the plugin's other settings, not in the folder.
 
 The sliders write `idle.screensaver` and `idle.lock` in
 `~/.config/omarchy/shell.json` — the same keys the stock service reads, so
-nothing forks. Both are seconds from the moment you went idle. The lock switch
+nothing forks. Both are seconds from the moment you went idle. The sliders
+always show those settings; the line under the title says what is in effect
+right now, rules included (*blank after 3:00, no lock · docked*). The lock switch
 is Stelline's own: off keeps the screensaver and never locks on idle (the stock
 service cannot do that). The switch at the top of the panel *is* Omarchy's own
 screensaver toggle — the same flag as *Trigger › Toggle › Screensaver* and
@@ -199,46 +207,44 @@ screensaver, lock left alone, previews still work, as in stock.
 ## When a saver plays
 
 Click a tile: that is the usual saver, the one that plays when nothing else
-applies. Open a tile's ⚙ and switch on the conditions under **Plays** to give it
-a rule; all the conditions of one rule have to hold, and each shows its own
-fields once it is on. A rule can also change the timings while it holds.
-
-A rule belongs to a saver, and both views of it say so: a tile's ⚙ heads its
-switches with **WHEN <SAVER> PLAYS**, and every row in **Rules** leads with the
-saver it is about — its glyph, its name, then the situation underneath. While a
-tile's ⚙ is open, that saver's rule is marked in the list. A rule with no saver
-changes the timings for whatever is playing and reads as **Any screensaver**.
+applies. A tile's ⚙ is the one place a saver's rule is edited. Under **WHEN
+<SAVER> PLAYS** are four switches — at night, on battery, docked, with a
+theme; all the ones that are on have to hold, and each shows its own fields
+once it is on. **Different timings at those times** adds the same two sliders
+as at the top of the panel, for while the rule holds; the lock slider's own
+switch is *never lock*.
 
 | Condition | Holds when |
 |---|---|
 | At night | the clock is inside a window, wrapping midnight |
 | On battery | unplugged, optionally only below a percentage |
 | Docked | an external monitor is one of the active outputs — the laptop's own panel does not count, and whether the lid is open or closed makes no difference. Nothing to set. |
-
-A laptop on a desk is the common reason for a rule that changes only the
-timings, so on a laptop it is a switch right under **Lock**: **Never lock
-while docked**. On, the screensaver plays for as long as you are away and a
-nudge of the mouse is straight back in; the lock returns the moment the
-monitor is unplugged. Underneath it is an ordinary rule — Rules shows it as
-*Docked → never locks* — so it composes with everything else, and *Rules ›
-Timings at certain times… › when docked* makes the same rule by hand. The
-line at the top of the panel and the TIMINGS heading both say when a rule is
-overriding the timings right now. Whether the lid closing sends the machine
-to sleep is logind's decision, not the screensaver's — see
-`HandleLidSwitchExternalPower` in `logind.conf(5)`.
 | With a theme | `~/.local/state/omarchy/current/theme.name` equals the chosen slug |
 
-So a clip for the evenings and a set of company logos for the working day is
-two tiles: give the clip a night rule from 17:00 to 08:30 and click the logos.
+A rule that changes only the timings has no tile, so it lives under the
+sliders, and on a laptop there are two: **Different timings on battery**
+(on, it unfolds its own screensaver and lock sliders, starting shorter) and
+**Never lock while docked** (on, the screensaver plays for as long as you are
+away and a nudge of the mouse is straight back in; the lock returns the
+moment the monitor is unplugged). Whether the lid closing sends the machine
+to sleep is logind's decision, not the screensaver's — see
+`HandleLidSwitchExternalPower` in `logind.conf(5)`.
 
-One rule per tile; when two tiles' rules hold at once, the older rule wins.
-The Rules row lists every rule in that order, together with any rule that
-only changes the timings (say, a shorter screensaver on battery) — those are
-added there. Nothing in the package is anyone's content: the built-ins draw
-your own branding file, the clock, rain, or nothing; every other saver is one
-you made. Nothing ships enabled, so a fresh install behaves exactly like
-stock. Unknown condition types never match, so a rule written by a newer
-version is inert on an older one.
+**Rules** lists every rule in one place, each leading with the saver it is
+about (a timings-only one reads **Any screensaver**), with a switch to pause
+it and ✕ to remove it. Clicking a row goes to where it is edited. While a
+tile's ⚙ is open, that saver's rule is marked in the list.
+
+Every rule that fits applies at once: the saver comes from the first rule
+that names one, each timing from the first rule that sets it, and *never
+lock* beats any number another rule sets. So a clip for the evenings and a
+set of company logos for the working day is two tiles — give the clip a night
+rule from 17:00 to 08:30 and click the logos — and the battery timings still
+apply when the clip is playing. Nothing in the package is anyone's content:
+the built-ins draw your own branding file, the clock, or nothing; every other
+saver is one you made. Nothing ships enabled, so a fresh install behaves
+exactly like stock. Unknown condition types never match, so a rule written
+by a newer version is inert on an older one.
 
 ## Status card
 

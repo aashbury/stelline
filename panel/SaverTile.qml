@@ -5,7 +5,8 @@ import "../StellineModel.js" as M
 
 // One saver in the grid: a live thumbnail, the name, and one line saying when
 // it plays. Click makes it the usual saver (or checks it into the shuffle);
-// hovering shows Preview and the gear. A saver still importing shows so.
+// the pointer or the cursor reveals Preview and the gear. A saver still
+// importing shows so.
 CursorSurface {
   id: root
 
@@ -124,14 +125,15 @@ CursorSurface {
         styleColor: Color.background
       }
 
-      // Usual-saver marker, or the shuffle checkbox.
+      // The shuffle checkbox. The usual saver needs no mark of its own: its
+      // surface is highlighted and its caption says so.
       Text {
         anchors.left: parent.left
         anchors.top: parent.top
         anchors.margins: Style.space(4)
-        visible: !root.plainTile && (root.shuffleMode || root.selected)
+        visible: !root.plainTile && root.shuffleMode
         textFormat: Text.PlainText
-        text: root.shuffleMode ? (root.inRotation ? "󰄲" : "󰄱") : "●"
+        text: (root.inRotation ? "󰄲" : "󰄱")
         color: Color.accent
         font.family: root.fontFamily
         font.pixelSize: Style.font.body
@@ -144,9 +146,9 @@ CursorSurface {
         anchors.top: parent.top
         anchors.margins: Style.space(2)
         spacing: 0
-        // Hovering reveals these on any tile, but the one that plays keeps
-        // them: a gear nobody can see is a gear nobody finds.
-        visible: (root.hot || root.open || (root.selected && !root.shuffleMode)) && !root.plainTile && !root.importing
+        // Revealed by the pointer or the keyboard cursor, and kept while the
+        // tile's panel is open below.
+        visible: (root.hot || root.open) && !root.plainTile && !root.importing
         PanelActionButton {
           iconText: "󰐊"
           tooltipText: "Preview"
@@ -179,7 +181,7 @@ CursorSurface {
     Text {
       width: parent.width
       textFormat: Text.PlainText
-      text: root.moreTile ? root.moreCount + " more" : (root.addTile ? "pictures, a clip, text…" : (root.importing ? "importing…" : (root.failed ? "import failed" : (root.caption !== "" ? root.caption : root.metaLine))))
+      text: root.moreTile ? root.moreCount + " more" : (root.addTile ? "picture, clip, text" : (root.importing ? "importing…" : (root.failed ? "import failed" : (root.caption !== "" ? root.caption : root.metaLine))))
       color: root.failed ? Color.urgent : (root.caption !== "" && !root.importing ? Color.accent : root.dim)
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption

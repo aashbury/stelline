@@ -3,10 +3,12 @@ import qs.Commons
 import qs.Ui
 
 // A row inside an opened section that ends in a button rather than a switch:
-// same shape as SwitchRow so the two line up down the left edge.
+// same shape as SwitchRow, glyph slot included, so the two line up down the
+// left edge.
 Item {
   id: root
 
+  property string glyph: ""
   property string label: ""
   property string description: ""
   property string buttonText: ""
@@ -20,10 +22,26 @@ Item {
 
   implicitHeight: Math.max(Style.space(38), text.implicitHeight + Style.space(12))
 
-  Column {
-    id: text
+  Item {
+    id: mark
     anchors.left: parent.left
     anchors.leftMargin: Style.space(10)
+    anchors.verticalCenter: parent.verticalCenter
+    width: root.glyph !== "" ? Style.space(26) : 0
+    height: glyphText.implicitHeight
+    Text {
+      id: glyphText
+      textFormat: Text.PlainText
+      text: root.glyph
+      color: root.dim
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.subtitle
+    }
+  }
+
+  Column {
+    id: text
+    anchors.left: mark.right
     anchors.right: action.left
     anchors.rightMargin: Style.space(10)
     anchors.verticalCenter: parent.verticalCenter

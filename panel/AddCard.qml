@@ -90,21 +90,28 @@ BorderSurface {
       Text {
         anchors.baseline: parent.children[0].baseline
         textFormat: Text.PlainText
-        text: root.step === "start" ? "from…" : (root.step === "picking" ? "choose in the file dialog" : root.summary)
+        text: root.step === "start" ? "" : (root.step === "picking" ? "choose in the file dialog" : root.summary)
         color: root.dim
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
       }
     }
 
-    // ---- start ----
-    Flow {
+    // ---- start: where it comes from, two equal columns like the power
+    // panel's profile row, so the choices read as one set ----
+    Grid {
+      id: sources
       visible: root.step === "start"
       width: parent.width
-      spacing: Style.space(6)
+      columns: 2
+      columnSpacing: Style.space(6)
+      rowSpacing: Style.space(6)
+      readonly property real cell: (width - columnSpacing) / 2
       // Only when there is something to paste, so it never disappoints.
       Button {
         visible: root.pasteable !== ""
+        width: sources.cell
+        leftAlign: true
         text: root.pasteable === "image" ? "Paste the picture" : "Paste what you copied"
         iconText: "󰆒"
         bordered: true
@@ -114,22 +121,11 @@ BorderSurface {
         tooltipText: "What's on your clipboard — a picture, a file, or a folder"
         onClicked: if (root.svc) root.svc.pasteClipboard()
       }
-      Button { text: "Pictures…"; iconText: "󰋩"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: root.pick("images") }
-      Button { text: "A folder of pictures…"; iconText: "󰉋"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: root.pick("folder") }
-      Button { text: "A video or GIF…"; iconText: "󰕧"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: root.pick("video") }
-      Button { text: "Some text"; iconText: "󰊄"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: root.update({ step: "text" }) }
-      Button { visible: root.ai !== ""; text: "A description"; iconText: "󰚩"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: root.update({ step: "prompt" }) }
-    }
-    Text {
-      visible: root.step === "start"
-      width: parent.width
-      textFormat: Text.PlainText
-      wrapMode: Text.WordWrap
-      text: "Pictures and clips become ASCII art in your theme's colours, with the same effects as the wordmark — or play as they are."
-        + (root.ai === "" ? " Pick a default coding agent (omarchy default agent), or set ANTHROPIC_API_KEY, to describe one in words." : "")
-      color: root.dim
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.caption
+      Button { width: sources.cell; leftAlign: true; text: "Pictures…"; iconText: "󰋩"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: root.pick("images") }
+      Button { width: sources.cell; leftAlign: true; text: "A folder of pictures…"; iconText: "󰉋"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: root.pick("folder") }
+      Button { width: sources.cell; leftAlign: true; text: "A video or GIF…"; iconText: "󰕧"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: root.pick("video") }
+      Button { width: sources.cell; leftAlign: true; text: "Some text"; iconText: "󰊄"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: root.update({ step: "text" }) }
+      Button { visible: root.ai !== ""; width: sources.cell; leftAlign: true; text: "A description"; iconText: "󰚩"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; tooltipText: "Asks your default coding agent for the art"; onClicked: root.update({ step: "prompt" }) }
     }
 
     // ---- confirm (after the chooser) ----
@@ -167,7 +163,7 @@ BorderSurface {
         width: parent.width
         textFormat: Text.PlainText
         wrapMode: Text.WordWrap
-        text: root.style === "ascii" ? "The first 20 seconds at 10 frames a second, converted frame by frame — a minute or so." : "The first 20 seconds, as an animated picture."
+        text: root.style === "ascii" ? "The first 20 seconds; takes a minute or so." : "The first 20 seconds."
         color: root.dim
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
@@ -219,8 +215,8 @@ BorderSurface {
         textFormat: Text.PlainText
         wrapMode: Text.WordWrap
         text: (root.ai.indexOf("agent:") === 0
-            ? "Asks " + M.agentName(root.ai.substring(6)) + ", your default agent (omarchy default agent)"
-            : "Uses your ANTHROPIC_API_KEY") + " — a minute or two; you get a notification when it is ready."
+            ? "Asks " + M.agentName(root.ai.substring(6)) + ", your default agent."
+            : "Uses your Anthropic key.") + " A minute or two; you get a notification when it is ready."
         color: root.dim
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption

@@ -72,7 +72,7 @@ test("pickSaver: situation wins, then the chosen saver, then a shuffle that avoi
   assert.equal(M.pickSaver(one, null, "clock", 0.5), "clock")
 })
 
-test("situations: battery, night (wrapping midnight) and theme; first enabled match wins; unknown keys never match", () => {
+test("situations: battery, night (wrapping midnight) and theme; every fit applies, the first names the saver; unknown keys never match", () => {
   const ctx = { onBattery: true, batteryPercent: 42, minuteOfDay: 23 * 60, themeName: "hackerman" }
   const list = [
     { id: "a", enabled: false, when: { battery: {} }, saver: "blank" },
@@ -80,7 +80,9 @@ test("situations: battery, night (wrapping midnight) and theme; first enabled ma
     { id: "c", enabled: true, when: { night: { from: "22:00", to: "07:00" } }, saver: "clock" },
     { id: "d", enabled: true, when: { theme: { name: "Hackerman" } }, saver: "blank" }
   ]
-  assert.equal(M.activeSituation(list, ctx).id, "c")
+  // night and theme both hold: one merged situation, the saver from the earlier rule
+  assert.equal(M.activeSituation(list, ctx).id, "c+d")
+  assert.equal(M.activeSituation(list, ctx).saver, "clock")
   assert.equal(M.activeSituation(list, { ...ctx, minuteOfDay: 12 * 60 }).id, "d")
   assert.equal(M.activeSituation(list, { ...ctx, minuteOfDay: 12 * 60, themeName: "nord", batteryPercent: 10 }).id, "b")
   assert.equal(M.activeSituation(list, { onBattery: false, minuteOfDay: 12 * 60, themeName: "nord" }), null)
@@ -442,4 +444,41 @@ test("a rule's subject is the saver it belongs to; a timings-only rule has none"
   // and the older one-line form still names the saver, for the hero and TIMINGS
   assert.equal(M.situationEffect(saverRule, list), "Dancing")
   assert.equal(M.situationEffect({ saver: "dance", lock: "never" }, list), "Dancing · never locks")
+})
+
+test("every rule that fits applies: the saver from the first that names one, each timing from the first that sets it, never-lock wins", () => {
+  const list = [
+    { id: "night-clock", enabled: true, when: { night: { from: "22:00", to: "07:00" } }, saver: "clock" },
+    { id: "battery-timings", enabled: true, when: { battery: {} }, screensaver: 90, lock: 180 },
+    { id: "docked-no-lock", enabled: true, when: { docked: {} }, lock: "never" }
+  ]
+  const at = M.activeSituation(list, { onBattery: true, batteryPercent: 50, minuteOfDay: 23 * 60, docked: true })
+  assert.equal(at.saver, "clock")
+  assert.equal(at.screensaver, 90)
+  assert.equal(at.lock, "never")
+  assert.deepEqual(Object.keys(at.when).sort(), ["battery", "docked", "night"])
+  assert.equal(M.situationLabel(at), "Night 22:00–07:00 · On battery · Docked")
+  // the merged timeline honours all of it
+  const eff = M.effectiveTimeouts({ screensaver: 300, lock: 600 }, M.mergeSettings({ situations: list }), at)
+  assert.equal(eff.screensaver, 90)
+  assert.equal(eff.lockEnabled, false)
+  // one match comes back as itself, untouched
+  assert.equal(M.activeSituation(list, { onBattery: false, minuteOfDay: 12 * 60, docked: true }), list[2])
+})
+
+test("a timings-only rule is a switch under the sliders", () => {
+  const on = M.setTimingsRule([], "battery", true, {})
+  assert.deepEqual(on, [{ id: "battery-timings", enabled: true, when: { battery: { below: 100 } }, screensaver: 90, lock: 180 }])
+  assert.equal(M.timingsRule(on, "battery"), on[0])
+  assert.equal(M.timingsRuleIndex(on, "docked"), -1)
+  // a saver's battery rule is not the switch
+  assert.equal(M.timingsRule([{ id: "x", enabled: true, when: { battery: {} }, saver: "clock" }], "battery"), null)
+  // a switched-off copy is switched back on rather than duplicated; off removes it
+  const off = M.cloneJson(on); off[0].enabled = false
+  assert.equal(M.setTimingsRule(off, "battery", true).length, 1)
+  assert.equal(M.setTimingsRule(off, "battery", true)[0].enabled, true)
+  assert.deepEqual(M.setTimingsRule(on, "battery", false), [])
+  assert.equal(M.hasTiming(90), true)
+  assert.equal(M.hasTiming(""), false)
+  assert.equal(M.hasTiming(null), false)
 })

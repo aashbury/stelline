@@ -4,11 +4,14 @@ import qs.Ui
 import "../StellineModel.js" as M
 
 // The panel body. Level 1: hero, stay awake (the coffee cup — changed often,
-// so it sits at the top), preview, the saver grid (click a tile = that one
-// plays), timings. Level 2: a tile's gear opens it below the grid — when it
+// so it sits at the top), the timings, the saver grid (click a tile = that
+// one plays). Level 2: a tile's gear opens it below the grid — when it
 // plays, how it looks, delete. Level 3: three rows that say what they are
-// set to — rules in order, the while-you're-away note, shortcuts — one open
-// at a time.
+// set to — the rules, the while-you're-away note, shortcuts — one open at
+// a time.
+//
+// Nothing here explains itself in a sentence: the stock panels don't, and a
+// row that needs a caption is a row that needs a better label.
 //
 // One cursor, shared by keyboard and mouse: rows bind `hasCursor` to
 // `cursorActive && cursorIndex === <row>` and never read hover themselves.
@@ -30,7 +33,6 @@ Column {
   property int cursorIndex: 0
   property string openSection: ""
   property string openSettings: ""
-  property int expandedSituation: -1
 
   signal closeRequested()
   signal ensureVisible(real y, real h)
@@ -43,13 +45,29 @@ Column {
   readonly property bool stayAwake: svc ? svc.stayAwake === true : false
   // One switch: Omarchy's own screensaver toggle and the stage switch agree.
   readonly property bool screensaverOn: svc ? svc.screensaverOff !== true && cfg.screensaverEnabled !== false : false
-  readonly property int screensaverSeconds: svc ? svc.screensaverTimeoutSeconds : 150
-  readonly property int lockSeconds: svc ? svc.lockTimeoutSeconds : 300
+  // The sliders show the settings; the hero shows what is in effect, rules
+  // included. A rule that says "never lock" must not drag the Lock slider to
+  // the end of its track.
+  readonly property int screensaverSeconds: svc && svc.idleConfig ? M.secondsFromConfig(svc.idleConfig.screensaver, 150) : 150
+  readonly property int lockSeconds: svc && svc.idleConfig ? M.secondsFromConfig(svc.idleConfig.lock, 300) : 300
+  readonly property int screensaverNow: svc ? svc.screensaverTimeoutSeconds : screensaverSeconds
+  readonly property int lockNow: svc ? svc.lockTimeoutSeconds : lockSeconds
   readonly property bool adding: !!(svc && svc.importDraft)
   readonly property var openSaver: openSettings !== "" ? M.saverById(openSettings, userSavers) : null
   readonly property int columns: 3
   readonly property int tileGap: Style.space(6)
   readonly property int tileWidth: Math.floor((width - tileGap * (columns - 1)) / columns)
+
+  // The two laptop rows under the sliders are rules underneath — one that
+  // shortens the timings on battery, one that never locks at a monitor —
+  // matched by shape, so Rules lists them too.
+  readonly property bool hasLaptopRows: svc ? svc.isLaptop === true : false
+  readonly property var batteryRule: M.timingsRule(cfg.situations, "battery")
+  readonly property bool batteryTimings: !!batteryRule && batteryRule.enabled === true
+  readonly property bool batteryRowsOpen: hasLaptopRows && batteryTimings
+  readonly property int batteryScreensaver: batteryTimings && M.hasTiming(batteryRule.screensaver) ? Number(batteryRule.screensaver) : screensaverSeconds
+  readonly property bool batteryLocks: !(batteryTimings && batteryRule.lock === "never")
+  readonly property int batteryLock: batteryTimings && M.hasTiming(batteryRule.lock) && batteryRule.lock !== "never" ? Number(batteryRule.lock) : lockSeconds
 
   // The grid is the one part of the panel that grows without limit, and it
   // sits above the things set once. Past four rows it keeps four and ends in
@@ -61,16 +79,19 @@ Column {
   readonly property int hiddenCount: savers.length - shownSavers.length
 
   // Cursor rows, in visual order — most-used first: the master switch, stay
-  // awake, the timings, then the gallery, then what gets set once. Tiles are
-  // one row each and end with "Show all" (when capped) and Add. Rule rows
-  // follow the Rules row while it is open.
+  // awake, the timings (with the two laptop rows, and the battery pair while
+  // it is open), then the gallery, then what gets set once. Tiles are one
+  // row each and end with "Show all" (when capped) and Add. Rule rows follow
+  // the Rules row while it is open.
   readonly property int rowHero: 0
   readonly property int rowStayAwake: 1
   readonly property int rowScreensaver: 2
   readonly property int rowLock: 3
-  readonly property bool hasDockedRow: svc ? svc.isLaptop === true : false
-  readonly property int rowDockedLock: hasDockedRow ? 4 : -1
-  readonly property int rowPreview: hasDockedRow ? 5 : 4
+  readonly property int rowBattery: hasLaptopRows ? 4 : -1
+  readonly property int rowBatteryScreensaver: batteryRowsOpen ? 5 : -1
+  readonly property int rowBatteryLock: batteryRowsOpen ? 6 : -1
+  readonly property int rowDockedLock: hasLaptopRows ? (batteryRowsOpen ? 7 : 5) : -1
+  readonly property int rowPreview: rowLock + 1 + (hasLaptopRows ? 2 : 0) + (batteryRowsOpen ? 2 : 0)
   readonly property int rowTileFirst: rowPreview + 1
   readonly property int tileCount: shownSavers.length + (gridCapped ? 1 : 0) + 1
   readonly property int rowMore: gridCapped ? rowTileFirst + shownSavers.length : -1
@@ -90,6 +111,9 @@ Column {
     if (index === rowShuffle) return shuffleToggle
     if (index === rowScreensaver) return screensaverRow
     if (index === rowLock) return lockRow
+    if (index === rowBattery) return batteryRow
+    if (index === rowBatteryScreensaver) return batteryScreensaverRow
+    if (index === rowBatteryLock) return batteryLockRow
     if (index === rowDockedLock) return dockedLockRow
 
     if (index === rowRules) return advanced.children[0]
@@ -107,9 +131,7 @@ Column {
   }
   onCursorIndexChanged: if (cursorActive) scrollToRow(cursorIndex)
 
-  // An editor opening below the grid, or a situation's editor, should come
-  // into view whole.
-  onExpandedSituationChanged: if (expandedSituation >= 0) revealEditor.restart()
+  // An editor opening below the grid should come into view whole.
   onOpenSettingsChanged: if (openSettings !== "") revealEditor.restart()
   onAddingChanged: if (adding) revealEditor.restart()
   Timer {
@@ -117,8 +139,7 @@ Column {
     interval: 60
     onTriggered: {
       var item = null
-      if (root.expandedSituation >= 0) item = root.rowItem(root.rowSituationFirst + root.expandedSituation)
-      else if (root.adding) item = addCard
+      if (root.adding) item = addCard
       else if (root.openSettings !== "") item = inspector
       if (!item) return
       var p = item.mapToItem(root, 0, 0)
@@ -137,15 +158,17 @@ Column {
       root.ensureVisible(p.y, Math.min(item.height, Style.space(420)))
     }
   }
-  function toggleSection(name) {
-    openSection = openSection === name ? "" : name
-    if (openSection !== "rules") expandedSituation = -1
-  }
+  function toggleSection(name) { openSection = openSection === name ? "" : name }
 
+  // Opens at the top with nothing unfolded, the way every panel does; an
+  // Add in progress is the one thing worth coming back to.
   function reset() {
     cursorActive = false
     cursorIndex = rowTileFirst
     gridExpanded = false
+    openSettings = ""
+    openSection = ""
+    if (adding) revealEditor.restart()
     if (svc && typeof svc.refreshThemes === "function") svc.refreshThemes()
     if (svc && typeof svc.probeIpcOwner === "function") svc.probeIpcOwner()
     if (svc && typeof svc.rescan === "function") svc.rescan()
@@ -185,6 +208,8 @@ Column {
       if (inTiles(cursorIndex)) cursorIndex = Math.max(rowTileFirst, Math.min(rowShuffle - 1, cursorIndex + (dx > 0 ? 1 : -1)))
       else if (cursorIndex === rowScreensaver) screensaverRow.nudge(dx > 0 ? 1 : -1)
       else if (cursorIndex === rowLock) lockRow.nudge(dx > 0 ? 1 : -1)
+      else if (cursorIndex === rowBatteryScreensaver) batteryScreensaverRow.nudge(dx > 0 ? 1 : -1)
+      else if (cursorIndex === rowBatteryLock) batteryLockRow.nudge(dx > 0 ? 1 : -1)
     }
   }
 
@@ -204,15 +229,17 @@ Column {
     else if (inTiles(cursorIndex)) { var id = cursorSaverId(); if (id === "") startAdd(); else chooseSaver(id) }
     else if (cursorIndex === rowShuffle) toggleShuffle()
     else if (cursorIndex === rowLock) setStage("lockEnabled", !cfg.lockEnabled)
+    else if (cursorIndex === rowBattery) setBatteryTimings(!batteryTimings)
+    else if (cursorIndex === rowBatteryLock) patchBatteryTimings({ lock: batteryLocks ? "never" : lockSeconds })
     else if (cursorIndex === rowDockedLock) svc.setDockedNoLock(!svc.dockedNoLock)
     else if (cursorIndex === rowRules) toggleSection("rules")
     else if (cursorIndex === rowAway) toggleSection("away")
     else if (cursorIndex === rowShortcuts) toggleSection("shortcuts")
-    else if (cursorIndex >= rowSituationFirst && cursorIndex < rowAway) toggleSituationEditor(cursorIndex - rowSituationFirst)
+    else if (cursorIndex >= rowSituationFirst && cursorIndex < rowAway) openRule(cursorIndex - rowSituationFirst)
   }
 
   // Delete: a user saver under the cursor opens its inspector with Delete
-  // armed; the second press deletes. Situations delete at once, as before.
+  // armed; the second press deletes. Rules delete at once.
   function remove() {
     if (!cursorActive) return
     if (cursorIndex >= rowSituationFirst && cursorIndex < rowAway) { removeSituation(cursorIndex - rowSituationFirst); return }
@@ -292,21 +319,6 @@ Column {
 
   function writeSituations(list) { if (svc) svc.writeSettings({ situations: list }) }
 
-  function addSituation(kind) {
-    var list = M.cloneJson(cfg.situations)
-    var s = { id: kind + "-" + Date.now().toString(36), enabled: true, when: {} }
-    if (kind === "battery") { s.when.battery = { below: 100 }; s.screensaver = 90; s.lock = 180 }
-    else if (kind === "night") s.when.night = { from: "22:00", to: "07:00" }
-    // The reason anyone adds a docked rule: at the desk, the saver plays and
-    // nothing locks. The row's editor can change that.
-    else if (kind === "docked") { s.when.docked = {}; s.lock = "never" }
-    else s.when.theme = { name: svc && svc.themeName ? svc.themeName : "" }
-    list.push(s)
-    writeSituations(list)
-    openSection = "rules"
-    expandedSituation = list.length - 1
-  }
-
   function updateSituation(index, patch) {
     var list = M.cloneJson(cfg.situations)
     if (index < 0 || index >= list.length) return
@@ -325,16 +337,29 @@ Column {
     writeSituations(list)
   }
 
-  function toggleSituationEditor(index) { expandedSituation = expandedSituation === index ? -1 : index }
-
   function removeSituation(index) {
     var list = M.cloneJson(cfg.situations)
     if (index < 0 || index >= list.length) return
     list.splice(index, 1)
-    if (expandedSituation === index) expandedSituation = -1
     writeSituations(list)
     if (cursorIndex >= rowCount) cursorIndex = Math.max(0, rowCount - 1)
   }
+
+  // A rule is edited where it lives: a saver's rule in that saver's gear, a
+  // timings-only one at its switch under the sliders.
+  function openRule(index) {
+    var s = cfg.situations[index]
+    if (!s) return
+    if (s.saver && M.saverById(s.saver, userSavers)) {
+      if (openSettings === s.saver) revealEditor.restart(); else openSettings = s.saver
+      return
+    }
+    if (M.timingsRuleIndex(cfg.situations, "battery") === index && rowBattery >= 0) scrollToRow(rowBattery)
+    else if (M.dockedNoLockIndex(cfg.situations) === index && rowDockedLock >= 0) scrollToRow(rowDockedLock)
+  }
+
+  function setBatteryTimings(on) { writeSituations(M.setTimingsRule(cfg.situations, "battery", !!on, svc ? svc.situationContext : null)) }
+  function patchBatteryTimings(patch) { var at = M.timingsRuleIndex(cfg.situations, "battery"); if (at >= 0) updateSituation(at, patch) }
 
   function minutes(seconds) {
     var s = Math.max(0, Math.round(Number(seconds) || 0))
@@ -351,9 +376,9 @@ Column {
     title: "Stelline"
     meta: root.serviceOk
       ? (root.stayAwake ? "staying awake"
-        : (!root.screensaverOn ? "screensaver off" + (root.svc.lockStageEnabled ? ", lock at " + root.minutes(root.lockSeconds) : ", no lock")
-        : root.saver.name.toLowerCase() + " after " + root.minutes(root.screensaverSeconds)
-          + (root.svc.lockStageEnabled ? ", lock at " + root.minutes(root.lockSeconds) : ", no lock")
+        : (!root.screensaverOn ? "screensaver off" + (root.svc.lockStageEnabled ? ", lock at " + root.minutes(root.lockNow) : ", no lock")
+        : root.saver.name.toLowerCase() + " after " + root.minutes(root.screensaverNow)
+          + (root.svc.lockStageEnabled ? ", lock at " + root.minutes(root.lockNow) : ", no lock")
           + (root.svc.situation ? " · " + M.situationLabel(root.svc.situation).toLowerCase() : "")))
       : "not running yet — restart the shell"
     foreground: root.foreground
@@ -387,11 +412,12 @@ Column {
     fontFamily: root.fontFamily
   }
 
-  Toggle {
+  SwitchRow {
     id: stayAwakeToggle
     width: parent.width
-    label: "󰅶  Stay awake"
-    description: root.stayAwake ? "No screensaver, no lock, until you turn this off" : "Keeps the screen on — also Super+Ctrl+I"
+    glyph: "󰅶"
+    label: "Stay awake"
+    description: root.stayAwake ? "No screensaver, no lock, until you turn this off" : "Also Super+Ctrl+I"
     checked: root.stayAwake
     foreground: root.foreground
     fontFamily: root.fontFamily
@@ -403,20 +429,7 @@ Column {
   PanelSeparator { width: parent.width; foreground: root.foreground }
 
   // ---- timings ----
-  Row {
-    width: parent.width
-    spacing: Style.space(8)
-    PanelSectionHeader { text: "TIMINGS"; foreground: root.foreground; fontFamily: root.fontFamily }
-    Text {
-      anchors.baseline: parent.children[0].baseline
-      textFormat: Text.PlainText
-      text: "how long after you stop" + (root.svc && root.svc.situation && M.situationEffect(root.svc.situation, root.userSavers) !== ""
-        ? " · now: " + M.situationEffect(root.svc.situation, root.userSavers) + " (" + M.situationLabel(root.svc.situation).toLowerCase() + ")" : "")
-      color: root.dim
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.caption
-    }
-  }
+  PanelSectionHeader { text: "TIMINGS"; foreground: root.foreground; fontFamily: root.fontFamily }
 
   SliderRow {
     id: screensaverRow
@@ -440,7 +453,7 @@ Column {
     width: parent.width
     bar: root.bar
     label: "Lock"
-    value: root.cfg.lockEnabled ? root.lockSeconds : (root.svc && root.svc.idleConfig ? M.secondsFromConfig(root.svc.idleConfig.lock, 300) : 300)
+    value: root.lockSeconds
     minimum: 60
     maximum: 3600
     step: 60
@@ -455,14 +468,71 @@ Column {
     onHovered: function(h) { root.hoverRow(root.rowLock, h) }
   }
 
-  // The lock's one common exception, where you look when the lock bothers
-  // you. Underneath it is an ordinary rule — Rules shows it too.
+  // A laptop's two exceptions, where you look when the timings bother you.
+  // Each is an ordinary rule underneath — Rules lists them too.
+  SwitchRow {
+    id: batteryRow
+    visible: root.hasLaptopRows
+    width: parent.width
+    glyph: "󰁹"
+    label: "Different timings on battery"
+    description: root.svc && root.svc.onBattery && root.batteryTimings ? "That's now" : ""
+    checked: root.batteryTimings
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    hasCursor: root.cursorActive && root.cursorIndex === root.rowBattery
+    onClicked: root.setBatteryTimings(!checked)
+    onHovered: function(h) { root.hoverRow(root.rowBattery, h) }
+  }
+  Column {
+    visible: root.batteryRowsOpen
+    width: parent.width
+    leftPadding: Style.space(24)
+    spacing: Style.space(8)
+    SliderRow {
+      id: batteryScreensaverRow
+      width: parent.width - parent.leftPadding
+      bar: root.bar
+      label: "Screensaver"
+      value: root.batteryScreensaver
+      minimum: 30
+      maximum: 1800
+      step: 30
+      format: function(v) { return root.minutes(v) }
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      hasCursor: root.cursorActive && root.cursorIndex === root.rowBatteryScreensaver
+      onReleased: function(v) { root.patchBatteryTimings({ screensaver: Math.round(v) }) }
+      onHovered: function(h) { root.hoverRow(root.rowBatteryScreensaver, h) }
+    }
+    SliderRow {
+      id: batteryLockRow
+      width: parent.width - parent.leftPadding
+      bar: root.bar
+      label: "Lock"
+      value: root.batteryLock
+      minimum: 60
+      maximum: 3600
+      step: 60
+      format: function(v) { return root.minutes(v) }
+      showSwitch: true
+      switchChecked: root.batteryLocks
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      hasCursor: root.cursorActive && root.cursorIndex === root.rowBatteryLock
+      onReleased: function(v) { root.patchBatteryTimings({ lock: Math.round(v) }) }
+      onSwitchToggled: root.patchBatteryTimings({ lock: root.batteryLocks ? "never" : root.lockSeconds })
+      onHovered: function(h) { root.hoverRow(root.rowBatteryLock, h) }
+    }
+  }
+
   SwitchRow {
     id: dockedLockRow
-    visible: root.hasDockedRow
+    visible: root.hasLaptopRows
     width: parent.width
+    glyph: "󰍹"
     label: "Never lock while docked"
-    description: root.svc && root.svc.docked ? "A monitor is plugged in — that's now" : "A monitor is plugged in"
+    description: root.svc && root.svc.docked && root.svc.dockedNoLock ? "That's now" : ""
     checked: root.svc ? root.svc.dockedNoLock === true : false
     foreground: root.foreground
     fontFamily: root.fontFamily
@@ -480,23 +550,13 @@ Column {
     width: parent.width
     implicitHeight: Math.max(saversHeading.implicitHeight, previewButton.implicitHeight)
 
-    Row {
+    PanelSectionHeader {
       id: saversHeading
       anchors.left: parent.left
-      anchors.right: previewButton.left
-      anchors.rightMargin: Style.space(8)
       anchors.verticalCenter: parent.verticalCenter
-      spacing: Style.space(8)
-      PanelSectionHeader { text: "SAVERS"; foreground: root.foreground; fontFamily: root.fontFamily }
-      Text {
-        anchors.baseline: parent.children[0].baseline
-        textFormat: Text.PlainText
-        text: root.cfg.shuffle ? "check the ones to shuffle between" : "click the one that should usually play"
-        color: root.dim
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.caption
-        elide: Text.ElideRight
-      }
+      text: "SAVERS"
+      foreground: root.foreground
+      fontFamily: root.fontFamily
     }
 
     Button {
@@ -579,12 +639,11 @@ Column {
     onEditingChanged: root.setEditing("add", editing)
   }
 
-  // Set once, so a plain row rather than the emphasis Stay awake gets.
   SwitchRow {
     id: shuffleToggle
     width: parent.width
+    glyph: "󰒟"
     label: "Shuffle"
-    description: root.cfg.shuffle ? "A different checked one each time" : "Always the usual one"
     checked: root.cfg.shuffle
     foreground: root.foreground
     fontFamily: root.fontFamily

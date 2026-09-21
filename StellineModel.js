@@ -319,11 +319,30 @@ function situationMatches(s, ctx) {
   return true
 }
 
-// First enabled match wins; null when nothing applies.
+function hasTiming(v) { return v !== undefined && v !== null && v !== "" }
+
+// Every enabled rule that fits applies at once: the saver comes from the
+// first that names one, each timing from the first that sets it. A saver
+// rule and a timings rule for the same moment therefore never fight; order
+// only matters between two rules that set the same thing. Null when nothing
+// applies.
 function activeSituation(list, ctx) {
   if (!Array.isArray(list)) return null
-  for (var i = 0; i < list.length; i++) if (situationMatches(list[i], ctx)) return list[i]
-  return null
+  var hits = []
+  for (var i = 0; i < list.length; i++) if (situationMatches(list[i], ctx)) hits.push(list[i])
+  if (hits.length === 0) return null
+  if (hits.length === 1) return hits[0]
+  var merged = { id: hits.map(function(s) { return s.id }).join("+"), enabled: true, when: {} }
+  for (var j = 0; j < hits.length; j++) {
+    var s = hits[j]
+    for (var k in s.when) if (!(k in merged.when)) merged.when[k] = s.when[k]
+    if (s.saver && !merged.saver) merged.saver = s.saver
+    if (hasTiming(s.screensaver) && !hasTiming(merged.screensaver)) merged.screensaver = s.screensaver
+    // "Never lock" is a promise, so it beats any number another rule sets.
+    if (s.lock === "never") merged.lock = "never"
+    else if (hasTiming(s.lock) && !hasTiming(merged.lock)) merged.lock = s.lock
+  }
+  return merged
 }
 
 function conditionLabel(key, c) {
@@ -406,6 +425,44 @@ function setDockedNoLock(situations, on) {
   if (on) {
     if (at === -1) list.push({ id: "docked-no-lock", enabled: true, when: { docked: {} }, lock: "never" })
     else list[at].enabled = true
+  } else if (at !== -1) {
+    list.splice(at, 1)
+  }
+  return list
+}
+
+// A rule that only changes the timings in one situation — no saver, one
+// condition — is what a switch under the sliders stands for. Matched by
+// shape, like the docked one, so a hand-written rule counts too.
+function timingsRuleIndex(situations, key) {
+  if (!Array.isArray(situations)) return -1
+  for (var i = 0; i < situations.length; i++) {
+    var s = situations[i]
+    if (!isPlainObject(s) || !isPlainObject(s.when)) continue
+    var keys = Object.keys(s.when)
+    if (keys.length !== 1 || keys[0] !== key) continue
+    if (s.saver) continue
+    return i
+  }
+  return -1
+}
+
+function timingsRule(situations, key) {
+  var at = timingsRuleIndex(situations, key)
+  return at === -1 ? null : situations[at]
+}
+
+// Switching one on that does not exist yet starts it with shorter timings,
+// so the switch visibly does something; off removes it.
+function setTimingsRule(situations, key, on, ctx) {
+  var list = Array.isArray(situations) ? cloneJson(situations) : []
+  var at = timingsRuleIndex(list, key)
+  if (on) {
+    if (at === -1) {
+      var s = { id: key + "-timings", enabled: true, when: {}, screensaver: 90, lock: 180 }
+      s.when[key] = defaultCondition(key, ctx)
+      list.push(s)
+    } else list[at].enabled = true
   } else if (at !== -1) {
     list.splice(at, 1)
   }
@@ -1295,6 +1352,10 @@ if (typeof module !== "undefined") {
     situationLabel: situationLabel,
     situationEffect: situationEffect,
     situationTimings: situationTimings,
+    hasTiming: hasTiming,
+    timingsRuleIndex: timingsRuleIndex,
+    timingsRule: timingsRule,
+    setTimingsRule: setTimingsRule,
     ruleSaver: ruleSaver,
     mmss: mmss,
     digest: digest,

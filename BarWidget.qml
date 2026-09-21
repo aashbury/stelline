@@ -40,6 +40,7 @@ Panel {
 
   onOpenedChanged: if (opened) {
     body.reset()
+    flick.contentY = 0
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
   }
 
@@ -73,7 +74,9 @@ Panel {
     open: root.opened
     focusTarget: keyCatcher
     contentWidth: panel.fittedContentWidth(Style.space(470))
-    contentHeight: panel.fittedContentHeight(body.implicitHeight, Style.space(720))
+    // As tall as the screen allows: the rows set once sit at the bottom, and
+    // a row that has to be scrolled to is a row nobody knows is there.
+    contentHeight: panel.fittedContentHeight(body.implicitHeight)
 
     PanelKeyCatcher {
       id: keyCatcher
