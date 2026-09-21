@@ -177,23 +177,36 @@ Item {
   // In-flight glyphs on the same grid: the font's advance is padded out to
   // the cell width and lines are fixed to the cell height, so column 120 of
   // the overlay sits over column 120 of the canvas.
-  Repeater {
-    model: 3
-    Text {
-      required property int index
-      readonly property string body: index === 0 ? root.dimOverlay : (index === 1 ? root.overlay : root.hotOverlay)
-      x: view.artX + (root.offsets[index] || 0) * view.cellW
-      y: view.artY - root.padR * view.cellH
-      visible: body !== ""
-      textFormat: Text.PlainText
-      renderType: Text.NativeRendering
-      text: body
-      color: index === 0 ? Qt.darker(root.trail, 1.9) : (index === 1 ? root.trail : Qt.lighter(root.fg, 1.25))
-      font.family: root.fontFamily
-      font.pixelSize: view.pixelSize
-      font.letterSpacing: view.cellW - view.advance
-      lineHeightMode: Text.FixedHeight
-      lineHeight: view.cellH
+  // The painter fits the art by scaling its canvas, so the overlay has to sit
+  // under exactly the same transform or the glyphs still in flight drift off
+  // the letters they are meant to be landing on — further off the further
+  // right and further down they are.
+  Item {
+    x: view.artX
+    y: view.artY
+    width: view.artW
+    height: view.artH
+    scale: view.shrink
+    transformOrigin: Item.Center
+
+    Repeater {
+      model: 3
+      Text {
+        required property int index
+        readonly property string body: index === 0 ? root.dimOverlay : (index === 1 ? root.overlay : root.hotOverlay)
+        x: (root.offsets[index] || 0) * view.cellW
+        y: -root.padR * view.cellH
+        visible: body !== ""
+        textFormat: Text.PlainText
+        renderType: Text.NativeRendering
+        text: body
+        color: index === 0 ? Qt.darker(root.trail, 1.9) : (index === 1 ? root.trail : Qt.lighter(root.fg, 1.25))
+        font.family: root.fontFamily
+        font.pixelSize: view.pixelSize
+        font.letterSpacing: view.cellW - view.advance
+        lineHeightMode: Text.FixedHeight
+        lineHeight: view.cellH
+      }
     }
   }
 }
