@@ -24,16 +24,25 @@ test("every effect resolves every cell by its duration and nothing before it sta
 // An effect's glyphs now land in one of three brightness layers; a test that
 // asks "what is on screen" has to look at all three.
 function merged(f) {
+  // Each layer is emitted at its own left edge with its offset in columns, so
+  // putting the frame back together means shifting them before comparing.
+  const offs = f.offset || [0, 0, 0]
   const layers = [f.dim || "", f.overlay || "", f.hot || ""].map((l) => l.split("\n"))
+  const base = Math.min(...offs)
   const rows = Math.max(...layers.map((l) => l.length))
   const out = []
   for (let r = 0; r < rows; r++) {
-    const width = Math.max(...layers.map((l) => (l[r] || "").length))
     let line = ""
-    for (let c = 0; c < width; c++) {
-      let ch = " "
-      for (const l of layers) { const g = (l[r] || "")[c]; if (g && g !== " ") ch = g }
-      line += ch
+    for (let i = 0; i < 3; i++) {
+      const src = layers[i][r] || ""
+      const shift = offs[i] - base
+      for (let c = 0; c < src.length; c++) {
+        const ch = src[c]
+        if (!ch || ch === " ") continue
+        const at = shift + c
+        while (line.length < at) line += " "
+        line = line.substring(0, at) + ch + line.substring(at + 1)
+      }
     }
     out.push(line.replace(/\s+$/, ""))
   }
@@ -81,10 +90,11 @@ test("every effect plans, stays inside the grid, and finishes", () => {
     const p = E.plan(fx, art, 11)
     assert.ok(p.cells.length > 0, fx)
     for (const cell of p.cells) assert.ok(isFinite(cell.at) && cell.at >= 0, fx + " at")
-    // mid-flight: an overlay no wider or taller than the art
+    // Mid-flight an effect may draw outside the word — that is what the
+    // margin is for — but never outside the margin.
     const mid = merged(E.frame(E.plan(fx, art, 11), Math.round(p.duration * 0.4))).split("\n")
-    assert.ok(mid.length <= art.length, fx + " rows")
-    for (const line of mid) assert.ok(line.length <= 8, fx + " cols")
+    assert.ok(mid.length <= art.length + p.padR * 2, fx + " rows")
+    for (const line of mid) assert.ok(line.length <= 8 + p.padC * 2, fx + " cols")
     // and everything is resolved once the plan is over
     assert.equal(E.frame(p, p.duration + 50).resolved.length, p.cells.length, fx + " unresolved")
   }
@@ -142,4 +152,35 @@ test("the ambient layer keeps drawing and never runs out", () => {
 test("moods still partition every effect after the new ones", () => {
   const seen = Object.keys(E.MOODS).flatMap((k) => E.MOODS[k])
   assert.deepEqual(seen.slice().sort(), E.EFFECTS.slice().sort())
+})
+
+test("the field draws outside the word, and never outlives its effect", () => {
+  const art = ["  ████  ", " ██  ██ ", "████████", "██    ██"]
+  const field = ["spotlight", "cascade", "shockwave", "beams", "storm"]
+  for (const fx of field) {
+    const p = E.plan(fx, art, 6)
+    assert.ok(p.padR > 0 || p.padC > 0, fx + " has no margin")
+    // it uses the margin: something is drawn beyond the word's own box, in
+    // whichever direction that effect travels
+    let outside = 0
+    for (let t = 200; t < p.duration; t += 120) {
+      const rows = merged(E.frame(E.plan(fx, art, 6), t)).split("\n")
+      const wider = rows.some((l) => l.length > art[0].length)
+      if (rows.length > art.length || wider) outside++
+    }
+    assert.ok(outside > 0, fx + " never draws outside the word")
+    // and the screen is the letters' own once the arrival is over
+    assert.equal(merged(E.frame(p, p.duration + 40)), "", fx + " weather outlived it")
+  }
+})
+
+test("on battery the whole-canvas effects stand down", () => {
+  for (const fx of E.FIELD_EFFECTS) assert.ok(E.EFFECTS.includes(fx), fx + " is not an effect")
+  const cheap = E.onlyCheap(E.EFFECTS)
+  assert.ok(cheap.length > 0)
+  for (const fx of E.FIELD_EFFECTS) assert.ok(!cheap.includes(fx), fx + " survived")
+  // a pinned list is filtered the same way, and never becomes empty
+  assert.deepEqual(E.onlyCheap(["reveal", "storm"]), ["reveal"])
+  assert.deepEqual(E.onlyCheap(["storm", "cascade"]), ["reveal"])
+  assert.ok(E.onlyCheap([]).length > 0)
 })

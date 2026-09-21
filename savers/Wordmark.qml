@@ -42,7 +42,11 @@ Item {
   // is a screensaver, so the next one starts `holdSec` after the last one
   // lands rather than on a fixed clock — 0 means the art never sits still.
   // Each run lands in a slightly new spot, which is the burn-in drift too.
-  readonly property var effectList: settings && Array.isArray(settings.effects) && settings.effects.length ? settings.effects : E.EFFECTS
+  readonly property bool onBattery: service && service.onBattery === true
+  readonly property var chosenEffects: settings && Array.isArray(settings.effects) && settings.effects.length ? settings.effects : E.EFFECTS
+  // Unplugged, the whole-canvas ones stand down: a screensaver that costs a
+  // third of a core is not what you want running off a battery.
+  readonly property var effectList: onBattery ? E.onlyCheap(chosenEffects) : chosenEffects
   readonly property string effectSetting: settings && settings.effect ? String(settings.effect) : "cycle"
   readonly property int holdSec: settings && settings.holdSec !== undefined && Number(settings.holdSec) >= 0 ? Number(settings.holdSec) : 4
   readonly property bool cycling: active && !thumbnail && effectSetting === "cycle"

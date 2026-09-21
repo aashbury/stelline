@@ -95,7 +95,7 @@ that does not parse, and the toggle removes exactly those lines again.
 | | |
 |---|---|
 | **Original** | Omarchy's own screensaver, exactly as it ships and the default: `ttfx` in your terminal, cycling through its 37 effects at random. Choose a subset in ⚙ — with a choice, Stelline starts the terminal itself running a copy of Omarchy's loop with `--include-effects`; without, it runs the stock launcher untouched. Its ⚙ also has the same three artwork edits as *Style › Screensaver* (a picture, the text, back to the logo). |
-| **Wordmark** | A word you type — **Text** in its ⚙, `stelline` to begin with — drawn by Stelline instead of `ttfx`: whole-pixel cells in the theme's foreground colour, with one of **eighteen animations of Stelline's own** every few seconds — `decrypt`, `rain`, `beams`, `scatter`, `wipe`, `typewriter`, `reveal`, `pulse`, and six that assemble the art rather than fade it in: `scanline` (a bright bar sweeps down), `grid` (a lattice snaps in, then fills), `shockwave` (an expanding ring), `slit` (opens from one column and widens), `glitch` (bands tear sideways and lock back), `dust` (particles drift in and converge), `spotlight` (a beam crosses and leaves the letters lit behind it), `cascade` (columns fall and each drops a letter as its head goes by), `derez` (diagonal shards slide in from alternating sides), `collapse` (spun in from far out and tightened onto the letterform). They are not Omarchy's 37 — those run only inside `ttfx`, so only the Original has them. What you get instead is the cost: almost nothing, against several cores. Clear the field and it shows Omarchy's shared artwork instead, the same file the Original plays. |
+| **Wordmark** | A word you type — **Text** in its ⚙, `stelline` to begin with — drawn by Stelline instead of `ttfx`: whole-pixel cells in the theme's foreground colour, with one of **eighteen animations of Stelline's own** every few seconds — `decrypt`, `rain`, `beams`, `scatter`, `wipe`, `typewriter`, `reveal`, `pulse`, and six that assemble the art rather than fade it in: `scanline` (a bright bar sweeps down), `grid` (a lattice snaps in, then fills), `shockwave` (an expanding ring), `slit` (opens from one column and widens), `glitch` (bands tear sideways and lock back), `dust` (particles drift in and converge), `spotlight` (a beam crosses and leaves the letters lit behind it), `cascade` (columns fall and each drops a letter as its head goes by), `derez` (diagonal shards slide in from alternating sides), `collapse` (spun in from far out and tightened onto the letterform), `storm` (rain in the dark, the sky going off behind it). Five of them animate the **whole canvas** rather than the letters alone — a beam crossing the dark, rain falling past the word, a ring expanding through the emptiness — the way Omarchy's own effects use the whole terminal. They are not Omarchy's 37 — those run only inside `ttfx`, so only the Original has them. What you get instead is the cost: almost nothing, against several cores. Clear the field and it shows Omarchy's shared artwork instead, the same file the Original plays. |
 | **Clock** | Seven-segment digits built from block characters, the colon blinking in the accent, the date in small wide-tracked capitals beneath. Repaints only when the text changes. |
 | **Blank** | Black. Exists so a battery rule has somewhere free to point. |
 
@@ -112,10 +112,18 @@ brightness per cell, and the renderer lays out one text layer per level — a
 bright core, the body, and a falloff — which is what makes a sweep read as a
 beam. Layers with nothing in them are never laid out.
 
-A full cycle costs about a fifth of one core while it is on screen and nothing
-when it is not. Omarchy's own screensaver costs several whole cores; if you
-want less than a fifth, raise **Rest between**, or give a battery rule the
-**Blank** saver.
+An effect may draw outside the word: the frame carries a margin all round and
+coordinates stay in the word's own frame of reference, so `spotlight` sweeps
+its beam across empty space and `cascade` rains past the letters rather than
+only on them. Each brightness is emitted at its own left edge and shifted back
+by the renderer, so a narrow beam lays out narrow text.
+
+A full cycle costs about a third of one core while it is on screen and nothing
+when it is not — full-canvas animation is most of that. Omarchy's own
+screensaver costs several whole cores. **On battery the whole-canvas effects
+stand down** on their own, the way a series halves its frame rate; if you want
+less still, the **Calm** mood has none of them, **Rest between** trades motion
+for quiet, and a battery rule can point at **Blank**.
 
 Colours are the theme's, never invented: settled art in the foreground colour,
 the glyphs still in flight in the accent, and `pulse` breathing between the

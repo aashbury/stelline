@@ -9,7 +9,7 @@
 
 var EFFECTS = ["decrypt", "rain", "beams", "scatter", "wipe", "typewriter", "reveal", "pulse",
                "scanline", "grid", "shockwave", "slit", "glitch", "dust",
-               "spotlight", "cascade", "derez", "collapse"]
+               "spotlight", "cascade", "derez", "collapse", "storm"]
 
 // How a piece leaves. An arrival on its own is a poster; a screensaver wants
 // the art to go again, so every cycle is arrive, live, depart. Departures are
@@ -21,6 +21,18 @@ var EXITS = ["fall", "shear", "implode", "dissolve", "sweepout"]
 // screen is never a still picture.
 var AMBIENTS = ["scan", "interference", "flicker"]
 
+// The ones that animate the whole canvas rather than the letters alone. They
+// are the point of the thing and also most of its cost, so on battery they
+// step aside — the same bargain Series already makes with its frame rate.
+var FIELD_EFFECTS = ["spotlight", "cascade", "shockwave", "beams", "storm"]
+
+function onlyCheap(list) {
+  var pool = (Array.isArray(list) && list.length ? list : EFFECTS).filter(function(e) {
+    return FIELD_EFFECTS.indexOf(e) === -1
+  })
+  return pool.length ? pool : ["reveal"]
+}
+
 // Nobody wants to audit fourteen names to set a mood. Each of these is a set
 // the panel can offer as one chip; picking one writes the same `effects`
 // array the individual chips do, so there is no second setting to keep in
@@ -28,7 +40,7 @@ var AMBIENTS = ["scan", "interference", "flicker"]
 var MOODS = {
   calm:    ["reveal", "wipe", "typewriter", "slit", "pulse"],
   neon:    ["decrypt", "rain", "scanline", "glitch", "grid", "cascade"],
-  kinetic: ["beams", "scatter", "shockwave", "dust", "spotlight", "derez", "collapse"]
+  kinetic: ["beams", "scatter", "shockwave", "dust", "spotlight", "derez", "collapse", "storm"]
 }
 var CIPHER = "!@#$%&*+=?<>/\\|01アイウエオカキクケコサシスセソタチツテトナニヌネノ"
 
@@ -64,7 +76,7 @@ function plan(effect, lines, seed) {
   for (var i = 0; i < rows; i++) cols = Math.max(cols, lines[i].length)
   var list = cells(lines)
   var random = rng(seed)
-  var p = { effect: effect, rows: rows, cols: cols, cells: list, duration: 3500, random: random }
+  var p = { effect: effect, rows: rows, cols: cols, cells: list, duration: 3500, random: random, padR: 0, padC: 0, clearsField: false }
   var n = list.length
   var k
   switch (effect) {
@@ -84,6 +96,7 @@ function plan(effect, lines, seed) {
   case "beams":
     p.duration = 3200
     p.sweep = 500
+    p.padC = Math.max(6, Math.round(cols * 0.1))
     p.rowStart = []
     var order = []
     for (k = 0; k < rows; k++) order.push(k)
@@ -94,10 +107,12 @@ function plan(effect, lines, seed) {
   case "scatter":
     p.duration = 3200
     p.travel = 1200
+    p.padR = Math.max(2, Math.round(rows * 0.5))
+    p.padC = Math.max(6, Math.round(cols * 0.08))
     for (k = 0; k < n; k++) {
       var s = list[k]
-      s.r0 = Math.floor(random() * rows)
-      s.c0 = Math.floor(random() * cols)
+      s.r0 = Math.floor(-p.padR + random() * (rows + p.padR * 2))
+      s.c0 = Math.floor(-p.padC + random() * (cols + p.padC * 2))
       s.start = random() * 1800
       s.at = s.start + p.travel
     }
@@ -141,7 +156,10 @@ function plan(effect, lines, seed) {
     p.duration = 3000
     p.centreRow = (rows - 1) / 2
     p.centreCol = (cols - 1) / 2
-    p.reach = Math.max(1, Math.sqrt(Math.pow(rows * 2, 2) + Math.pow(cols, 2)) / 2)
+    p.fps = 12
+    p.padR = Math.max(3, Math.round(rows * 0.7))
+    p.padC = Math.max(6, Math.round(cols * 0.08))
+    p.reach = Math.max(1, Math.sqrt(Math.pow((rows + p.padR * 2) * 2, 2) + Math.pow(cols + p.padC * 2, 2)) / 2)
     for (k = 0; k < n; k++) {
       var scell = list[k]
       var sdr = (scell.r - p.centreRow) * 2
@@ -195,6 +213,8 @@ function plan(effect, lines, seed) {
     // Particles drift in from off-frame and converge.
     p.duration = 3400
     p.travel = 1700
+    p.padR = Math.max(3, rows)
+    p.padC = Math.max(8, Math.round(cols * 0.12))
     for (k = 0; k < n; k++) {
       var dcell = list[k]
       var angle = random() * Math.PI * 2
@@ -209,6 +229,10 @@ function plan(effect, lines, seed) {
     // A beam crosses the art and leaves the letters lit behind it.
     p.duration = 3400
     p.beam = 620
+    p.padR = Math.max(3, Math.round(rows * 0.8))
+    p.padC = Math.max(4, Math.round(cols * 0.06))
+    p.beamWidth = Math.max(5, Math.round(cols * 0.09))
+    p.fps = 12
     for (k = 0; k < n; k++) {
       var pcell = list[k]
       pcell.at = 400 + (pcell.c / Math.max(1, cols)) * 2500 + (pcell.r / Math.max(1, rows)) * 220
@@ -218,8 +242,13 @@ function plan(effect, lines, seed) {
     // Columns fall; each one drops a letter into place as its head goes by.
     p.duration = 4000
     p.fall = 105
+    p.tail = 5
+    p.fps = 12
+    p.padR = Math.max(3, Math.round(rows * 0.8))
+    p.padC = Math.max(4, Math.round(cols * 0.06))
+    p.clearsField = true
     p.colStart = []
-    for (k = 0; k < cols; k++) p.colStart.push(random() * 2000)
+    for (k = 0; k < cols + p.padC * 2; k++) p.colStart.push(random() * 2000)
     for (k = 0; k < n; k++) {
       var ccell = list[k]
       ccell.at = p.colStart[ccell.c] + (ccell.r + 1) * p.fall
@@ -229,6 +258,7 @@ function plan(effect, lines, seed) {
     // The art arrives as diagonal shards sliding in from alternating sides.
     p.duration = 3300
     p.slide = 760
+    p.padC = Math.max(8, Math.round(cols * 0.14))
     for (k = 0; k < n; k++) {
       var rcell = list[k]
       rcell.band = Math.floor((rcell.c + rcell.r * 2) / 9)
@@ -240,6 +270,8 @@ function plan(effect, lines, seed) {
     // Spun in from far out, tightening onto the letterform.
     p.duration = 3600
     p.travel = 2000
+    p.padR = Math.max(3, rows)
+    p.padC = Math.max(8, Math.round(cols * 0.12))
     p.centreRow = (rows - 1) / 2
     p.centreCol = (cols - 1) / 2
     for (k = 0; k < n; k++) {
@@ -249,6 +281,21 @@ function plan(effect, lines, seed) {
       ocell.ang = Math.atan2(odr, odc)
       ocell.start = random() * 1100
       ocell.at = ocell.start + p.travel
+    }
+    break
+  case "storm":
+    // Rain in the dark, the sky going off behind it, the word arriving with
+    // the light.
+    p.duration = 4200
+    p.padR = Math.max(3, rows)
+    p.padC = Math.max(4, Math.round(cols * 0.06))
+    p.clearsField = true
+    p.fps = 12
+    p.flashes = [700, 1500, 2100, 3000, 3600]
+    for (k = 0; k < n; k++) {
+      var ncell = list[k]
+      // each letter lands on one of the flashes
+      ncell.at = p.flashes[Math.floor(random() * p.flashes.length)] + random() * 90
     }
     break
   default:
@@ -269,7 +316,8 @@ function planExit(style, lines, seed) {
   for (var i = 0; i < rows; i++) cols = Math.max(cols, lines[i].length)
   var list = cells(lines)
   var random = rng(seed)
-  var p = { effect: style, exit: true, rows: rows, cols: cols, cells: list, duration: 2400, random: random }
+  var p = { effect: style, exit: true, rows: rows, cols: cols, cells: list, duration: 2400, random: random,
+            padR: Math.max(6, rows), padC: Math.max(8, Math.round(cols * 0.14)) }
   var n = list.length
   var k, cell
   switch (style) {
@@ -344,18 +392,30 @@ function planAmbient(style, lines, seed) {
   var cols = 0
   for (var i = 0; i < rows; i++) cols = Math.max(cols, lines[i].length)
   var list = cells(lines)
-  return { effect: AMBIENTS.indexOf(style) === -1 ? "scan" : style, ambient: true, rows: rows, cols: cols, cells: list, random: rng(seed) }
+  return { effect: AMBIENTS.indexOf(style) === -1 ? "scan" : style, ambient: true, rows: rows, cols: cols, cells: list,
+           random: rng(seed), padR: Math.max(2, Math.round(rows * 0.6)), padC: Math.max(4, Math.round(cols * 0.05)) }
 }
 
 // `t` here is time since the art settled, and it never ends.
 function ambientFrame(p, t) {
-  var g = blankFrame(p.rows, p.cols)
+  var g = blankFrame(p.rows, p.cols, p.padR, p.padC)
   var list = p.cells
   var k, cell
   if (p.effect === "scan") {
     // A bright band rolls down over the letters, lighting what it crosses.
     var period = 3800 + p.rows * 40
-    var head = ((t % period) / period) * (p.rows + 6) - 3
+    var span = p.rows + p.padR * 2
+    var head = ((t % period) / period) * (span + 4) - p.padR - 2
+    // the line itself, all the way across
+    for (var lr = Math.floor(head - 1); lr <= Math.ceil(head + 1); lr++) {
+      var ld = Math.abs(lr - head)
+      if (ld > 1.1) continue
+      for (var lc = -p.padC; lc < p.cols + p.padC; lc++) {
+        if (noise(lc, lr) > 0.5) continue
+        put(g, lr, lc, ld < 0.5 ? "─" : "·", DIM)
+      }
+    }
+    // and the letters it is crossing, lit
     for (k = 0; k < list.length; k++) {
       cell = list[k]
       var d = Math.abs(cell.r - head)
@@ -387,7 +447,7 @@ function ambientFrame(p, t) {
       }
     }
   }
-  return { overlay: layerOf(g, MID), hot: layerOf(g, HOT), dim: layerOf(g, DIM) }
+  return layersOf(g)
 }
 
 // A frame is characters plus a brightness for each: 2 is the core of a beam,
@@ -396,35 +456,313 @@ function ambientFrame(p, t) {
 // row of characters. A layer with nothing in it is never laid out.
 var DIM = 0, MID = 1, HOT = 2
 
-function blankFrame(rows, cols) {
-  var chars = [], heat = []
-  for (var r = 0; r < rows; r++) {
-    chars.push(new Array(cols).fill(" "))
-    heat.push(new Array(cols).fill(MID))
+// The frame is bigger than the word. Omarchy's own screensaver animates the
+// whole terminal — beams cross empty space, rain falls past the letters — and
+// an effect confined to the letterform's own cells can never do that. So the
+// buffer carries a margin all round, coordinates stay in the art's own frame
+// of reference, and anything may draw outside it: `put(g, -2, 40, "░")` is two
+// rows above the word. The renderer shifts the overlay back by the margin.
+function blankFrame(rows, cols, padR, padC) {
+  var pr = padR || 0, pc = padC || 0
+  var height = rows + pr * 2, width = cols + pc * 2
+  var chars = [], heat = [], lo = [], hi = []
+  for (var r = 0; r < height; r++) {
+    chars.push(new Array(width).fill(" "))
+    heat.push(new Array(width).fill(MID))
+    // What each row actually touched, so reading the frame back never walks
+    // the whole canvas — a beam is fourteen columns of ninety.
+    lo.push(width)
+    hi.push(-1)
   }
-  return { chars: chars, heat: heat, used: [0, 0, 0] }
+  return { chars: chars, heat: heat, lo: lo, hi: hi, used: [0, 0, 0], padR: pr, padC: pc }
 }
 
 function put(g, r, c, ch, level) {
-  if (r < 0 || c < 0 || r >= g.chars.length || c >= g.chars[r].length) return
+  var rr = r + g.padR, cc = c + g.padC
+  if (rr < 0 || cc < 0 || rr >= g.chars.length || cc >= g.chars[rr].length) return
   var lv = level === undefined ? MID : level
-  g.chars[r][c] = ch
-  g.heat[r][c] = lv
+  g.chars[rr][cc] = ch
+  g.heat[rr][cc] = lv
   g.used[lv]++
+  if (cc < g.lo[rr]) g.lo[rr] = cc
+  if (cc > g.hi[rr]) g.hi[rr] = cc
 }
 
-// One string per brightness, trailing blanks trimmed so the text layout stays
-// as small as the effect actually is.
-function layerOf(g, want) {
-  if (g.used[want] === 0) return ""
-  var out = []
-  for (var r = 0; r < g.chars.length; r++) {
-    var row = g.chars[r], heat = g.heat[r], line = ""
-    for (var c = 0; c < row.length; c++) line += (row[c] !== " " && heat[c] === want) ? row[c] : " "
-    out.push(line.replace(/\s+$/, ""))
+// A settled letter must not be papered over by whatever is falling past it.
+function clear(g, r, c) {
+  var rr = r + g.padR, cc = c + g.padC
+  if (rr < 0 || cc < 0 || rr >= g.chars.length || cc >= g.chars[rr].length) return
+  g.chars[rr][cc] = " "
+}
+
+// A deterministic value in [0,1) for a place and a moment — field glyphs need
+// randomness that does not change every time a frame is asked for.
+function noise(a, b) {
+  var h = Math.imul(a * 73856093 ^ b * 19349663, 2654435761) >>> 0
+  return (h % 100000) / 100000
+}
+
+// What an effect draws in the empty space. Called before the letters, so the
+// word always reads on top of its own weather.
+function drawField(p, t, g) {
+  // Once the arrival is over the letters are on the canvas and the screen
+  // belongs to them: no weather may outlive its own effect.
+  if (t >= p.duration) return
+  var c, r, k
+  switch (p.effect) {
+  case "spotlight":
+    // A searchlight: the beam is a column of haze crossing the dark, and the
+    // letters it has passed stay lit behind it.
+    // Enters from off the left and leaves off the right within the effect.
+    var beamSpan = p.cols + p.padC * 2 + p.beamWidth * 2
+    var beamCol = -p.padC - p.beamWidth + (t / p.duration) * beamSpan
+    for (c = -p.padC; c < p.cols + p.padC; c++) {
+      var bd = Math.abs(c - beamCol)
+      if (bd > p.beamWidth) continue
+      var lv = bd < p.beamWidth * 0.22 ? HOT : (bd < p.beamWidth * 0.55 ? MID : DIM)
+      for (r = -p.padR; r < p.rows + p.padR; r++) {
+        if (noise(c * 7 + r, Math.floor(t / 110)) > 0.42) continue
+        put(g, r, c, bd < p.beamWidth * 0.22 ? "▓" : (bd < p.beamWidth * 0.55 ? "▒" : "░"), lv)
+      }
+    }
+    break
+  case "cascade":
+    // Rain over the whole canvas, not only over the word.
+    for (c = -p.padC; c < p.cols + p.padC; c++) {
+      var head = (t - p.colStart[c + p.padC]) / p.fall - p.padR - 1
+      if (head < -p.padR) continue
+      for (k = 0; k < p.tail; k++) {
+        r = Math.round(head - k)
+        if (r < -p.padR || r >= p.rows + p.padR) continue
+        put(g, r, c, CIPHER.charAt(Math.floor(noise(c, r + Math.floor(t / 70)) * CIPHER.length)),
+            k === 0 ? HOT : (k < 3 ? MID : DIM))
+      }
+    }
+    break
+  case "shockwave":
+    // The ring is visible crossing the emptiness, which is the whole point of
+    // a shockwave.
+    var reach = (t - 200) / 2400 * p.reach
+    if (reach <= 0) break
+    for (r = -p.padR; r < p.rows + p.padR; r++) {
+      for (c = -p.padC; c < p.cols + p.padC; c++) {
+        var dr = (r - p.centreRow) * 2, dc = c - p.centreCol
+        var dist = Math.sqrt(dr * dr + dc * dc)
+        var off = Math.abs(dist - reach)
+        if (off > 2.2) continue
+        if (noise(c, r) > 0.62) continue
+        put(g, r, c, off < 0.8 ? "▓" : "░", off < 0.8 ? MID : DIM)
+      }
+    }
+    break
+  case "beams":
+    // Each beam crosses the full width, not just the letters in its row.
+    for (r = 0; r < p.rows; r++) {
+      var rs = p.rowStart[r]
+      if (t < rs || t >= rs + p.sweep) continue
+      var bhead = -p.padC + ((t - rs) / p.sweep) * (p.cols + p.padC * 2)
+      for (k = 0; k < 6; k++) {
+        c = Math.round(bhead - k)
+        put(g, r, c, k === 0 ? "█" : (k < 2 ? "▓" : (k < 4 ? "▒" : "░")), k === 0 ? HOT : (k < 3 ? MID : DIM))
+      }
+    }
+    break
+  case "storm":
+    // Rain in the dark with the sky going off behind it.
+    var flash = p.flashes
+    var lit = false
+    for (k = 0; k < flash.length; k++) if (t >= flash[k] && t < flash[k] + 140) lit = true
+    for (c = -p.padC; c < p.cols + p.padC; c += 2) {
+      var sh = ((t / 2.2) + noise(c, 1) * 900) % ((p.rows + p.padR * 2) * 14)
+      r = Math.round(-p.padR + sh / 14)
+      if (r >= -p.padR && r < p.rows + p.padR) put(g, r, c, "╲", DIM)
+      if (r + 1 >= -p.padR && r + 1 < p.rows + p.padR) put(g, r + 1, c + 1, "╲", DIM)
+    }
+    if (lit) {
+      for (r = -p.padR; r < p.rows + p.padR; r += 2) {
+        for (c = -p.padC; c < p.cols + p.padC; c += 3) {
+          if (noise(c, r + Math.floor(t / 40)) > 0.5) continue
+          put(g, r, c, "░", DIM)
+        }
+      }
+    }
+    break
   }
-  while (out.length && out[out.length - 1] === "") out.pop()
-  return out.join("\n")
+}
+
+// All three brightnesses in one walk over only the cells that were touched.
+// Trailing blanks are trimmed so each text layout stays as small as the
+// effect actually is, and an empty level costs nothing at all.
+function layersOf(g) {
+  // Each level is emitted at its own left edge rather than padded out from
+  // column zero, and the renderer shifts it back. A beam is fourteen columns
+  // of text instead of ninety, which is what the frame actually costs — the
+  // layout, not the arithmetic.
+  var loAt = [Infinity, Infinity, Infinity]
+  var hiAt = [-1, -1, -1]
+  var lastRow = [-1, -1, -1]
+  var r, c, lv
+  for (r = 0; r < g.chars.length; r++) {
+    var from = g.lo[r], to = g.hi[r]
+    if (to < from) continue
+    var row = g.chars[r], heat = g.heat[r]
+    for (c = from; c <= to; c++) {
+      if (row[c] === " ") continue
+      lv = heat[c]
+      if (c < loAt[lv]) loAt[lv] = c
+      if (c > hiAt[lv]) hiAt[lv] = c
+      lastRow[lv] = r
+    }
+  }
+  var out = { dim: "", overlay: "", hot: "", offset: [0, 0, 0] }
+  var names = ["dim", "overlay", "hot"]
+  for (lv = 0; lv < 3; lv++) {
+    if (hiAt[lv] < 0) continue
+    var left = loAt[lv]
+    out.offset[lv] = left - g.padC
+    var lines = []
+    for (r = 0; r <= lastRow[lv]; r++) {
+      var f = g.lo[r], t2 = g.hi[r]
+      if (t2 < f) { lines.push(""); continue }
+      var chars = g.chars[r], hot = g.heat[r], line = ""
+      for (c = left; c <= hiAt[lv]; c++) {
+        var ch = (c >= f && c <= t2 && chars[c] !== " " && hot[c] === lv) ? chars[c] : " "
+        line += ch
+      }
+      lines.push(line.replace(/\s+$/, ""))
+    }
+    while (lines.length && lines[lines.length - 1] === "") lines.pop()
+    out[names[lv]] = lines.join("\n")
+  }
+  return out
+}
+
+function drawField(p, t, g) {
+  // Once the arrival is over the letters are on the canvas and the screen
+  // belongs to them: no weather may outlive its own effect.
+  if (t >= p.duration) return
+  var c, r, k
+  switch (p.effect) {
+  case "spotlight":
+    // A searchlight: the beam is a column of haze crossing the dark, and the
+    // letters it has passed stay lit behind it.
+    // Enters from off the left and leaves off the right within the effect.
+    var beamSpan = p.cols + p.padC * 2 + p.beamWidth * 2
+    var beamCol = -p.padC - p.beamWidth + (t / p.duration) * beamSpan
+    for (c = -p.padC; c < p.cols + p.padC; c++) {
+      var bd = Math.abs(c - beamCol)
+      if (bd > p.beamWidth) continue
+      var lv = bd < p.beamWidth * 0.22 ? HOT : (bd < p.beamWidth * 0.55 ? MID : DIM)
+      for (r = -p.padR; r < p.rows + p.padR; r++) {
+        if (noise(c * 7 + r, Math.floor(t / 110)) > 0.42) continue
+        put(g, r, c, bd < p.beamWidth * 0.22 ? "▓" : (bd < p.beamWidth * 0.55 ? "▒" : "░"), lv)
+      }
+    }
+    break
+  case "cascade":
+    // Rain over the whole canvas, not only over the word.
+    for (c = -p.padC; c < p.cols + p.padC; c++) {
+      var head = (t - p.colStart[c + p.padC]) / p.fall - p.padR - 1
+      if (head < -p.padR) continue
+      for (k = 0; k < p.tail; k++) {
+        r = Math.round(head - k)
+        if (r < -p.padR || r >= p.rows + p.padR) continue
+        put(g, r, c, CIPHER.charAt(Math.floor(noise(c, r + Math.floor(t / 70)) * CIPHER.length)),
+            k === 0 ? HOT : (k < 3 ? MID : DIM))
+      }
+    }
+    break
+  case "shockwave":
+    // The ring is visible crossing the emptiness, which is the whole point of
+    // a shockwave.
+    var reach = (t - 200) / 2400 * p.reach
+    if (reach <= 0) break
+    for (r = -p.padR; r < p.rows + p.padR; r++) {
+      for (c = -p.padC; c < p.cols + p.padC; c++) {
+        var dr = (r - p.centreRow) * 2, dc = c - p.centreCol
+        var dist = Math.sqrt(dr * dr + dc * dc)
+        var off = Math.abs(dist - reach)
+        if (off > 2.2) continue
+        if (noise(c, r) > 0.62) continue
+        put(g, r, c, off < 0.8 ? "▓" : "░", off < 0.8 ? MID : DIM)
+      }
+    }
+    break
+  case "beams":
+    // Each beam crosses the full width, not just the letters in its row.
+    for (r = 0; r < p.rows; r++) {
+      var rs = p.rowStart[r]
+      if (t < rs || t >= rs + p.sweep) continue
+      var bhead = -p.padC + ((t - rs) / p.sweep) * (p.cols + p.padC * 2)
+      for (k = 0; k < 6; k++) {
+        c = Math.round(bhead - k)
+        put(g, r, c, k === 0 ? "█" : (k < 2 ? "▓" : (k < 4 ? "▒" : "░")), k === 0 ? HOT : (k < 3 ? MID : DIM))
+      }
+    }
+    break
+  case "storm":
+    // Rain in the dark with the sky going off behind it.
+    var flash = p.flashes
+    var lit = false
+    for (k = 0; k < flash.length; k++) if (t >= flash[k] && t < flash[k] + 140) lit = true
+    for (c = -p.padC; c < p.cols + p.padC; c += 2) {
+      var sh = ((t / 2.2) + noise(c, 1) * 900) % ((p.rows + p.padR * 2) * 14)
+      r = Math.round(-p.padR + sh / 14)
+      if (r >= -p.padR && r < p.rows + p.padR) put(g, r, c, "╲", DIM)
+      if (r + 1 >= -p.padR && r + 1 < p.rows + p.padR) put(g, r + 1, c + 1, "╲", DIM)
+    }
+    if (lit) {
+      for (r = -p.padR; r < p.rows + p.padR; r += 2) {
+        for (c = -p.padC; c < p.cols + p.padC; c += 3) {
+          if (noise(c, r + Math.floor(t / 40)) > 0.5) continue
+          put(g, r, c, "░", DIM)
+        }
+      }
+    }
+    break
+  }
+}
+
+// All three brightnesses in one walk over only the cells that were touched.
+// Trailing blanks are trimmed so each text layout stays as small as the
+// effect actually is, and an empty level costs nothing at all.
+var SPACES = "                                                                "
+function pad(n) {
+  var out = ""
+  while (out.length < n) out += SPACES.substring(0, Math.min(SPACES.length, n - out.length))
+  return out
+}
+
+function layersOf(g) {
+  var want = [g.used[DIM] > 0, g.used[MID] > 0, g.used[HOT] > 0]
+  var rows = [[], [], []]
+  var last = [-1, -1, -1]
+  for (var r = 0; r < g.chars.length; r++) {
+    var from = g.lo[r], to = g.hi[r]
+    if (to < from) { rows[0].push(""); rows[1].push(""); rows[2].push(""); continue }
+    var row = g.chars[r], heat = g.heat[r]
+    var line = ["", "", ""]
+    var seen = [false, false, false]
+    var head = pad(from)
+    for (var lv = 0; lv < 3; lv++) if (want[lv]) line[lv] = head
+    for (var c = from; c <= to; c++) {
+      var ch = row[c]
+      var at = heat[c]
+      for (var q = 0; q < 3; q++) {
+        if (!want[q]) continue
+        if (ch !== " " && at === q) { line[q] += ch; seen[q] = true }
+        else line[q] += " "
+      }
+    }
+    for (var m = 0; m < 3; m++) {
+      if (!want[m]) { rows[m].push(""); continue }
+      rows[m].push(seen[m] ? line[m] : "")
+      if (seen[m]) last[m] = r
+    }
+  }
+  var out = ["", "", ""]
+  for (var k = 0; k < 3; k++) out[k] = want[k] && last[k] >= 0 ? rows[k].slice(0, last[k] + 1).join("\n") : ""
+  return { dim: out[DIM], overlay: out[MID], hot: out[HOT] }
 }
 
 // frame(plan, t) → { resolved: [cell, ...] newly in place since the last
@@ -432,14 +770,17 @@ function layerOf(g, want) {
 function frame(p, t) {
   if (p && p.exit) return exitFrame(p, t)
   var resolved = []
-  var g = blankFrame(p.rows, p.cols)
+  var g = blankFrame(p.rows, p.cols, p.padR, p.padC)
   var list = p.cells
   var random = p.random
   var cursor = p.effect === "typewriter" ? firstPending(p, t) : -1
+  drawField(p, t, g)
   for (var k = 0; k < list.length; k++) {
     var cell = list[k]
     if (cell.at <= t) {
       if (!cell.done) { cell.done = true; resolved.push(cell) }
+      // The letter is on the canvas now; keep the weather off it.
+      if (p.clearsField) clear(g, cell.r, cell.c)
       continue
     }
     switch (p.effect) {
@@ -523,6 +864,9 @@ function frame(p, t) {
       var dg = Math.max(0, Math.min(1, (cell.at - t) / p.slide))
       put(g, cell.r, cell.c + Math.round(cell.dir * dg * p.cols * 0.55), cell.ch, dg > 0.55 ? DIM : (dg > 0.2 ? MID : HOT))
       break
+    case "storm":
+      if (noise(cell.c, cell.r + Math.floor(t / 120)) < 0.12) put(g, cell.r, cell.c, cell.ch, DIM)
+      break
     case "collapse":
       if (t >= cell.start) {
         var ce = Math.max(0, Math.min(1, (t - cell.start) / p.travel))
@@ -535,15 +879,16 @@ function frame(p, t) {
       break
     }
   }
-  return { resolved: resolved, overlay: layerOf(g, MID), hot: layerOf(g, HOT), dim: layerOf(g, DIM), done: t >= p.duration }
+  var out = layersOf(g)
+  return { resolved: resolved, overlay: out.overlay, hot: out.hot, dim: out.dim, offset: out.offset, done: t >= p.duration }
 }
 
 // A departure draws every cell that has not gone yet, so the canvas is
 // cleared first and the whole piece lives in the overlay for these two seconds.
 function exitFrame(p, t) {
-  // Room below the art so a fall has somewhere to fall to; trailing blank
-  // rows are trimmed off again, so the padding costs nothing when unused.
-  var g = blankFrame(p.rows + 10, p.cols)
+  // Room all round so a fall has somewhere to fall to and a shear has
+  // somewhere to go; trailing blank rows are trimmed off again.
+  var g = blankFrame(p.rows, p.cols, p.padR, p.padC)
   var list = p.cells
   var random = p.random
   for (var k = 0; k < list.length; k++) {
@@ -576,7 +921,8 @@ function exitFrame(p, t) {
       put(g, cell.r + Math.round(fe * fe * (p.rows + 5)), cell.c, cell.ch, fe < 0.35 ? MID : DIM)
     }
   }
-  return { resolved: [], overlay: layerOf(g, MID), hot: layerOf(g, HOT), dim: layerOf(g, DIM), done: t >= p.duration }
+  var ex = layersOf(g)
+  return { resolved: [], overlay: ex.overlay, hot: ex.hot, dim: ex.dim, offset: ex.offset, done: t >= p.duration }
 }
 
 // The cursor sits on the first cell still to come at time t.
@@ -593,5 +939,5 @@ function pick(list, random) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { EFFECTS: EFFECTS, EXITS: EXITS, AMBIENTS: AMBIENTS, MOODS: MOODS, planExit: planExit, planAmbient: planAmbient, ambientFrame: ambientFrame, CIPHER: CIPHER, cells: cells, rng: rng, plan: plan, frame: frame, pick: pick }
+  module.exports = { EFFECTS: EFFECTS, FIELD_EFFECTS: FIELD_EFFECTS, onlyCheap: onlyCheap, EXITS: EXITS, AMBIENTS: AMBIENTS, MOODS: MOODS, planExit: planExit, planAmbient: planAmbient, ambientFrame: ambientFrame, CIPHER: CIPHER, cells: cells, rng: rng, plan: plan, frame: frame, pick: pick }
 }

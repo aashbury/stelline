@@ -39,6 +39,13 @@ Item {
   property var ambientPlan: null
   property double ambientAt: 0
 
+  // An effect may draw outside the word — a beam crossing the dark, rain
+  // falling past it — so the frame carries a margin and the overlay is shifted
+  // back by it to keep the letters over their own cells.
+  readonly property var livePlan: plan ? plan : ambientPlan
+  readonly property int padR: livePlan && livePlan.padR ? livePlan.padR : 0
+  readonly property int padC: livePlan && livePlan.padC ? livePlan.padC : 0
+
   property color muted: Color.muted
   readonly property bool accentShows: Math.abs(accent.r - fg.r) + Math.abs(accent.g - fg.g) + Math.abs(accent.b - fg.b) > 0.12
   readonly property color trail: accentShows ? accent : muted
@@ -56,8 +63,14 @@ Item {
   // Planned from this item's own art: when `art` changes, the painter's copy
   // of it may not have updated yet.
   function artLines() { return root.art === "" ? [] : root.art.replace(/\s+$/, "").split("\n") }
-  function clearOverlays() { root.overlay = ""; root.hotOverlay = ""; root.dimOverlay = "" }
-  function show(f) { root.overlay = f.overlay; root.hotOverlay = f.hot; root.dimOverlay = f.dim }
+  function clearOverlays() { root.overlay = ""; root.hotOverlay = ""; root.dimOverlay = ""; root.offsets = [0, 0, 0] }
+  // Each level carries its own left edge in columns, so a narrow effect lays
+  // out narrow text wherever it happens to be on screen.
+  property var offsets: [0, 0, 0]
+  function show(f) {
+    root.overlay = f.overlay; root.hotOverlay = f.hot; root.dimOverlay = f.dim
+    root.offsets = f.offset ? f.offset : [0, 0, 0]
+  }
 
   function restart() {
     root.pulseMix = 0
@@ -97,6 +110,9 @@ Item {
 
   function beginAmbient() {
     root.phase = "live"
+    // The arrival is over; keep stepping it and it re-seeds the ambient on
+    // every tick, which is a resting layer that never actually moves.
+    root.plan = null
     clearOverlays()
     var lines = artLines()
     root.ambientPlan = (root.ambientStyle === "" || lines.length === 0) ? null : E.planAmbient(root.ambientStyle, lines, Date.now() % 100000)
@@ -127,7 +143,10 @@ Item {
 
   Timer {
     // The resting art does not need the frame rate an arrival does.
-    interval: root.phase === "live" ? 110 : Math.round(1000 / Math.max(5, Math.min(30, root.fps)))
+    // An effect that covers the whole screen asks for a gentler rate than one
+    // that only touches the letters.
+    readonly property int rate: root.plan && root.plan.fps ? root.plan.fps : root.fps
+    interval: root.phase === "live" ? 110 : Math.round(1000 / Math.max(5, Math.min(30, rate)))
     repeat: true
     running: root.active && root.ticking
     onTriggered: root.step()
@@ -163,8 +182,8 @@ Item {
     Text {
       required property int index
       readonly property string body: index === 0 ? root.dimOverlay : (index === 1 ? root.overlay : root.hotOverlay)
-      x: view.artX
-      y: view.artY
+      x: view.artX + (root.offsets[index] || 0) * view.cellW
+      y: view.artY - root.padR * view.cellH
       visible: body !== ""
       textFormat: Text.PlainText
       renderType: Text.NativeRendering
