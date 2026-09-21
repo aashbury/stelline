@@ -79,9 +79,10 @@ Column {
     id: body
     visible: root.open
     width: parent.width
+    topPadding: Style.space(2)
     leftPadding: Style.space(8)
     rightPadding: Style.space(8)
-    bottomPadding: Style.space(4)
-    spacing: Style.space(8)
+    bottomPadding: Style.space(10)
+    spacing: Style.space(4)
   }
 }

@@ -312,3 +312,24 @@ test("rules: one per saver, conditions AND together, last one off removes it, la
   assert.deepEqual(patch.situations, [{ id: "t", enabled: true, when: { battery: {} }, screensaver: 60 }])
   assert.equal(patch.savers.dance, undefined)
 })
+
+test("parseClipboard sorts what was pasted into a source", () => {
+  assert.deepEqual(M.parseClipboard("file\t/a/b.png\nfile\t/a/c.jpg"), { source: "images", paths: ["/a/b.png", "/a/c.jpg"] })
+  assert.deepEqual(M.parseClipboard("dir\t/home/x/pics"), { source: "folder", paths: ["/home/x/pics"] })
+  assert.deepEqual(M.parseClipboard("file\t/a/clip.mp4"), { source: "video", paths: ["/a/clip.mp4"] })
+  // A folder wins over loose files, and a GIF stays a picture among pictures.
+  assert.deepEqual(M.parseClipboard("file\t/a/b.png\ndir\t/d"), { source: "folder", paths: ["/d"] })
+  assert.equal(M.parseClipboard(""), null)
+  assert.equal(M.parseClipboard("nonsense"), null)
+})
+
+test("the clipboard scripts are one self-contained bash script each", () => {
+  const probe = M.clipboardProbeScript()
+  assert.match(probe, /wl-paste --list-types/)
+  assert.match(probe, /echo paths/)
+  const paste = M.clipboardPasteScript("/run/user/1000/stelline-paste")
+  assert.match(paste, /rm -rf -- "\$stage"/)
+  assert.match(paste, /'\/run\/user\/1000\/stelline-paste'/)
+  // Nothing outside the staging folder is ever removed.
+  assert.equal(paste.split("rm -rf").length - 1, 1)
+})

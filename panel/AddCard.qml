@@ -26,8 +26,18 @@ BorderSurface {
   property bool animated: true
 
   readonly property bool editing: nameField.activeFocus || textField.activeFocus || promptField.activeFocus
+  readonly property string pasteable: svc ? String(svc.clipboardHas || "") : ""
 
-  onStepChanged: { style = "ascii"; animated = true; if (step === "confirm") nameField.text = draft && draft.name ? draft.name : "" }
+  // Asked each time the card comes up: what is on the clipboard now is what
+  // the button should offer. The card itself is always instantiated, so the
+  // draft appearing — not Component.onCompleted — is when it opens.
+  readonly property bool open: !!draft
+  onOpenChanged: if (open && svc) svc.refreshClipboard()
+
+  onStepChanged: {
+    style = "ascii"; animated = true
+    if (step === "confirm") nameField.text = draft && draft.name ? draft.name : ""
+  }
   Component.onCompleted: if (step === "confirm") nameField.text = draft && draft.name ? draft.name : ""
 
   function update(patch) {
@@ -92,6 +102,18 @@ BorderSurface {
       visible: root.step === "start"
       width: parent.width
       spacing: Style.space(6)
+      // Only when there is something to paste, so it never disappoints.
+      Button {
+        visible: root.pasteable !== ""
+        text: root.pasteable === "image" ? "Paste the picture" : "Paste what you copied"
+        iconText: "󰆒"
+        bordered: true
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        fontSize: Style.font.caption
+        tooltipText: "What's on your clipboard — a picture, a file, or a folder"
+        onClicked: if (root.svc) root.svc.pasteClipboard()
+      }
       Button { text: "Pictures…"; iconText: "󰋩"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: root.pick("images") }
       Button { text: "A folder of pictures…"; iconText: "󰉋"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: root.pick("folder") }
       Button { text: "A video or GIF…"; iconText: "󰕧"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: root.pick("video") }

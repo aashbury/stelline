@@ -140,10 +140,20 @@ Item {
     if (root.miniVisible && root.miniSaver === id) root.miniVisible = false
     var patch = M.forgetSaver(root.cfg, id)
     if (Object.keys(patch).length) writeSettings(patch)
-    runProcess(deleter, "delete-saver " + id, script)
+    // One at a time: runProcess skips a busy process, so deleting several in
+    // a row would drop all but the first.
+    root.deleteQueue = root.deleteQueue.concat([{ id: id, script: script }])
+    runNextDelete()
     return "ok"
   }
-  Process { id: deleter; onExited: root.rescan() }
+  property var deleteQueue: []
+  function runNextDelete() {
+    if (deleter.running || root.deleteQueue.length === 0) return
+    var job = root.deleteQueue[0]
+    root.deleteQueue = root.deleteQueue.slice(1)
+    runProcess(deleter, "delete-saver " + job.id, job.script)
+  }
+  Process { id: deleter; onExited: { root.rescan(); root.runNextDelete() } }
 
   // Per-saver rules: the tile's "plays when" conditions.
   function setRuleCondition(saverId, key, on) {
@@ -192,6 +202,53 @@ Item {
     }
   }
   function summonPanel() { Quickshell.execDetached(["omarchy-shell", "shell", "summon", root.pluginId, "{}"]) }
+
+  // The clipboard as a source. `clipboardHas` is "image" (bytes), "paths"
+  // (files or a folder) or "" — the Add card only offers Paste when there is
+  // something to paste, so the button never disappoints.
+  property string clipboardHas: ""
+  readonly property string pasteStageDir: runtimeDir + "/stelline-paste"
+  function refreshClipboard() {
+    if (clipProbe.running) return
+    clipProbe.command = ["bash", "-c", M.clipboardProbeScript()]
+    clipProbe.running = true
+  }
+  Process {
+    id: clipProbe
+    stdout: SplitParser { onRead: function(line) { var t = String(line).trim(); root.clipboardHas = (t === "image" || t === "paths") ? t : "" } }
+    onExited: function(exitCode) { if (exitCode !== 0) root.clipboardHas = "" }
+  }
+
+  property var pastedRows: []
+  function pasteClipboard() {
+    if (paster.running) return "busy"
+    if (!M.isPlainObject(root.importDraft)) { var d = M.importDefaults(); d.step = "start"; root.importDraft = d }
+    root.pastedRows = []
+    paster.command = ["bash", "-c", M.clipboardPasteScript(root.pasteStageDir)]
+    paster.running = true
+    logEvent("paste-start", "")
+    return "ok"
+  }
+  Process {
+    id: paster
+    stdout: SplitParser { onRead: function(line) { if (String(line).trim() !== "") root.pastedRows = root.pastedRows.concat([String(line)]) } }
+    onExited: function(exitCode) {
+      var found = exitCode === 0 ? M.parseClipboard(root.pastedRows.join("\n")) : null
+      root.logEvent("paste-exit", "exitCode=" + exitCode + " rows=" + root.pastedRows.length)
+      if (!found || !M.isPlainObject(root.importDraft)) { root.clipboardHas = ""; return }
+      var draft = M.cloneJson(root.importDraft)
+      draft.source = found.source
+      draft.paths = found.paths
+      if (!draft.name || draft.nameAuto !== false) {
+        // Pasted bytes land on a file called pasted.png; that is no name.
+        draft.name = found.paths[0].indexOf(root.pasteStageDir) === 0 ? "Pasted picture" : M.suggestName(draft.paths, "New saver")
+        draft.nameAuto = true
+      }
+      draft.step = "confirm"
+      root.importDraft = draft
+    }
+  }
+
 
   // The screensaver artwork (~/.config/omarchy/branding/screensaver.txt) — the
   // same file Style › Screensaver edits, shown by Wordmark and the Original.
@@ -1153,6 +1210,8 @@ Item {
     }
     function rescan(): string { root.rescan(); return "ok" }
     function pick(kind: string): string { return root.pickFiles(kind) }
+    function paste(): string { root.refreshClipboard(); return root.pasteClipboard() }
+    function clipboard(): string { root.refreshClipboard(); return root.clipboardHas }
     function setRule(saverId: string, key: string, on: string): string {
       if (M.RULE_KEYS.indexOf(key) === -1) return "unknown-condition"
       if (!M.saverById(saverId, root.userSavers)) return "unknown-saver"

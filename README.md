@@ -4,8 +4,8 @@ A native screensaver manager for [Omarchy](https://omarchy.org) 4 (Quattro).
 
 Stelline draws the screensaver inside the Omarchy shell — your branding in the
 theme's colours with the effects the stock saver is known for, a clock, digital
-rain, nothing at all, or **your own**: pictures, a folder of them, a video clip,
-some text, or a description, turned into ASCII art in your theme's colours (or
+rain, nothing at all, or **your own**: whatever you copied, pictures, a folder
+of them, a video clip, some text, or a description, turned into ASCII art in your theme's colours (or
 shown as they are). A grid of tiles, one click to choose, and a rule per tile —
 at night, on battery, with a theme — for when each one plays. Timings, a
 shuffle, and a quiet corner card that tells you what arrived while you were
@@ -64,7 +64,7 @@ Requires Omarchy 4.x. Stelline's id is `io.github.aashbury.stelline`.
 | panel | ⚙ on a tile | when it plays, how it looks, delete; for Wordmark and Original also the artwork |
 | panel | 󰅶 Stay awake | the coffee cup — top of the panel, same as Super+Ctrl+I |
 | panel | ▶ on a tile | preview it |
-| panel | the **Add** tile | a new saver from pictures, a folder, a clip, text or a description |
+| panel | the **Add** tile | a new saver from the clipboard, pictures, a folder, a clip, text or a description |
 | saver | any key, click, wheel or pointer movement | dismiss |
 | saver | `→` or `n` | next saver in the rotation |
 
@@ -104,6 +104,7 @@ The **Add** tile makes a saver from:
 
 | From | You pick | Becomes |
 |---|---|---|
+| **Paste** | nothing — it takes what you copied: a screenshot, a picture file, or a folder. Offered only when the clipboard holds one | ASCII art in theme colours, exactly as the rows below |
 | **Pictures** | one or more files (the desktop file chooser) | ASCII art in theme colours, one piece per picture, played as a slideshow with the effects above — or the pictures as they are, crossfading |
 | **A folder of pictures** | a folder | the same, and a folder shown as-is is read live: drop a picture in, it joins |
 | **A video or GIF** | one file | an ASCII animation, frame by frame (the first 20 s at 10 fps) — or the clip as it is, as an animated picture |

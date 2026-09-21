@@ -211,7 +211,7 @@ Column {
     }
 
     Text { textFormat: Text.PlainText; text: "0 keeps the usual timing"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
-    Toggle {
+    SwitchRow {
       width: parent.width - parent.leftPadding - parent.rightPadding
       label: "Don't lock at those times"
       checked: root.situation.lock === "never"

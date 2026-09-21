@@ -792,6 +792,90 @@ function agentCase() {
   return out
 }
 
+// ---- the clipboard ---------------------------------------------------------
+//
+// A picture on the clipboard is the shortest way to a screensaver: copy a
+// screenshot, or copy a file in the file manager, and paste. Two scripts share
+// one body — one answers whether there is anything to paste, so the button
+// only appears when it would work; the other lands it on disk and prints what
+// it found as `kind<TAB>path` lines, the shape the file chooser already returns.
+var CLIPBOARD_BASH = [
+  "types=$(wl-paste --list-types 2>/dev/null)",
+  "pick=$(printf '%s\\n' \"$types\" | grep -m1 -E '^image/(png|jpeg|webp|bmp|tiff|avif)$' || true)",
+  "list=''",
+  "if [[ -z $pick ]]; then",
+  "  if printf '%s\\n' \"$types\" | grep -qx 'text/uri-list'; then list=$(wl-paste --no-newline --type text/uri-list 2>/dev/null | head -n 40)",
+  "  elif printf '%s\\n' \"$types\" | grep -q '^text/plain'; then list=$(wl-paste --no-newline 2>/dev/null | head -n 4)",
+  "  fi",
+  "fi",
+  // file:// URIs, percent escapes and a leading ~ all become a real path.
+  "unesc() {",
+  "  local p=$1",
+  "  p=${p%$'\\r'}",
+  "  if [[ $p == file://* ]]; then p=${p#file://}; p=$(printf '%b' \"${p//%/\\\\x}\"); fi",
+  "  if [[ $p == '~'* ]]; then p=$HOME${p#'~'}; fi",
+  "  printf '%s' \"$p\"",
+  "}",
+  "usable() {",
+  "  local p; p=$(unesc \"$1\")",
+  "  [[ -d $p ]] && { printf 'dir\\t%s\\n' \"$p\"; return 0; }",
+  "  [[ -f $p ]] || return 1",
+  "  [[ $p == *.@(png|jpg|jpeg|webp|gif|svg|bmp|avif|mp4|mov|mkv|webm|avi|m4v) ]] || return 1",
+  "  printf 'file\\t%s\\n' \"$p\"",
+  "}"
+]
+
+function clipboardProbeScript() {
+  return ["set -u", "shopt -s extglob nocasematch"].concat(CLIPBOARD_BASH, [
+    "if [[ -n $pick ]]; then echo image; exit 0; fi",
+    "found=0",
+    "while IFS= read -r line; do [[ -n $line ]] && usable \"$line\" >/dev/null && { found=1; break; }; done <<< \"$list\"",
+    "[[ $found == 1 ]] && echo paths || echo none"
+  ]).join("\n")
+}
+
+// Pasted bytes need a file of their own; they go in a staging folder under the
+// runtime directory, wiped on each paste so they never pile up.
+function clipboardPasteScript(stageDir) {
+  return ["set -u", "shopt -s extglob nocasematch",
+    "stage=" + shellQuote(stageDir),
+    "rm -rf -- \"$stage\"; mkdir -p \"$stage\" || exit 1"].concat(CLIPBOARD_BASH, [
+    "if [[ -n $pick ]]; then",
+    "  ext=${pick#image/}; [[ $ext == jpeg ]] && ext=jpg",
+    "  out=$stage/pasted.$ext",
+    "  wl-paste --no-newline --type \"$pick\" > \"$out\" 2>/dev/null || exit 1",
+    "  [[ -s $out ]] || exit 1",
+    "  printf 'file\\t%s\\n' \"$out\"",
+    "  exit 0",
+    "fi",
+    "n=0",
+    "while IFS= read -r line; do [[ -n $line ]] && usable \"$line\" && n=$((n+1)); done <<< \"$list\"",
+    "[[ $n -gt 0 ]]"
+  ]).join("\n")
+}
+
+// `kind<TAB>path` lines back into { source, paths } for the Add card: a folder
+// is a folder, a lone clip is a clip, anything else is pictures.
+function parseClipboard(text) {
+  var rows = String(text || "").split("\n")
+  var dirs = [], files = []
+  for (var i = 0; i < rows.length; i++) {
+    var at = rows[i].indexOf("\t")
+    if (at === -1) continue
+    var kind = rows[i].substring(0, at)
+    var path = rows[i].substring(at + 1).replace(/\s+$/, "")
+    if (path === "") continue
+    if (kind === "dir") dirs.push(path)
+    else if (kind === "file") files.push(path)
+  }
+  if (dirs.length > 0) return { source: "folder", paths: [dirs[0]] }
+  if (files.length === 0) return null
+  var pictures = files.filter(isImagePath)
+  if (pictures.length === 0) return { source: "video", paths: [files[0]] }
+  if (pictures.length === 1 && isVideoPath(pictures[0])) return { source: "video", paths: pictures }
+  return { source: "images", paths: pictures }
+}
+
 // The bash that builds one saver, written by the service to a file and run
 // in the background. Everything lands under `dir`; saver.json is written
 // first with importing:true (the tile appears at once) and rewritten at the
@@ -1089,6 +1173,9 @@ if (typeof module !== "undefined") {
     AGENTS: AGENTS,
     agentName: agentName,
     aiPrompt: aiPrompt,
+    clipboardProbeScript: clipboardProbeScript,
+    clipboardPasteScript: clipboardPasteScript,
+    parseClipboard: parseClipboard,
     importScript: importScript,
     deleteScript: deleteScript,
     RULE_KEYS: RULE_KEYS,
