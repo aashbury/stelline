@@ -47,51 +47,15 @@ Column {
     width: parent.width - root.leftPadding - root.rightPadding
     spacing: Style.space(6)
 
-    Row {
-      spacing: Style.space(8)
-      Text {
-        anchors.verticalCenter: parent.verticalCenter
-        textFormat: Text.PlainText
-        text: root.pinned.length === 0
-          ? (root.saverId === "wordmark" ? "All " + E.EFFECTS.length + " of Stelline's own effects, in turn — click the ones you want" : "All the effects, in turn — click the ones you want")
-          : root.pinned.length + " of " + (root.saverId === "wordmark" ? "Stelline's " : "") + E.EFFECTS.length + " effects chosen"
-        color: root.dim
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.caption
-      }
-      Button {
-        text: "All of them"
-        bordered: true
-        visible: root.pinned.length > 0
-        foreground: root.foreground
-        fontFamily: root.fontFamily
-        fontSize: Style.font.caption
-        onClicked: root.patched({ effects: [] })
-      }
-    }
-    Flow {
+    MoodPicker {
       width: parent.width
-      spacing: Style.space(4)
-      Repeater {
-        model: E.EFFECTS
-        Button {
-          required property var modelData
-          text: modelData
-          bordered: true
-          selected: root.pinned.indexOf(modelData) !== -1
-          foreground: root.foreground
-          fontFamily: root.fontFamily
-          fontSize: Style.font.caption
-          horizontalPadding: Style.space(7)
-          verticalPadding: Style.space(3)
-          onClicked: {
-            var next = root.pinned.slice()
-            var at = next.indexOf(modelData)
-            if (at === -1) next.push(modelData); else next.splice(at, 1)
-            root.patched({ effects: next })
-          }
-        }
-      }
+      effects: E.EFFECTS
+      moods: E.MOODS
+      moodKeys: ["calm", "neon", "kinetic"]
+      pinned: root.pinned
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      onChanged: function(list) { root.patched({ effects: list }) }
     }
     SliderRow {
       width: parent.width
@@ -248,49 +212,24 @@ Column {
     visible: root.saverId === "terminal"
     width: parent.width - root.leftPadding - root.rightPadding
     spacing: Style.space(8)
-    Row {
-      spacing: Style.space(8)
-      Text {
-        anchors.verticalCenter: parent.verticalCenter
-        textFormat: Text.PlainText
-        text: root.pinned.length === 0 ? "All 37 of Omarchy's effects, at random — click the ones you want" : root.pinned.length + " of 37 effects chosen"
-        color: root.dim
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.caption
-      }
-      Button {
-        text: "All of them"
-        bordered: true
-        visible: root.pinned.length > 0
-        foreground: root.foreground
-        fontFamily: root.fontFamily
-        fontSize: Style.font.caption
-        onClicked: root.patched({ effects: [] })
-      }
-    }
-    Flow {
+    MoodPicker {
       width: parent.width
-      spacing: Style.space(4)
-      Repeater {
-        model: M.TTFX_EFFECTS
-        Button {
-          required property var modelData
-          text: modelData
-          bordered: true
-          selected: root.pinned.indexOf(modelData) !== -1
-          foreground: root.foreground
-          fontFamily: root.fontFamily
-          fontSize: Style.font.caption
-          horizontalPadding: Style.space(7)
-          verticalPadding: Style.space(3)
-          onClicked: {
-            var next = root.pinned.slice()
-            var at = next.indexOf(modelData)
-            if (at === -1) next.push(modelData); else next.splice(at, 1)
-            root.patched({ effects: next })
-          }
-        }
-      }
+      effects: M.TTFX_EFFECTS
+      moods: M.TTFX_MOODS
+      moodKeys: ["calm", "neon", "kinetic"]
+      pinned: root.pinned
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      onChanged: function(list) { root.patched({ effects: list }) }
+    }
+    Text {
+      width: parent.width
+      textFormat: Text.PlainText
+      wrapMode: Text.WordWrap
+      text: "Omarchy's own " + M.TTFX_EFFECTS.length + ", played by ttfx."
+      color: root.dim
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
     }
   }
 }

@@ -95,12 +95,19 @@ that does not parse, and the toggle removes exactly those lines again.
 | | |
 |---|---|
 | **Original** | Omarchy's own screensaver, exactly as it ships and the default: `ttfx` in your terminal, cycling through its 37 effects at random. Choose a subset in ⚙ — with a choice, Stelline starts the terminal itself running a copy of Omarchy's loop with `--include-effects`; without, it runs the stock launcher untouched. Its ⚙ also has the same three artwork edits as *Style › Screensaver* (a picture, the text, back to the logo). |
-| **Wordmark** | The same text as the Original, drawn by Stelline instead of `ttfx`: whole-pixel cells in the theme's foreground colour, with one of **eight animations of Stelline's own** every few seconds (pin some in ⚙): `decrypt`, `rain`, `beams`, `scatter`, `wipe`, `typewriter`, `reveal`, `pulse`. They are not Omarchy's 37 — those run only inside `ttfx`, so only the Original has them. What you get instead is the cost: almost nothing, against several cores. Until the branding file has been changed from the stock logo it says *Stelline*; edit the text (⚙, or *Style › Screensaver*) and both savers say what you wrote. |
+| **Wordmark** | The same text as the Original, drawn by Stelline instead of `ttfx`: whole-pixel cells in the theme's foreground colour, with one of **fourteen animations of Stelline's own** every few seconds — `decrypt`, `rain`, `beams`, `scatter`, `wipe`, `typewriter`, `reveal`, `pulse`, and six that assemble the art rather than fade it in: `scanline` (a bright bar sweeps down), `grid` (a lattice snaps in, then fills), `shockwave` (an expanding ring), `slit` (opens from one column and widens), `glitch` (bands tear sideways and lock back), `dust` (particles drift in and converge). They are not Omarchy's 37 — those run only inside `ttfx`, so only the Original has them. What you get instead is the cost: almost nothing, against several cores. Until the branding file has been changed from the stock logo it says *Stelline*; edit the text (⚙, or *Style › Screensaver*) and both savers say what you wrote. |
 | **Clock** | Seven-segment digits built from block characters, the colon blinking in the accent, the date in small wide-tracked capitals beneath. Repaints only when the text changes. |
 | **Blank** | Black. Exists so a battery rule has somewhere free to point. |
 
 Every saver drifts a few pixels every half minute. Colours follow the theme
 live; the font is the shell's monospace font.
+
+**Which animations play** is one control in a saver's ⚙, for Stelline's
+fourteen and Omarchy's thirty-seven alike: **Everything**, or a mood —
+**Calm** (quiet reveals), **Neon** (decode and CRT), **Kinetic** (motion and
+particles). A mood is just a set of effects, so *Choose individually* under it
+opens the full list and ticking your own is still there; the moods together
+are exactly the whole list, and nothing extra is stored either way.
 
 ### Your own
 

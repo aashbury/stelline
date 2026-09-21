@@ -7,7 +7,18 @@
 // one text overlay, so a frame costs a few thousand array writes, not a
 // repaint of the art.
 
-var EFFECTS = ["decrypt", "rain", "beams", "scatter", "wipe", "typewriter", "reveal", "pulse"]
+var EFFECTS = ["decrypt", "rain", "beams", "scatter", "wipe", "typewriter", "reveal", "pulse",
+               "scanline", "grid", "shockwave", "slit", "glitch", "dust"]
+
+// Nobody wants to audit fourteen names to set a mood. Each of these is a set
+// the panel can offer as one chip; picking one writes the same `effects`
+// array the individual chips do, so there is no second setting to keep in
+// step and an old config still means what it meant.
+var MOODS = {
+  calm:    ["reveal", "wipe", "typewriter", "slit", "pulse"],
+  neon:    ["decrypt", "rain", "scanline", "glitch", "grid"],
+  kinetic: ["beams", "scatter", "shockwave", "dust"]
+}
 var CIPHER = "!@#$%&*+=?<>/\\|01アイウエオカキクケコサシスセソタチツテトナニヌネノ"
 
 function cells(lines) {
@@ -92,6 +103,97 @@ function plan(effect, lines, seed) {
     p.duration = Math.min(5000, 600 + rows * 140)
     for (k = 0; k < n; k++) list[k].at = list[k].r * 140
     break
+  case "scanline":
+    // A bright bar travels down and the text is simply there behind it.
+    p.duration = 3000
+    for (k = 0; k < n; k++) list[k].at = 250 + (list[k].r / Math.max(1, rows - 1 || 1)) * 2400
+    break
+  case "grid":
+    // Whatever of the art falls on a lattice snaps in first, then the rest
+    // fills outward from those lines.
+    p.duration = 3400
+    p.gridRow = 4
+    p.gridCol = 8
+    for (k = 0; k < n; k++) {
+      var gcell = list[k]
+      var dr = Math.min(gcell.r % p.gridRow, p.gridRow - (gcell.r % p.gridRow))
+      var dc = Math.min(gcell.c % p.gridCol, p.gridCol - (gcell.c % p.gridCol))
+      var near = Math.min(dr, dc)
+      gcell.at = near === 0
+        ? 150 + (gcell.c / Math.max(1, cols)) * 700
+        : 1100 + near * 260 + random() * 260
+    }
+    break
+  case "shockwave":
+    // An expanding ring. Rows count double: a character cell is about twice
+    // as tall as it is wide, so equal steps in each make a circle.
+    p.duration = 3000
+    p.centreRow = (rows - 1) / 2
+    p.centreCol = (cols - 1) / 2
+    p.reach = Math.max(1, Math.sqrt(Math.pow(rows * 2, 2) + Math.pow(cols, 2)) / 2)
+    for (k = 0; k < n; k++) {
+      var scell = list[k]
+      var sdr = (scell.r - p.centreRow) * 2
+      var sdc = scell.c - p.centreCol
+      scell.dist = Math.sqrt(sdr * sdr + sdc * sdc)
+      scell.at = 200 + (scell.dist / p.reach) * 2400
+    }
+    break
+  case "slit":
+    // Opens from a single column and widens both ways.
+    p.duration = 2900
+    p.centreCol = (cols - 1) / 2
+    for (k = 0; k < n; k++) {
+      var lcell = list[k]
+      lcell.at = 200 + (Math.abs(lcell.c - p.centreCol) / Math.max(1, p.centreCol)) * 2400
+    }
+    break
+  case "glitch":
+    // The art is there from the first frame but torn into bands that slide
+    // sideways; the bands lock back into place one at a time, in a random
+    // order spread over the whole run rather than all at once early.
+    p.duration = 3200
+    p.bandRows = 2
+    p.tear = 800
+    p.shift = []
+    p.settle = []
+    var bands = Math.max(1, Math.ceil(rows / p.bandRows))
+    var bandOrder = []
+    for (k = 0; k < bands; k++) bandOrder.push(k)
+    for (k = bandOrder.length - 1; k > 0; k--) {
+      var bj = Math.floor(random() * (k + 1))
+      var bt = bandOrder[k]; bandOrder[k] = bandOrder[bj]; bandOrder[bj] = bt
+    }
+    for (k = 0; k < bands; k++) {
+      p.shift.push(0)
+      p.settle.push(0)
+    }
+    for (k = 0; k < bands; k++) {
+      var slot = bandOrder[k]
+      var spread = Math.round((random() * 2 - 1) * Math.max(4, cols * 0.3))
+      p.shift[slot] = spread === 0 ? 4 : spread
+      p.settle[slot] = 700 + (k / bands) * 2200 + random() * 160
+    }
+    for (k = 0; k < n; k++) {
+      var bcell = list[k]
+      bcell.band = Math.floor(bcell.r / p.bandRows)
+      bcell.at = p.settle[bcell.band]
+    }
+    break
+  case "dust":
+    // Particles drift in from off-frame and converge.
+    p.duration = 3400
+    p.travel = 1700
+    for (k = 0; k < n; k++) {
+      var dcell = list[k]
+      var angle = random() * Math.PI * 2
+      var out = 1.25 + random() * 0.7
+      dcell.r0 = (rows - 1) / 2 + Math.sin(angle) * out * rows / 2
+      dcell.c0 = (cols - 1) / 2 + Math.cos(angle) * out * cols / 2
+      dcell.start = random() * 1500
+      dcell.at = dcell.start + p.travel
+    }
+    break
   default:
     // pulse and anything unknown: everything is there from the start.
     p.effect = "pulse"
@@ -158,6 +260,36 @@ function frame(p, t) {
     case "typewriter":
       if (k === cursor) put(grid, cell.r, cell.c, "█")
       break
+    case "scanline":
+    case "slit":
+      // The bar itself: a short gradient just ahead of where it has reached.
+      var ahead = cell.at - t
+      if (ahead < 520) put(grid, cell.r, cell.c, ahead < 120 ? "█" : (ahead < 300 ? "▓" : "░"))
+      break
+    case "shockwave":
+      var ring = cell.at - t
+      if (ring < 420) put(grid, cell.r, cell.c, ring < 110 ? "█" : (ring < 260 ? "▓" : "▒"))
+      break
+    case "grid":
+      if (cell.at - t < 240) put(grid, cell.r, cell.c, "▒")
+      break
+    case "glitch":
+      // Torn sideways, the tear closing over the last stretch before the band
+      // settles. The jitter is stepped off the clock rather than drawn from
+      // the generator, so a frame is the same however often it is asked for.
+      var lead = p.settle[cell.band] - t
+      var amp = Math.max(0, Math.min(1, lead / p.tear))
+      var step = Math.floor(t / 80)
+      var jitter = ((cell.band * 31 + step * 17) % 9) / 8 - 0.5
+      put(grid, cell.r, cell.c + Math.round(p.shift[cell.band] * amp * (0.7 + jitter * 0.6)), cell.ch)
+      break
+    case "dust":
+      if (t >= cell.start) {
+        var e = (t - cell.start) / p.travel
+        e = 1 - Math.pow(1 - e, 3)
+        put(grid, Math.round(cell.r0 + (cell.r - cell.r0) * e), Math.round(cell.c0 + (cell.c - cell.c0) * e), e < 0.72 ? "·" : cell.ch)
+      }
+      break
     }
   }
   var lines = []
@@ -179,5 +311,5 @@ function pick(list, random) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { EFFECTS: EFFECTS, CIPHER: CIPHER, cells: cells, rng: rng, plan: plan, frame: frame, pick: pick }
+  module.exports = { EFFECTS: EFFECTS, MOODS: MOODS, CIPHER: CIPHER, cells: cells, rng: rng, plan: plan, frame: frame, pick: pick }
 }

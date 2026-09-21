@@ -75,7 +75,8 @@ function defaults() {
     screensaverEnabled: true,
     lockEnabled: true,
     savers: {
-      wordmark: { effect: "cycle", effects: ["reveal", "typewriter", "pulse"], holdSec: 15, background: "theme" },
+      // The quiet set, which is also a named mood: a fresh panel reads "Calm".
+      wordmark: { effect: "cycle", effects: ["reveal", "wipe", "typewriter", "slit", "pulse"], holdSec: 15, background: "theme" },
       clock: { format: "HH:mm", showDate: true, showSeconds: false },
       blank: {},
       terminal: { effects: [] }
@@ -191,6 +192,34 @@ var TTFX_EFFECTS = [
   "slice", "slide", "smoke", "spotlights", "spray", "swarm", "sweep", "synthgrid", "thunderstorm",
   "unstable", "vhstape", "waves", "wipe"
 ]
+
+// The same three moods Stelline's own effects offer, over Omarchy's 37 —
+// `orbittingvolley` tells nobody anything, and seven rows of chips is the
+// most overwhelming control in the panel. Every effect belongs to exactly
+// one mood, so the sets stay a partition and "all of them" is the union.
+var TTFX_MOODS = {
+  calm:    ["colorshift", "expand", "highlight", "middleout", "pour", "print", "slice", "slide", "sweep", "waves", "wipe"],
+  neon:    ["binarypath", "decrypt", "errorcorrect", "laseretch", "matrix", "overflow", "rain", "randomsequence", "synthgrid", "vhstape"],
+  kinetic: ["beams", "blackhole", "bouncyballs", "bubbles", "burn", "crumble", "fireworks", "orbittingvolley", "rings", "scattered", "smoke", "spotlights", "spray", "swarm", "thunderstorm", "unstable"]
+}
+
+// Which mood a pinned list is, if any: "" when nothing is pinned (every
+// effect plays), a mood key when the list is exactly that set, or "custom"
+// when someone has picked their own. The pinned array stays the only stored
+// value — a mood is just a set of it — so nothing needs migrating and an
+// unknown name in an old config still just drops out.
+function moodOf(pinned, moods) {
+  var list = Array.isArray(pinned) ? pinned.slice().sort() : []
+  if (list.length === 0) return ""
+  for (var key in moods) {
+    var want = moods[key].slice().sort()
+    if (want.length !== list.length) continue
+    var same = true
+    for (var i = 0; i < want.length; i++) if (want[i] !== list[i]) { same = false; break }
+    if (same) return key
+  }
+  return "custom"
+}
 
 // ---- situations -----------------------------------------------------------
 
@@ -1137,6 +1166,8 @@ if (typeof module !== "undefined") {
     pickSaver: pickSaver,
     DEFAULT_SAVER: DEFAULT_SAVER,
     TTFX_EFFECTS: TTFX_EFFECTS,
+    TTFX_MOODS: TTFX_MOODS,
+    moodOf: moodOf,
     hhmm: hhmm,
     inWindow: inWindow,
     situationMatches: situationMatches,
