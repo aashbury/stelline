@@ -193,11 +193,14 @@ Item {
   }
   function summonPanel() { Quickshell.execDetached(["omarchy-shell", "shell", "summon", root.pluginId, "{}"]) }
 
-  // Whether "Describe it" has a model to talk to: Claude Code's CLI, or an API key.
+  // Who answers "Describe it": Omarchy's default coding agent (`omarchy
+  // default agent`) when one is set and installed, else Claude Code, else the
+  // API with a key. "" when nothing is there. Re-probed whenever the panel opens.
   property string aiProvider: ""
+  function refreshAi() { if (!aiProbe.running) aiProbe.running = true }
   Process {
     id: aiProbe
-    command: ["bash", "-lc", "if command -v claude >/dev/null 2>&1; then echo cli; elif [[ -n ${ANTHROPIC_API_KEY:-} ]]; then echo api; else echo none; fi"]
+    command: ["bash", "-lc", "a=$(omarchy-default-agent 2>/dev/null || true); if [[ -n $a ]] && command -v \"$a\" >/dev/null 2>&1; then echo \"agent:$a\"; elif command -v claude >/dev/null 2>&1; then echo agent:claude; elif [[ -n ${ANTHROPIC_API_KEY:-} ]]; then echo api; else echo none; fi"]
     stdout: SplitParser { onRead: function(line) { var t = String(line).trim(); root.aiProvider = t === "none" ? "" : t } }
   }
 

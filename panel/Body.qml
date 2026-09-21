@@ -118,6 +118,7 @@ Column {
     if (svc && typeof svc.refreshThemes === "function") svc.refreshThemes()
     if (svc && typeof svc.probeIpcOwner === "function") svc.probeIpcOwner()
     if (svc && typeof svc.rescan === "function") svc.rescan()
+    if (svc && typeof svc.refreshAi === "function") svc.refreshAi()
   }
 
   function setEditing(key, on) {

@@ -747,6 +747,8 @@ function metaJson(spec, extra) {
 // The prompt for a described saver: frames separated by a marker line, so the
 // answer parses without depending on any one model's formatting habits.
 var FRAME_MARKER = "---FRAME---"
+var ART_BEGIN = "===ART==="
+var ART_END = "===END==="
 
 function aiPrompt(description, frames) {
   var n = Math.max(1, Math.min(60, Math.round(Number(frames) || 1)))
@@ -758,9 +760,38 @@ function aiPrompt(description, frames) {
       : "Produce one piece.",
     "Use a monospace grid about 60 columns wide and 20 to 28 lines tall. Plain ASCII characters, and Unicode block (█▀▄▌▐░▒▓) and braille (⠁…⣿) characters are all fine; use what draws the subject best.",
     n > 1 ? "Separate frames with a line containing only " + FRAME_MARKER + "." : "",
-    "Output only the art. No title, no explanation, no code fences."
+    "Put a line containing only " + ART_BEGIN + " before the art and a line containing only " + ART_END + " after it. Nothing else: no title, no explanation, no code fences, no tool use — just draw it."
   ]
   return lines.filter(function(l) { return l !== undefined }).join("\n")
+}
+
+// Omarchy's default coding agent (`omarchy default agent <name>`), each in
+// its one-shot mode with tools off or read-only where the CLI has a switch
+// for it. Low effort where it can be asked for: at the default the model
+// deliberates over the grid spec for minutes. The answer goes to stdout —
+// or to a file for codex, which is quieter that way.
+var AGENTS = {
+  claude:   { name: "Claude Code",    argv: "claude -p \"$prompt\" --output-format text --tools '' --no-session-persistence --effort low" },
+  codex:    { name: "Codex",          argv: "codex exec --skip-git-repo-check --ephemeral -s read-only -c model_reasoning_effort=low -o \"$tmp/last.txt\" \"$prompt\" >/dev/null && cat \"$tmp/last.txt\"" },
+  gemini:   { name: "Gemini",         argv: "gemini -p \"$prompt\" -o text --approval-mode plan" },
+  opencode: { name: "OpenCode",       argv: "opencode run --pure \"$prompt\"" },
+  copilot:  { name: "GitHub Copilot", argv: "copilot -p \"$prompt\" --output-format text" },
+  crush:    { name: "Crush",          argv: "crush run -q \"$prompt\"" },
+  pi:       { name: "Pi",             argv: "pi -p --no-tools --no-session --no-context-files \"$prompt\"" },
+  omp:      { name: "Oh My Pi",       argv: "omp -p --no-tools --no-session \"$prompt\"" },
+  grok:     { name: "Grok",           argv: "grok -p \"$prompt\" --permission-mode plan" }
+}
+
+function agentName(id) {
+  return AGENTS[id] ? AGENTS[id].name : String(id || "")
+}
+
+// The bash `case` that runs whichever agent is the default.
+function agentCase() {
+  var out = ["case \"$agent\" in"]
+  for (var id in AGENTS) out.push("  " + id + ") out=$({ timeout 600 env -u CLAUDECODE " + AGENTS[id].argv + "; } 2>\"$tmp/err\" </dev/null) || { out=''; why=$(reason \"$tmp/err\"); } ;;")
+  out.push("  *) agent='' ;;", "esac")
+  return out
 }
 
 // The bash that builds one saver, written by the service to a file and run
@@ -852,12 +883,17 @@ function importScript(spec, rootDir) {
     var frames = spec.animated ? Math.max(2, Math.min(60, Math.round(Number(spec.frames) || 12))) : 1
     lines.push(
       "prompt=" + q(aiPrompt(spec.prompt, frames)),
+      // The first line that explains itself (sign-in, limits, errors), else the tail.
+      "reason() { local r; r=$(grep -m1 -iE 'unauthori|not logged|log ?in|sign ?in|limit|quota|denied|error' \"$1\" 2>/dev/null | sed -E 's/^(ERROR|error)[: ]*//' | cut -c1-160); [[ -n $r ]] || r=$(tail -c 160 \"$1\" 2>/dev/null | tr -s '\\n ' ' '); printf %s \"$r\"; }",
       "out=''; why=''",
-      "if command -v claude >/dev/null 2>&1; then",
-      // Low effort on purpose: at the default the model deliberates over the
-      // grid for minutes; at low it draws in seconds. No tools, no session.
-      "  out=$(timeout 600 env -u CLAUDECODE claude -p \"$prompt\" --output-format text --tools '' --no-session-persistence --effort low 2>\"$tmp/err\") || { out=''; why=$(tail -c 160 \"$tmp/err\" | tr -s '\\n ' ' '); }",
-      "fi",
+      // The system's default agent first; Claude Code if none is set; the
+      // API with a key as the last resort.
+      "agent=$(omarchy-default-agent 2>/dev/null || true)",
+      "[[ -n $agent ]] && command -v \"$agent\" >/dev/null 2>&1 || agent=''",
+      "[[ -z $agent ]] && command -v claude >/dev/null 2>&1 && agent=claude"
+    )
+    lines = lines.concat(agentCase())
+    lines.push(
       "if [[ -z $out && -n ${ANTHROPIC_API_KEY:-} ]]; then",
       "  body=$(jq -n --arg p \"$prompt\" '{model:\"claude-opus-5\", max_tokens:16000, output_config:{effort:\"low\"}, fallbacks:\"default\", messages:[{role:\"user\", content:$p}]}')",
       "  resp=$(curl -s --max-time 600 https://api.anthropic.com/v1/messages -H 'content-type: application/json' -H \"x-api-key: $ANTHROPIC_API_KEY\" -H 'anthropic-version: 2023-06-01' -H 'anthropic-beta: server-side-fallback-2026-07-01' -d \"$body\") || resp=''",
@@ -865,9 +901,11 @@ function importScript(spec, rootDir) {
       "  out=$(jq -r '[.content[]? | select(.type==\"text\") | .text] | join(\"\\n\")' <<<\"$resp\" 2>/dev/null) || out=''",
       "fi",
       "[[ -n $out ]] || fail \"no model answered${why:+ — $why}\"",
-      // Drop code fences, turn marker lines into form feeds, drop empty frames.
-      "printf '%s\\n' \"$out\" | sed -e '/^```/d' -e 's/^" + FRAME_MARKER + "$/\\f/' > \"$dir/frames.txt\"",
-      "[[ $(tr -d '\\f[:space:]' < \"$dir/frames.txt\" | wc -c) -gt 20 ]] || fail 'the answer had no art in it'",
+      // Keep what sits between the markers (the whole answer if the model
+      // skipped them), drop code fences, turn frame markers into form feeds.
+      "art=$(printf '%s\\n' \"$out\" | awk -v b=" + ART_BEGIN + " -v e=" + ART_END + " '$0==b{on=1; found=1; next} $0==e{on=0} on{print}'); [[ -n $art ]] || art=$out",
+      "printf '%s\\n' \"$art\" | sed -e '/^```/d' -e 's/^" + FRAME_MARKER + "$/\\f/' > \"$dir/frames.txt\"",
+      "[[ $(tr -d '\\f[:space:]' < \"$dir/frames.txt\" | wc -c) -gt 20 ]] || fail \"the answer had no art in it${agent:+ ($agent)}\"",
       finish("'.pieces=[\"frames.txt\"] | .play=" + (frames > 1 ? "\"animation\" | .fps=6" : "\"slideshow\"") + "'")
     )
   } else {
@@ -1048,6 +1086,10 @@ if (typeof module !== "undefined") {
     ASCII_COLUMNS: ASCII_COLUMNS,
     ASCII_ROWS: ASCII_ROWS,
     FRAME_MARKER: FRAME_MARKER,
+    ART_BEGIN: ART_BEGIN,
+    ART_END: ART_END,
+    AGENTS: AGENTS,
+    agentName: agentName,
     aiPrompt: aiPrompt,
     importScript: importScript,
     deleteScript: deleteScript,

@@ -107,7 +107,7 @@ The **Add** tile makes a saver from:
 | **A folder of pictures** | a folder | the same, and a folder shown as-is is read live: drop a picture in, it joins |
 | **A video or GIF** | one file | an ASCII animation, frame by frame (the first 20 s at 10 fps) — or the clip as it is, as an animated picture |
 | **Some text** | you type it | big letters as block art — a wordmark of your own |
-| **A description** | you describe it | ASCII art, still or an animation loop, drawn by a model: Claude Code on this machine if it is installed, else the Claude API with `ANTHROPIC_API_KEY`. Shown only when one of those is there. |
+| **A description** | you describe it | ASCII art, still or an animation loop, drawn by your **default coding agent** (`omarchy default agent` — Claude Code, Codex, Gemini, OpenCode, Copilot, Crush, Pi, Oh My Pi or Grok), each in its one-shot mode with tools off or read-only where it has such a switch. Claude Code if no default is set; the Claude API with `ANTHROPIC_API_KEY` as a last resort. Shown only when one of those is there. |
 
 Imports run in the background — the tile appears at once and fills in; a
 notification says when it is ready — one after another. ASCII conversion is
@@ -236,11 +236,13 @@ the stock service; `status` reports `"clone": "stelline"`.
 - Fields inside editors are mouse-driven; rows and tiles are keyboard-navigable.
 - Converting a clip to ASCII runs the stock transcoder once per frame: about a
   minute for 20 seconds of video. It runs in the background.
-- A described saver needs Claude Code (`claude` on the PATH) or
-  `ANTHROPIC_API_KEY`; the Add card hides the option otherwise. The model is
-  asked at low effort on purpose (at the default it deliberates over the grid
-  for minutes); an animation takes a minute or two. What comes back is only as
-  good as the model's drawing that day.
+- A described saver needs a default coding agent (`omarchy default agent`),
+  Claude Code, or `ANTHROPIC_API_KEY`; the Add card hides the option otherwise
+  and names who it will ask. The agent is asked at low effort where it takes
+  that switch (at the default a model deliberates over the grid spec for
+  minutes); an animation takes a minute or two. The art is read between marker
+  lines the prompt asks for, so an agent's own chatter cannot end up in a
+  frame. What comes back is only as good as the model's drawing that day.
 - Pinned-effect terminal launching on more than one monitor follows the stock
   launcher's sequence but has only been tested on one.
 - Disabling the plugin leaves a harmless `{ "id": "omarchy.idle" }` entry in the

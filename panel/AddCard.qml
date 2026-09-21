@@ -104,7 +104,7 @@ BorderSurface {
       textFormat: Text.PlainText
       wrapMode: Text.WordWrap
       text: "Pictures and clips become ASCII art in your theme's colours, with the same effects as the wordmark — or play as they are."
-        + (root.ai === "" ? " Install Claude Code, or set ANTHROPIC_API_KEY, to describe one in words." : "")
+        + (root.ai === "" ? " Pick a default coding agent (omarchy default agent), or set ANTHROPIC_API_KEY, to describe one in words." : "")
       color: root.dim
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
@@ -196,7 +196,9 @@ BorderSurface {
         width: parent.width
         textFormat: Text.PlainText
         wrapMode: Text.WordWrap
-        text: (root.ai === "cli" ? "Asks Claude Code on this machine" : "Uses your ANTHROPIC_API_KEY") + " — a minute or two; you get a notification when it is ready."
+        text: (root.ai.indexOf("agent:") === 0
+            ? "Asks " + M.agentName(root.ai.substring(6)) + ", your default agent (omarchy default agent)"
+            : "Uses your ANTHROPIC_API_KEY") + " — a minute or two; you get a notification when it is ready."
         color: root.dim
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
