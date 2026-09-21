@@ -179,12 +179,18 @@ Item {
   readonly property real dpr: Screen.devicePixelRatio > 0 ? Screen.devicePixelRatio : 1
   function snap(v) { return Math.round(v * root.dpr) / root.dpr }
 
+  // Cells are whole pixels, so a tall piece in a small box (a tile) can still
+  // overflow at the smallest cell; the finished layer is then scaled down.
+  readonly property real shrink: artW > 0 && artH > 0 ? Math.min(1, (root.width * root.fitWidth) / artW, (root.height * root.fitHeight) / artH) : 1
+
   Item {
     id: canvasHost
     width: root.artW
     height: root.artH
     x: root.snap((root.width - root.artW) / 2 + root.driftX)
     y: root.snap((root.height - root.artH) / 2 + root.driftY)
+    scale: root.shrink
+    transformOrigin: Item.Center
 
     Canvas {
       id: fgCanvas

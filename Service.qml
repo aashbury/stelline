@@ -160,6 +160,8 @@ Item {
   property var pickedPaths: []
   function pickFiles(kind) {
     if (picker.running) return "busy"
+    // Scripted (`omarchy-shell stelline pick images`): open an Add for it.
+    if (!M.isPlainObject(root.importDraft)) { var d = M.importDefaults(); d.step = "picking"; root.importDraft = d }
     var argv = ["omarchy-file-select", "--title"]
     if (kind === "folder") argv = argv.concat(["Pick a folder of pictures", "--directory"])
     else if (kind === "video") argv = argv.concat(["Pick a video or GIF", "--extensions", M.VIDEO_EXTENSIONS.join(" ")])
@@ -1116,6 +1118,7 @@ Item {
       return root.importSaver(spec)
     }
     function deleteSaver(saverId: string): string { return root.deleteSaver(saverId) }
+    function cancelAdd(): string { root.importDraft = null; return "ok" }
     function rescan(): string { root.rescan(); return "ok" }
     function pick(kind: string): string { return root.pickFiles(kind) }
     function setRule(saverId: string, key: string, on: string): string {

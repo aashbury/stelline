@@ -217,7 +217,7 @@ focus), `list`, `get`, `set`, `set64`, `setSaver`, `toggleShuffle`,
 `import64 <base64 json>` (the spec the Add card builds: `source`
 `images|folder|video|text|prompt`, `paths`, `text`, `prompt`, `style`
 `ascii|image`, `name`, `fps`, `seconds`, `animated`, `frames`), `deleteSaver
-<id>`, `rescan`, `pick <images|folder|video>`, `finishSetup`, `undoSetup`,
+<id>`, `rescan`, `pick <images|folder|video>`, `cancelAdd`, `finishSetup`, `undoSetup`,
 `setMenuEntry <on|off>`, `simulateIdle`, `simulateLock [dry-run|off|real]`,
 `reloadCard`, `ping`.
 

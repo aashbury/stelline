@@ -11,7 +11,7 @@ var SAVERS = [
   { id: "clock",    name: "Clock",    glyph: "󰥔", meta: "big monospace time and date", file: "savers/Clock.qml",    kind: "native" },
   { id: "matrix",   name: "Matrix rain", glyph: "󰘨", meta: "falling glyphs in theme colours", file: "savers/Matrix.qml", kind: "native" },
   { id: "blank",    name: "Blank",    glyph: "󰹏", meta: "black — for battery", file: "savers/Blank.qml",  kind: "native" },
-  { id: "terminal", name: "Terminal", glyph: "",  meta: "stock ttfx in a terminal", file: "",                   kind: "external" }
+  { id: "terminal", name: "Terminal", glyph: "󰆍", meta: "stock ttfx in a terminal", file: "",                   kind: "external" }
 ]
 
 // Every saver the user can pick: the built-ins, then their own (imported
@@ -713,7 +713,7 @@ function scanScript(rootDir) {
     "    first=$(jq -r '.pieces[0] // empty' \"$f\" 2>/dev/null); [[ -n $first ]] || first=$(ls -1 \"$d\"/*.txt 2>/dev/null | head -n1)",
     "    [[ $first == /* ]] || first=\"$d/$first\"",
     "    [[ -f $first ]] && thumb=$(head -c 12000 \"$first\")",
-    "    frameCount=$(cat \"$d\"/*.txt 2>/dev/null | awk 'BEGIN{RS=\"\\f\"} /[^[:space:]]/{n++} END{print n+0}')",
+    "    frameCount=$(for t in \"$d\"/*.txt; do cat \"$t\" 2>/dev/null; printf '\\f'; done | awk 'BEGIN{RS=\"\\f\"} /[^[:space:]]/{n++} END{print n+0}')",
     "  fi",
     "  jq -c --arg dir \"$d\" --argjson files \"$files\" --argjson folderFiles \"$folderFiles\" --arg thumb \"$thumb\" --argjson frameCount \"${frameCount:-0}\" '{dir:$dir, files:$files, folderFiles:$folderFiles, thumb:$thumb, frameCount:$frameCount, json:.}' \"$f\" 2>/dev/null || echo \"{\\\"dir\\\":$(jq -Rn --arg d \"$d\" '$d'),\\\"json\\\":{\\\"error\\\":\\\"saver.json does not parse\\\"}}\"",
     "done",

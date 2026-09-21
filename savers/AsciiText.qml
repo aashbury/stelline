@@ -37,9 +37,12 @@ Item {
   }
 
   Text {
+    id: label
     anchors.centerIn: parent
     anchors.horizontalCenterOffset: root.driftX
     anchors.verticalCenterOffset: root.driftY
+    scale: implicitWidth > 0 && implicitHeight > 0 ? Math.min(1, (root.width * root.fitWidth) / implicitWidth, (root.height * root.fitHeight) / implicitHeight) : 1
+    transformOrigin: Item.Center
     textFormat: Text.PlainText
     renderType: Text.NativeRendering
     text: root.art

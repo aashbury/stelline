@@ -126,7 +126,7 @@ Column {
       width: parent.width
       bar: root.bar
       label: "Speed"
-      value: Number(root.settings.fps) || Number(root.series.fps) || 10
+      value: Number(root.settings.fps) || (root.series ? Number(root.series.fps) : 0) || 10
       minimum: 2
       maximum: 24
       step: 2
@@ -140,7 +140,7 @@ Column {
       width: parent.width
       bar: root.bar
       label: "Each picture"
-      value: Number(root.settings.dwellSec) || Number(root.series.dwellSec) || 12
+      value: Number(root.settings.dwellSec) || (root.series ? Number(root.series.dwellSec) : 0) || 12
       minimum: 5
       maximum: 60
       step: 5

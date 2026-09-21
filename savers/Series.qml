@@ -60,9 +60,15 @@ Item {
     return n >= root.index ? n + 1 : n
   }
 
-  function loadFrames() {
+  // Deferred a tick: properties set one after another from a Loader (or an
+  // instance declaration, literals before bindings) must all be in place
+  // before deciding between the thumbnail frame and the real pieces.
+  function loadFrames() { Qt.callLater(root.loadFramesNow) }
+
+  function loadFramesNow() {
     if (root.kind !== "ascii") return
     if (root.thumbnail) { root.frames = root.series && root.series.thumbArt ? [String(root.series.thumbArt)] : []; return }
+    if (!root.active) return
     if (root.pieces.length === 0) { root.frames = []; return }
     var cmd = root.pieces.map(function(p) { return "cat " + M.shellQuote(p) + " 2>/dev/null; printf '\\f'" }).join("; ")
     reader.command = ["bash", "-c", cmd]
@@ -73,6 +79,8 @@ Item {
     id: reader
     stdout: StdioCollector {
       onStreamFinished: {
+        // A thumbnail never shows the pieces, whatever was read on its behalf.
+        if (root.thumbnail || !root.active) return
         root.frames = M.splitFrames(String(text || ""))
         root.index = 0
       }
