@@ -29,6 +29,9 @@ CursorSurface {
   readonly property bool importing: !!(saver && saver.series && saver.series.importing)
   readonly property bool failed: !!(saver && saver.series && saver.series.error)
   readonly property bool hot: hasCursor || mouse.containsMouse
+  // With no rule to report, the line under the name says what the saver is.
+  readonly property string metaLine: saver && saver.meta ? String(saver.meta) : ""
+  readonly property bool external: !!(saver && saver.kind === "external")
 
   signal clicked()
   signal previewRequested()
@@ -100,6 +103,22 @@ CursorSurface {
         font.pixelSize: Style.font.display
       }
 
+      // The stock saver runs in a terminal, and its thumbnail is the same art
+      // the Wordmark draws — a terminal glyph tells the two apart.
+      Text {
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.margins: Style.space(4)
+        visible: root.external
+        textFormat: Text.PlainText
+        text: root.saver.glyph || "󰆍"
+        color: root.dim
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.body
+        style: Text.Outline
+        styleColor: Color.background
+      }
+
       // Usual-saver marker, or the shuffle checkbox.
       Text {
         anchors.left: parent.left
@@ -153,7 +172,7 @@ CursorSurface {
     Text {
       width: parent.width
       textFormat: Text.PlainText
-      text: root.moreTile ? root.moreCount + " more" : (root.addTile ? "pictures, a clip, text…" : (root.importing ? "importing…" : (root.failed ? "import failed" : root.caption)))
+      text: root.moreTile ? root.moreCount + " more" : (root.addTile ? "pictures, a clip, text…" : (root.importing ? "importing…" : (root.failed ? "import failed" : (root.caption !== "" ? root.caption : root.metaLine))))
       color: root.failed ? Color.urgent : (root.caption !== "" && !root.importing ? Color.accent : root.dim)
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption

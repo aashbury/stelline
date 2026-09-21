@@ -41,6 +41,8 @@ Column {
   readonly property var saver: M.saverById(cfg.saver, userSavers) || M.SAVERS[0]
   readonly property bool serviceOk: !!svc
   readonly property bool stayAwake: svc ? svc.stayAwake === true : false
+  // One switch: Omarchy's own screensaver toggle and the stage switch agree.
+  readonly property bool screensaverOn: svc ? svc.screensaverOff !== true && cfg.screensaverEnabled !== false : false
   readonly property int screensaverSeconds: svc ? svc.screensaverTimeoutSeconds : 150
   readonly property int lockSeconds: svc ? svc.lockTimeoutSeconds : 300
   readonly property bool adding: !!(svc && svc.importDraft)
@@ -192,7 +194,7 @@ Column {
   function activate() {
     if (!cursorActive) { cursorActive = true; return }
     if (!svc) return
-    if (cursorIndex === rowHero) setStage("screensaverEnabled", !cfg.screensaverEnabled)
+    if (cursorIndex === rowHero) setScreensaver(!screensaverOn)
     else if (cursorIndex === rowStayAwake) toggleStayAwake()
     else if (cursorIndex === rowPreview) preview("")
     else if (cursorIndex === rowMore) gridExpanded = true
@@ -260,6 +262,7 @@ Column {
   }
   function toggleShuffle() { if (svc) svc.writeSettings({ shuffle: !cfg.shuffle }) }
   function setStage(key, on) { if (svc) { var p = {}; p[key] = !!on; svc.writeSettings(p) } }
+  function setScreensaver(on) { if (svc) { svc.setScreensaverOff(!on); if (on) setStage("screensaverEnabled", true); else setStage("screensaverEnabled", false) } }
   function toggleStayAwake() { if (svc) svc.setIdleEnabled(stayAwake) }
   function setSeconds(stage, v) { if (svc) svc.writeIdleSeconds(stage, v) }
 
@@ -336,9 +339,11 @@ Column {
     width: parent.width
     title: "Stelline"
     meta: root.serviceOk
-      ? (root.stayAwake ? "staying awake" : root.saver.name.toLowerCase() + " after " + root.minutes(root.screensaverSeconds)
+      ? (root.stayAwake ? "staying awake"
+        : (!root.screensaverOn ? "screensaver off" + (root.cfg.lockEnabled ? ", lock at " + root.minutes(root.lockSeconds) : ", no lock")
+        : root.saver.name.toLowerCase() + " after " + root.minutes(root.screensaverSeconds)
           + (root.cfg.lockEnabled ? ", lock at " + root.minutes(root.lockSeconds) : ", no lock")
-          + (root.svc.situation ? " · " + M.situationLabel(root.svc.situation).toLowerCase() : ""))
+          + (root.svc.situation ? " · " + M.situationLabel(root.svc.situation).toLowerCase() : "")))
       : "not running yet — restart the shell"
     foreground: root.foreground
     fontFamily: root.fontFamily
@@ -353,11 +358,11 @@ Column {
     }
     trailingControl: Component {
       ToggleSwitch {
-        checked: root.cfg.screensaverEnabled
+        checked: root.screensaverOn
         interactive: root.serviceOk
         hasCursor: root.cursorActive && root.cursorIndex === root.rowHero
         foreground: root.foreground
-        onToggled: root.setStage("screensaverEnabled", !root.cfg.screensaverEnabled)
+        onToggled: root.setScreensaver(!root.screensaverOn)
         onHovered: function(h) { root.hoverRow(root.rowHero, h) }
       }
     }

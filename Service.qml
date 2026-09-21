@@ -900,6 +900,23 @@ Item {
     if (!screensaverOffProbe.running) screensaverOffProbe.running = true
   }
 
+  // The panel's screensaver switch IS the stock toggle (Trigger › Toggle ›
+  // Screensaver, `omarchy toggle screensaver`): one flag file, one truth.
+  // Written the way omarchy-toggle writes it, without the notification the
+  // menu entry sends — the switch in front of you is the feedback.
+  function setScreensaverOff(off) {
+    var on = !off
+    runProcess(screensaverOffWriter, "screensaver-off " + (off ? "on" : "off"),
+      off ? "mkdir -p " + M.shellQuote(root.togglesDir) + " && touch " + M.shellQuote(root.togglesDir + "/screensaver-off")
+          : "rm -f " + M.shellQuote(root.togglesDir + "/screensaver-off"))
+    root.screensaverOff = !!off
+    // Turning it on also lifts the config-level stage switch, so nothing
+    // hidden keeps it off.
+    if (on && root.cfg.screensaverEnabled === false) writeSettings({ screensaverEnabled: true })
+    return "ok"
+  }
+  Process { id: screensaverOffWriter; onExited: root.refreshScreensaverOff() }
+
   function persistStayAwake(value) {
     var command = value
       ? "mkdir -p \"$HOME/.local/state/omarchy/indicators\" && touch \"$HOME/.local/state/omarchy/indicators/stay-awake\""
@@ -1116,8 +1133,11 @@ Item {
       var key = stage === "lock" ? "lockEnabled" : "screensaverEnabled"
       var patch = {}
       patch[key] = String(on) === "true" || String(on) === "on"
+      // The screensaver stage and the stock toggle are one switch.
+      if (key === "screensaverEnabled") root.setScreensaverOff(!patch[key])
       return root.writeSettings(patch) ? "ok" : "failed"
     }
+    function setScreensaverOff(off: string): string { return root.setScreensaverOff(String(off) === "true" || String(off) === "on") }
 
     function setTimeout(stage: string, seconds: string): string {
       return root.writeIdleSeconds(stage, seconds) ? "ok" : "failed"

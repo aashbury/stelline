@@ -7,11 +7,13 @@ var PLUGIN_ID = "io.github.aashbury.stelline"
 // Static saver metadata. The picker reads this list; savers are only
 // instantiated by the overlay when they are actually shown.
 var SAVERS = [
-  { id: "wordmark", name: "Wordmark", glyph: "󰊄", meta: "your branding, theme colours", file: "savers/Wordmark.qml", kind: "native" },
-  { id: "clock",    name: "Clock",    glyph: "󰥔", meta: "big monospace time and date", file: "savers/Clock.qml",    kind: "native" },
-  { id: "matrix",   name: "Matrix rain", glyph: "󰘨", meta: "falling glyphs in theme colours", file: "savers/Matrix.qml", kind: "native" },
-  { id: "blank",    name: "Blank",    glyph: "󰹏", meta: "black — for battery", file: "savers/Blank.qml",  kind: "native" },
-  { id: "terminal", name: "Original", glyph: "󰆍", meta: "Omarchy's own, in a terminal", file: "", thumb: "savers/Wordmark.qml", kind: "external" }
+  // `meta` is the line under the name on a tile with no rule to report, so
+  // it has to fit a tile: about twenty characters.
+  { id: "wordmark", name: "Wordmark", glyph: "󰊄", meta: "your art, redrawn", file: "savers/Wordmark.qml", kind: "native" },
+  { id: "clock",    name: "Clock",    glyph: "󰥔", meta: "time and date", file: "savers/Clock.qml",    kind: "native" },
+  { id: "matrix",   name: "Matrix rain", glyph: "󰘨", meta: "falling glyphs", file: "savers/Matrix.qml", kind: "native" },
+  { id: "blank",    name: "Blank",    glyph: "󰹏", meta: "black, saves power", file: "savers/Blank.qml",  kind: "native" },
+  { id: "terminal", name: "Original", glyph: "󰆍", meta: "Omarchy's own", file: "", thumb: "savers/Wordmark.qml", kind: "external" }
 ]
 
 // Every saver the user can pick: the built-ins, then their own (imported

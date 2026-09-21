@@ -147,9 +147,10 @@ The sliders write `idle.screensaver` and `idle.lock` in
 `~/.config/omarchy/shell.json` — the same keys the stock service reads, so
 nothing forks. Both are seconds from the moment you went idle. The lock switch
 is Stelline's own: off keeps the screensaver and never locks on idle (the stock
-service cannot do that). The hero toggle turns the screensaver stage off while
-leaving the lock alone. `omarchy toggle screensaver` is honoured for the idle
-screensaver and ignored by previews, as in stock.
+service cannot do that). The switch at the top of the panel *is* Omarchy's own
+screensaver toggle — the same flag as *Trigger › Toggle › Screensaver* and
+`omarchy toggle screensaver` — so the two never disagree: off means no idle
+screensaver, lock left alone, previews still work, as in stock.
 
 ## When a saver plays
 
