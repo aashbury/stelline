@@ -20,7 +20,12 @@ Item {
   readonly property color bg: settings && settings.background === "black" ? "black" : Color.background
   readonly property color accent: Color.accent
 
-  readonly property string artPath: Quickshell.env("HOME") + "/.config/omarchy/branding/screensaver.txt"
+  // On its tile the Wordmark shows art of its own (the tile sets `thumbArt`),
+  // so it cannot be mistaken for the Original, whose tile shows the branding
+  // file the stock saver plays. Full screen it always draws the branding file.
+  property string thumbArt: ""
+  readonly property string brandingPath: Quickshell.env("HOME") + "/.config/omarchy/branding/screensaver.txt"
+  readonly property string artPath: thumbnail && thumbArt !== "" ? thumbArt : brandingPath
   property string art: ""
 
   // `cycle` (the default) plays a different effect every `holdSec`, drawn at

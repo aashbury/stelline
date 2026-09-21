@@ -6,14 +6,17 @@ var PLUGIN_ID = "io.github.aashbury.stelline"
 
 // Static saver metadata. The picker reads this list; savers are only
 // instantiated by the overlay when they are actually shown.
+// The stock saver first and as the default: installing Stelline changes
+// nothing until you choose. `meta` is the line under the name on a tile with
+// no rule to report, so it has to fit a tile: about twenty characters. The
+// Wordmark's tile shows its own art (`thumbArt`) so it cannot be mistaken for
+// the Original, which shows the same branding file the stock saver plays.
+var DEFAULT_SAVER = "terminal"
 var SAVERS = [
-  // `meta` is the line under the name on a tile with no rule to report, so
-  // it has to fit a tile: about twenty characters.
-  { id: "wordmark", name: "Wordmark", glyph: "󰊄", meta: "your art, redrawn", file: "savers/Wordmark.qml", kind: "native" },
+  { id: "terminal", name: "Original", glyph: "󰆍", meta: "Omarchy's own", file: "", thumb: "savers/Wordmark.qml", kind: "external" },
+  { id: "wordmark", name: "Wordmark", glyph: "󰊄", meta: "your art, redrawn", file: "savers/Wordmark.qml", thumbArt: "savers/stelline.txt", kind: "native" },
   { id: "clock",    name: "Clock",    glyph: "󰥔", meta: "time and date", file: "savers/Clock.qml",    kind: "native" },
-  { id: "matrix",   name: "Matrix rain", glyph: "󰘨", meta: "falling glyphs", file: "savers/Matrix.qml", kind: "native" },
-  { id: "blank",    name: "Blank",    glyph: "󰹏", meta: "black, saves power", file: "savers/Blank.qml",  kind: "native" },
-  { id: "terminal", name: "Original", glyph: "󰆍", meta: "Omarchy's own", file: "", thumb: "savers/Wordmark.qml", kind: "external" }
+  { id: "blank",    name: "Blank",    glyph: "󰹏", meta: "black, saves power", file: "savers/Blank.qml",  kind: "native" }
 ]
 
 // Every saver the user can pick: the built-ins, then their own (imported
@@ -59,15 +62,14 @@ function nextSaver(cfg, current, userSavers) {
 
 function defaults() {
   return {
-    saver: "wordmark",
+    saver: DEFAULT_SAVER,
     shuffle: false,
-    shuffleFrom: ["wordmark", "clock", "matrix"],
+    shuffleFrom: ["wordmark", "clock"],
     screensaverEnabled: true,
     lockEnabled: true,
     savers: {
       wordmark: { effect: "cycle", effects: ["reveal", "typewriter", "pulse"], holdSec: 15, background: "theme" },
       clock: { format: "HH:mm", showDate: true, showSeconds: false },
-      matrix: { density: 0.6, fps: 15, glyphs: "katakana" },
       blank: {},
       terminal: { effects: [] }
     },
@@ -160,7 +162,7 @@ function mergeSettings(entry, userSavers) {
   }
   // An unknown default saver (typo, or a user saver deleted from disk) falls
   // back to the wordmark — but only once the user savers are known.
-  if (!saverById(out.saver, userSavers)) out.saver = "wordmark"
+  if (!saverById(out.saver, userSavers)) out.saver = DEFAULT_SAVER
   return out
 }
 
@@ -550,7 +552,7 @@ function pickSaver(cfg, situation, last, random, userSavers) {
   var c = cfg || defaults()
   var ready = function(id) { var s = saverById(id, userSavers); return !!s && !(s.series && s.series.importing) }
   if (isPlainObject(situation) && situation.saver && ready(situation.saver)) return situation.saver
-  if (!c.shuffle) return ready(c.saver) ? c.saver : "wordmark"
+  if (!c.shuffle) return ready(c.saver) ? c.saver : DEFAULT_SAVER
   var ids = rotation(c, userSavers)
   var pool = ids.filter(function(id) { return id !== last })
   if (pool.length === 0) pool = ids
@@ -1088,7 +1090,7 @@ function playsLabel(cfg, saverId, userSavers) {
 function forgetSaver(cfg, saverId) {
   var c = cloneJson(cfg)
   var patch = {}
-  if (c.saver === saverId) patch.saver = "wordmark"
+  if (c.saver === saverId) patch.saver = DEFAULT_SAVER
   if (Array.isArray(c.shuffleFrom) && c.shuffleFrom.indexOf(saverId) !== -1) patch.shuffleFrom = c.shuffleFrom.filter(function(id) { return id !== saverId })
   if (Array.isArray(c.situations) && c.situations.some(function(s) { return isPlainObject(s) && s.saver === saverId })) {
     patch.situations = c.situations.map(function(s) {
@@ -1126,6 +1128,7 @@ if (typeof module !== "undefined") {
     effectiveTimeouts: effectiveTimeouts,
     firstTimeout: firstTimeout,
     pickSaver: pickSaver,
+    DEFAULT_SAVER: DEFAULT_SAVER,
     TTFX_EFFECTS: TTFX_EFFECTS,
     hhmm: hhmm,
     inWindow: inWindow,

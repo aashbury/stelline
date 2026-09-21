@@ -241,48 +241,6 @@ Column {
     }
   }
 
-  // ---- matrix ----
-  Column {
-    visible: root.saverId === "matrix"
-    width: parent.width - root.leftPadding - root.rightPadding
-    spacing: Style.space(8)
-    SliderRow {
-      width: parent.width
-      bar: root.bar
-      label: "Density"
-      value: Math.round((Number(root.settings.density) || 0.6) * 100)
-      minimum: 10
-      maximum: 100
-      step: 10
-      format: root.pct
-      foreground: root.foreground
-      fontFamily: root.fontFamily
-      onReleased: function(v) { root.patched({ density: Math.round(v) / 100 }) }
-    }
-    SliderRow {
-      width: parent.width
-      bar: root.bar
-      label: "Speed"
-      value: Number(root.settings.fps) || 15
-      minimum: 6
-      maximum: 30
-      step: 2
-      format: root.fps
-      foreground: root.foreground
-      fontFamily: root.fontFamily
-      onReleased: function(v) { root.patched({ fps: Math.round(v) }) }
-    }
-    Text { textFormat: Text.PlainText; text: "Characters · slower on battery"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
-    ButtonGroup {
-      options: ["katakana", "ascii", "binary"]
-      value: root.settings.glyphs || "katakana"
-      foreground: root.foreground
-      fontFamily: root.fontFamily
-      focusable: false
-      onChanged: function(v) { root.patched({ glyphs: v }) }
-    }
-  }
-
   // ---- terminal ----
   Column {
     visible: root.saverId === "terminal"

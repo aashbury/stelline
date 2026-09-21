@@ -4,7 +4,7 @@ const M = require("../StellineModel.js")
 
 test("defaults pick the wordmark with no rules at all", () => {
   const d = M.defaults()
-  assert.equal(d.saver, "wordmark")
+  assert.equal(d.saver, "terminal")
   assert.deepEqual(d.situations, [])
 })
 
@@ -16,16 +16,16 @@ test("findEntry walks bar layout sections and plugins[]", () => {
 })
 
 test("mergeSettings coerces strings from `omarchy bar set` and merges per-saver objects", () => {
-  const cfg = M.mergeSettings({ saver: "matrix", shuffle: "true", savers: { matrix: { fps: "12" } } })
-  assert.equal(cfg.saver, "matrix")
+  const cfg = M.mergeSettings({ saver: "clock", shuffle: "true", savers: { clock: { showSeconds: "true" } } })
+  assert.equal(cfg.saver, "clock")
   assert.equal(cfg.shuffle, true)
-  assert.equal(cfg.savers.matrix.fps, 12)
-  assert.equal(cfg.savers.matrix.density, 0.6)
+  assert.equal(cfg.savers.clock.showSeconds, true)
+  assert.equal(cfg.savers.clock.format, "HH:mm")
   assert.equal(cfg.savers.clock.format, "HH:mm")
 })
 
 test("mergeSettings falls back to wordmark for an unknown saver", () => {
-  assert.equal(M.mergeSettings({ saver: "nope" }).saver, "wordmark")
+  assert.equal(M.mergeSettings({ saver: "nope" }).saver, "terminal")
 })
 
 test("fullSettings applies a patch and always carries the id", () => {
@@ -36,7 +36,7 @@ test("fullSettings applies a patch and always carries the id", () => {
 })
 
 test("rotation is every native saver, or the shuffle set when shuffle is on", () => {
-  assert.deepEqual(M.rotation(M.defaults()), ["wordmark", "clock", "matrix", "blank"])
+  assert.deepEqual(M.rotation(M.defaults()), ["wordmark", "clock", "blank"])
   assert.deepEqual(M.rotation(M.mergeSettings({ shuffle: true, shuffleFrom: ["clock", "terminal", "nope"] })), ["clock"])
   assert.equal(M.nextSaver(M.defaults(), "blank"), "wordmark")
   assert.equal(M.nextSaver(M.defaults(), "unknown"), "wordmark")
@@ -64,10 +64,10 @@ test("effectiveTimeouts reads shell.json, honours the lock switch and situation 
 test("pickSaver: situation wins, then the chosen saver, then a shuffle that avoids repeats", () => {
   const d = M.defaults()
   assert.equal(M.pickSaver(d, { saver: "blank" }, "wordmark", 0), "blank")
-  assert.equal(M.pickSaver(d, null, "wordmark", 0), "wordmark")
-  const sh = M.mergeSettings({ shuffle: true, shuffleFrom: ["clock", "matrix"] })
-  assert.equal(M.pickSaver(sh, null, "clock", 0.99), "matrix")
-  assert.equal(M.pickSaver(sh, null, "matrix", 0.0), "clock")
+  assert.equal(M.pickSaver(d, null, "terminal", 0), "terminal")
+  const sh = M.mergeSettings({ shuffle: true, shuffleFrom: ["clock", "blank"] })
+  assert.equal(M.pickSaver(sh, null, "clock", 0.99), "blank")
+  assert.equal(M.pickSaver(sh, null, "blank", 0.0), "clock")
   const one = M.mergeSettings({ shuffle: true, shuffleFrom: ["clock"] })
   assert.equal(M.pickSaver(one, null, "clock", 0.5), "clock")
 })
@@ -78,7 +78,7 @@ test("situations: battery, night (wrapping midnight) and theme; first enabled ma
     { id: "a", enabled: false, when: { battery: {} }, saver: "blank" },
     { id: "b", enabled: true, when: { battery: { below: 30 } }, saver: "blank" },
     { id: "c", enabled: true, when: { night: { from: "22:00", to: "07:00" } }, saver: "clock" },
-    { id: "d", enabled: true, when: { theme: { name: "Hackerman" } }, saver: "matrix" }
+    { id: "d", enabled: true, when: { theme: { name: "Hackerman" } }, saver: "blank" }
   ]
   assert.equal(M.activeSituation(list, ctx).id, "c")
   assert.equal(M.activeSituation(list, { ...ctx, minuteOfDay: 12 * 60 }).id, "d")
@@ -199,13 +199,13 @@ test("parseScan turns saver folders into picker entries and rejects bad ids", ()
   assert.equal(M.saverById("acme-co", list).name, "Acme Co.")
   assert.equal(M.saverFile("acme-co", list), "savers/Series.qml")
   assert.equal(M.saverById("acme-co"), null)
-  assert.deepEqual(M.rotation(M.defaults(), list), ["wordmark", "clock", "matrix", "blank", "acme-co", "clip", "dance", "photos"])
+  assert.deepEqual(M.rotation(M.defaults(), list), ["wordmark", "clock", "blank", "acme-co", "clip", "dance", "photos"])
   assert.equal(M.mergeSettings({ saver: "acme-co" }, list).saver, "acme-co")
-  assert.equal(M.mergeSettings({ saver: "acme-co" }).saver, "wordmark")
+  assert.equal(M.mergeSettings({ saver: "acme-co" }).saver, "terminal")
   assert.equal(M.mergeSettings({ savers: { "acme-co": { dwellSec: 5 } } }).savers["acme-co"].dwellSec, 5)
   // an importing saver is never picked
-  assert.equal(M.pickSaver(M.mergeSettings({ saver: "half" }, list), null, "", 0, list), "wordmark")
-  assert.equal(M.pickSaver(M.defaults(), { saver: "half" }, "", 0, list), "wordmark")
+  assert.equal(M.pickSaver(M.mergeSettings({ saver: "half" }, list), null, "", 0, list), "terminal")
+  assert.equal(M.pickSaver(M.defaults(), { saver: "half" }, "", 0, list), "terminal")
   assert.equal(M.pickSaver(M.defaults(), { saver: "dance" }, "", 0, list), "dance")
 })
 
@@ -286,9 +286,9 @@ test("rules: one per saver, conditions AND together, last one off removes it, la
   list = M.setRuleCondition(list, "dance", "battery", false, ctx)
   assert.deepEqual(list, [])
   // a disabled rule left over from Advanced reads as no conditions; enabling one starts clean
-  const stale = [{ id: "x", enabled: false, when: { theme: { name: "hackerman" }, battery: {} }, saver: "matrix" }]
+  const stale = [{ id: "x", enabled: false, when: { theme: { name: "hackerman" }, battery: {} }, saver: "clock" }]
   assert.ok(!M.ruleHas(stale[0], "theme"))
-  const on = M.setRuleCondition(stale, "matrix", "night", true, ctx)
+  const on = M.setRuleCondition(stale, "clock", "night", true, ctx)
   assert.deepEqual(Object.keys(on[0].when), ["night"])
   assert.equal(on[0].enabled, true)
   // second saver's rule appends after the first
@@ -297,17 +297,17 @@ test("rules: one per saver, conditions AND together, last one off removes it, la
   // labels
   const cfg = M.mergeSettings({ saver: "blank", situations: on })
   assert.equal(M.playsLabel(cfg, "blank"), "usually plays")
-  assert.equal(M.playsLabel(cfg, "matrix"), "night 22:00–07:00")
-  assert.equal(M.playsLabel(cfg, "clock"), "")
-  const both = M.mergeSettings({ saver: "matrix", situations: on })
-  assert.equal(M.playsLabel(both, "matrix"), "usually · night 22:00–07:00")
-  const sh = M.mergeSettings({ shuffle: true, shuffleFrom: ["clock"], situations: on })
-  assert.equal(M.playsLabel(sh, "clock"), "in the shuffle")
+  assert.equal(M.playsLabel(cfg, "clock"), "night 22:00–07:00")
+  assert.equal(M.playsLabel(cfg, "wordmark"), "")
+  const both = M.mergeSettings({ saver: "clock", situations: on })
+  assert.equal(M.playsLabel(both, "clock"), "usually · night 22:00–07:00")
+  const sh = M.mergeSettings({ shuffle: true, shuffleFrom: ["wordmark"], situations: on })
+  assert.equal(M.playsLabel(sh, "wordmark"), "in the shuffle")
   assert.equal(M.playsLabel(sh, "blank"), "")
   // forgetting a saver clears every reference
   const fake = [{ id: "dance", name: "Dance", kind: "series", file: "savers/Series.qml", series: {} }]
   const patch = M.forgetSaver(M.mergeSettings({ saver: "dance", shuffleFrom: ["dance", "clock"], situations: [{ id: "r", enabled: true, when: { night: {} }, saver: "dance" }, { id: "t", enabled: true, when: { battery: {} }, saver: "dance", screensaver: 60 }], savers: { dance: { fps: 3 } } }, fake), "dance")
-  assert.equal(patch.saver, "wordmark")
+  assert.equal(patch.saver, "terminal")
   assert.deepEqual(patch.shuffleFrom, ["clock"])
   assert.deepEqual(patch.situations, [{ id: "t", enabled: true, when: { battery: {} }, screensaver: 60 }])
   assert.equal(patch.savers.dance, undefined)

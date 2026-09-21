@@ -2,15 +2,15 @@
 
 A native screensaver manager for [Omarchy](https://omarchy.org) 4 (Quattro).
 
-Stelline draws the screensaver inside the Omarchy shell — your branding in the
-theme's colours with the effects the stock saver is known for, a clock, digital
-rain, nothing at all, or **your own**: whatever you copied, pictures, a folder
+Stelline keeps Omarchy's own screensaver as the default and adds to it — your
+branding redrawn in the theme's colours, a digital clock, nothing at all, or
+**your own**: whatever you copied, pictures, a folder
 of them, a video clip, some text, or a description, turned into ASCII art in your theme's colours (or
 shown as they are). A grid of tiles, one click to choose, and a rule per tile —
 at night, on battery, with a theme — for when each one plays. Timings, a
 shuffle, and a quiet corner card that tells you what arrived while you were
-away and whether an agent is waiting for you. The stock terminal screensaver
-stays available, with the `ttfx` effects you pin.
+away and whether an agent is waiting for you. Until you choose otherwise,
+what plays is the stock screensaver, untouched.
 
 ![Stelline](preview.png)
 
@@ -94,11 +94,10 @@ that does not parse, and the toggle removes exactly those lines again.
 
 | | |
 |---|---|
+| **Original** | Omarchy's own screensaver, exactly as it ships and the default: `ttfx` in your terminal, cycling through its 37 effects at random. Choose a subset in ⚙ — with a choice, Stelline starts the terminal itself running a copy of Omarchy's loop with `--include-effects`; without, it runs the stock launcher untouched. Its ⚙ also has the same three artwork edits as *Style › Screensaver* (a picture, the text, back to the logo). |
 | **Wordmark** | `~/.config/omarchy/branding/screensaver.txt` — the same art the stock screensaver shows, set through *Style › Screensaver* — drawn as whole-pixel cells in the theme's foreground colour, with an entrance effect drawn at random every few seconds (pin some in ⚙): `decrypt`, `rain`, `beams`, `scatter`, `wipe`, `typewriter`, `reveal`, `pulse`. Edits show up live. |
-| **Clock** | Time and date in the terminal font; repaints once a minute unless you turn seconds on. |
-| **Matrix rain** | Heads in the foreground colour, trails in the accent; density, frame rate and glyph set are settings. Frame rate halves on battery. |
+| **Clock** | Seven-segment digits built from block characters, the colon blinking in the accent, the date in small wide-tracked capitals beneath. Repaints only when the text changes. |
 | **Blank** | Black. Exists so a battery rule has somewhere free to point. |
-| **Original** | Omarchy's own screensaver, exactly as it ships: `ttfx` in your terminal, cycling through its 37 effects at random. Choose a subset in ⚙ — with a choice, Stelline starts the terminal itself running a copy of Omarchy's loop with `--include-effects`; without, it runs the stock launcher untouched. Its ⚙ also has the same three artwork edits as *Style › Screensaver* (a picture, the text, back to the logo), shown live by Wordmark. |
 
 Every saver drifts a few pixels every half minute. Colours follow the theme
 live; the font is the shell's monospace font.
@@ -197,17 +196,16 @@ be base64 (Quickshell's IPC splits arguments on commas):
 
 ```sh
 omarchy-shell stelline set saver '"clock"'
-omarchy-shell stelline set64 shuffleFrom "$(printf '["clock","matrix"]' | base64 -w0)"
+omarchy-shell stelline set64 shuffleFrom "$(printf '["clock","blank"]' | base64 -w0)"
 ```
 
 Defaults:
 
 ```json
-{ "saver": "wordmark", "shuffle": false, "shuffleFrom": ["wordmark", "clock", "matrix"],
+{ "saver": "terminal", "shuffle": false, "shuffleFrom": ["wordmark", "clock"],
   "screensaverEnabled": true, "lockEnabled": true,
   "savers": { "wordmark": { "effect": "cycle", "effects": [], "holdSec": 15, "background": "theme" },
               "clock": { "format": "HH:mm", "showDate": true, "showSeconds": false },
-              "matrix": { "density": 0.6, "fps": 15, "glyphs": "katakana" },
               "blank": {}, "terminal": { "effects": [] } },
   "situations": [], "card": { "enabled": true, "corner": "bottom-right", "detail": "counts", "showAgent": true, "maxApps": 4 },
   "integration": { "menuEntry": false } }

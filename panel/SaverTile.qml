@@ -82,6 +82,8 @@ CursorSurface {
         onLoaded: {
           item.service = root.svc
           if ("thumbnail" in item) item.thumbnail = true
+          if ("thumbArt" in item && root.saver && root.saver.thumbArt)
+            item.thumbArt = String(Qt.resolvedUrl("../" + root.saver.thumbArt)).replace(/^file:\/\//, "")
           item.settings = Qt.binding(function() {
             var all = root.svc ? root.svc.cfg.savers : null
             return all && all[root.saver.id] ? all[root.saver.id] : ({})
