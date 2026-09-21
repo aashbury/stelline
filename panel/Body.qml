@@ -68,8 +68,10 @@ Column {
   readonly property int rowStayAwake: 1
   readonly property int rowScreensaver: 2
   readonly property int rowLock: 3
-  readonly property int rowPreview: 4
-  readonly property int rowTileFirst: 5
+  readonly property bool hasDockedRow: svc ? svc.isLaptop === true : false
+  readonly property int rowDockedLock: hasDockedRow ? 4 : -1
+  readonly property int rowPreview: hasDockedRow ? 5 : 4
+  readonly property int rowTileFirst: rowPreview + 1
   readonly property int tileCount: shownSavers.length + (gridCapped ? 1 : 0) + 1
   readonly property int rowMore: gridCapped ? rowTileFirst + shownSavers.length : -1
   readonly property int rowShuffle: rowTileFirst + tileCount
@@ -88,6 +90,7 @@ Column {
     if (index === rowShuffle) return shuffleToggle
     if (index === rowScreensaver) return screensaverRow
     if (index === rowLock) return lockRow
+    if (index === rowDockedLock) return dockedLockRow
 
     if (index === rowRules) return advanced.children[0]
     if (index === rowAway) return advanced.children[1]
@@ -201,6 +204,7 @@ Column {
     else if (inTiles(cursorIndex)) { var id = cursorSaverId(); if (id === "") startAdd(); else chooseSaver(id) }
     else if (cursorIndex === rowShuffle) toggleShuffle()
     else if (cursorIndex === rowLock) setStage("lockEnabled", !cfg.lockEnabled)
+    else if (cursorIndex === rowDockedLock) svc.setDockedNoLock(!svc.dockedNoLock)
     else if (cursorIndex === rowRules) toggleSection("rules")
     else if (cursorIndex === rowAway) toggleSection("away")
     else if (cursorIndex === rowShortcuts) toggleSection("shortcuts")
@@ -343,9 +347,9 @@ Column {
     title: "Stelline"
     meta: root.serviceOk
       ? (root.stayAwake ? "staying awake"
-        : (!root.screensaverOn ? "screensaver off" + (root.cfg.lockEnabled ? ", lock at " + root.minutes(root.lockSeconds) : ", no lock")
+        : (!root.screensaverOn ? "screensaver off" + (root.svc.lockStageEnabled ? ", lock at " + root.minutes(root.lockSeconds) : ", no lock")
         : root.saver.name.toLowerCase() + " after " + root.minutes(root.screensaverSeconds)
-          + (root.cfg.lockEnabled ? ", lock at " + root.minutes(root.lockSeconds) : ", no lock")
+          + (root.svc.lockStageEnabled ? ", lock at " + root.minutes(root.lockSeconds) : ", no lock")
           + (root.svc.situation ? " · " + M.situationLabel(root.svc.situation).toLowerCase() : "")))
       : "not running yet — restart the shell"
     foreground: root.foreground
@@ -402,7 +406,8 @@ Column {
     Text {
       anchors.baseline: parent.children[0].baseline
       textFormat: Text.PlainText
-      text: "how long after you stop"
+      text: "how long after you stop" + (root.svc && root.svc.situation && M.situationEffect(root.svc.situation, root.userSavers) !== ""
+        ? " · now: " + M.situationEffect(root.svc.situation, root.userSavers) + " (" + M.situationLabel(root.svc.situation).toLowerCase() + ")" : "")
       color: root.dim
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
@@ -444,6 +449,22 @@ Column {
     onReleased: function(v) { root.setSeconds("lock", v) }
     onSwitchToggled: root.setStage("lockEnabled", !root.cfg.lockEnabled)
     onHovered: function(h) { root.hoverRow(root.rowLock, h) }
+  }
+
+  // The lock's one common exception, where you look when the lock bothers
+  // you. Underneath it is an ordinary rule — Rules shows it too.
+  SwitchRow {
+    id: dockedLockRow
+    visible: root.hasDockedRow
+    width: parent.width
+    label: "Never lock while docked"
+    description: root.svc && root.svc.docked ? "A monitor is plugged in — that's now" : "A monitor is plugged in"
+    checked: root.svc ? root.svc.dockedNoLock === true : false
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    hasCursor: root.cursorActive && root.cursorIndex === root.rowDockedLock
+    onClicked: if (root.svc) root.svc.setDockedNoLock(!checked)
+    onHovered: function(h) { root.hoverRow(root.rowDockedLock, h) }
   }
 
   PanelSeparator { width: parent.width; foreground: root.foreground }

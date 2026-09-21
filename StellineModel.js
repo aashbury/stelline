@@ -350,14 +350,50 @@ function situationEffect(s, userSavers) {
   var parts = []
   var saver = s.saver ? saverById(s.saver, userSavers) : null
   if (saver) parts.push(saver.name)
+  // Timings read as sentences, not a fraction: "never locks", "screensaver
+  // 1:30 · lock 3:00". Only what the rule actually changes is mentioned.
   var hasScr = s.screensaver !== undefined && s.screensaver !== null && s.screensaver !== ""
   var hasLock = s.lock !== undefined && s.lock !== null && s.lock !== ""
-  if (hasScr || hasLock) {
-    var scr = hasScr ? mmss(s.screensaver) : "—"
-    var lock = hasLock ? (s.lock === "never" ? "never" : mmss(s.lock)) : "—"
-    parts.push(scr + " / " + lock)
-  }
+  if (hasScr) parts.push("screensaver " + mmss(s.screensaver))
+  if (hasLock) parts.push(s.lock === "never" ? "never locks" : "lock " + mmss(s.lock))
   return parts.join(" · ")
+}
+
+// The one docked rule most people want — "at the desk, never lock" — as a
+// switch rather than a rule to compose: a timings-only rule whose only
+// condition is docked and whose only effect is never locking. It lives in
+// the same list as every other rule, so Rules shows it and per-saver docked
+// rules stay possible.
+function dockedNoLockIndex(situations) {
+  if (!Array.isArray(situations)) return -1
+  for (var i = 0; i < situations.length; i++) {
+    var s = situations[i]
+    if (!isPlainObject(s) || !isPlainObject(s.when)) continue
+    var keys = Object.keys(s.when)
+    if (keys.length !== 1 || keys[0] !== "docked") continue
+    if (s.saver) continue
+    if (s.lock !== "never") continue
+    if (s.screensaver !== undefined && s.screensaver !== null && s.screensaver !== "") continue
+    return i
+  }
+  return -1
+}
+
+function dockedNoLock(situations) {
+  var at = dockedNoLockIndex(situations)
+  return at !== -1 && situations[at].enabled === true
+}
+
+function setDockedNoLock(situations, on) {
+  var list = Array.isArray(situations) ? cloneJson(situations) : []
+  var at = dockedNoLockIndex(list)
+  if (on) {
+    if (at === -1) list.push({ id: "docked-no-lock", enabled: true, when: { docked: {} }, lock: "never" })
+    else list[at].enabled = true
+  } else if (at !== -1) {
+    list.splice(at, 1)
+  }
+  return list
 }
 
 function mmss(seconds) {
@@ -1295,6 +1331,9 @@ if (typeof module !== "undefined") {
     deleteScript: deleteScript,
     RULE_KEYS: RULE_KEYS,
     isDocked: isDocked,
+    dockedNoLockIndex: dockedNoLockIndex,
+    dockedNoLock: dockedNoLock,
+    setDockedNoLock: setDockedNoLock,
     ruleIndexFor: ruleIndexFor,
     ruleFor: ruleFor,
     ruleHas: ruleHas,

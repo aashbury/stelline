@@ -68,7 +68,10 @@ CursorSurface {
     integer: true
     value: root.value
     opacity: root.showSwitch && !root.switchChecked ? 0.4 : 1
-    onReleased: function(v) { root.released(v) }
+    // A drag lands on any whole second; the row's own step is what the
+    // keyboard and the wheel move by, so a drag should land there too — a
+    // screensaver delay of 3:16 is not a setting anyone meant.
+    onReleased: function(v) { root.released(Math.max(root.minimum, Math.min(root.maximum, Math.round(v / root.step) * root.step))) }
   }
 
   Text {

@@ -29,8 +29,10 @@ Column {
   function isOpen(name) { return body ? body.openSection === name : false }
   function cursorOn(row) { return body ? body.cursorActive && body.cursorIndex === row : false }
   function ruleLabel(s) {
-    var who = s.saver ? (M.saverById(s.saver, root.userSavers) || { name: s.saver }).name : "Timings"
-    return who + " " + M.situationLabel(s).toLowerCase()
+    // A saver rule names the saver; a timings-only rule says what it does:
+    // "Docked → never locks".
+    if (s.saver) return (M.saverById(s.saver, root.userSavers) || { name: s.saver }).name + " " + M.situationLabel(s).toLowerCase()
+    return M.situationLabel(s) + " → " + (M.situationEffect(s, root.userSavers) || "no change")
   }
 
   // What each row says while closed. One rule reads out in full; more than

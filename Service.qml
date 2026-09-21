@@ -381,6 +381,21 @@ Item {
     return names
   }
   readonly property bool docked: M.isDocked(screenNames)
+
+  // Only a laptop docks. Asked once, the way Omarchy's own menu asks.
+  property bool isLaptop: false
+  Process {
+    id: laptopProbe
+    command: ["omarchy-hw-laptop"]
+    running: true
+    onExited: function(exitCode) { root.isLaptop = exitCode === 0; root.logEvent("hardware", root.isLaptop ? "laptop" : "not a laptop") }
+  }
+
+  // The "never lock while docked" switch: a rule underneath, a switch on top.
+  readonly property bool dockedNoLock: M.dockedNoLock(cfg.situations)
+  function setDockedNoLock(on) {
+    return writeSettings({ situations: M.setDockedNoLock(root.cfg.situations, !!on) }) ? "ok" : "failed"
+  }
   onDockedChanged: logEvent("docked", docked ? "external monitor active" : "laptop panel only")
   readonly property var situationContext: ({ onBattery: onBattery, batteryPercent: batteryPercent, minuteOfDay: minuteOfDay, themeName: themeName, docked: docked })
   readonly property var situation: M.activeSituation(cfg.situations, situationContext)
@@ -1238,6 +1253,7 @@ Item {
       return root.writeSettings(patch) ? "ok" : "failed"
     }
     function setScreensaverOff(off: string): string { return root.setScreensaverOff(String(off) === "true" || String(off) === "on") }
+    function setDockedNoLock(on: string): string { return root.setDockedNoLock(String(on) === "true" || String(on) === "on") }
 
     function setTimeout(stage: string, seconds: string): string {
       return root.writeIdleSeconds(stage, seconds) ? "ok" : "failed"

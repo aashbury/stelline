@@ -91,7 +91,7 @@ test("situations: battery, night (wrapping midnight) and theme; first enabled ma
   assert.equal(M.hhmm("25:00"), -1)
   assert.equal(M.situationLabel(list[1]), "Battery below 30%")
   assert.equal(M.situationLabel(list[2]), "Night 22:00–07:00")
-  assert.equal(M.situationEffect({ saver: "blank", screensaver: 90, lock: 180 }), "Blank · 1:30 / 3:00")
+  assert.equal(M.situationEffect({ saver: "blank", screensaver: 90, lock: 180 }), "Blank · screensaver 1:30 · lock 3:00")
   assert.equal(M.situationEffect({ saver: "clock" }), "Clock")
   assert.equal(M.TTFX_EFFECTS.length, 37)
 })
@@ -398,4 +398,30 @@ test("docked: an external output makes the rule hold, the laptop panel alone doe
   // and the timings a docked rule carries are honoured: never lock at the desk
   const eff = M.effectiveTimeouts({ screensaver: 30, lock: 300 }, M.mergeSettings({ situations: [rule] }), rule)
   assert.equal(eff.lockEnabled, false)
+})
+
+test("never-lock-while-docked is a switch over an ordinary rule", () => {
+  const off = M.setDockedNoLock([], true)
+  assert.deepEqual(off, [{ id: "docked-no-lock", enabled: true, when: { docked: {} }, lock: "never" }])
+  assert.equal(M.dockedNoLock(off), true)
+  // idempotent on, and a disabled copy is switched back on rather than duplicated
+  assert.equal(M.setDockedNoLock(off, true).length, 1)
+  const disabled = M.cloneJson(off); disabled[0].enabled = false
+  assert.equal(M.dockedNoLock(disabled), false)
+  assert.equal(M.setDockedNoLock(disabled, true)[0].enabled, true)
+  // off removes exactly that rule and leaves the rest alone
+  const others = [{ id: "n", enabled: true, when: { night: { from: "22:00", to: "07:00" } }, saver: "clock" }]
+  assert.deepEqual(M.setDockedNoLock(others.concat(off), false), others)
+  // a per-saver docked rule, or a docked rule that also changes the screensaver, is not the switch
+  assert.equal(M.dockedNoLock([{ id: "x", enabled: true, when: { docked: {} }, saver: "clock", lock: "never" }]), false)
+  assert.equal(M.dockedNoLock([{ id: "y", enabled: true, when: { docked: {} }, lock: "never", screensaver: 90 }]), false)
+  // it reads as a sentence everywhere it is shown
+  assert.equal(M.situationEffect(off[0]), "never locks")
+  assert.equal(M.situationEffect({ screensaver: 90, lock: 180 }), "screensaver 1:30 · lock 3:00")
+  assert.equal(M.situationEffect({ screensaver: 90 }), "screensaver 1:30")
+  // and the effective timeline drops the lock while it applies
+  const cfg = M.mergeSettings({ situations: off })
+  const eff = M.effectiveTimeouts({ screensaver: 30, lock: 300 }, cfg, M.activeSituation(cfg.situations, { docked: true }))
+  assert.equal(eff.lockEnabled, false)
+  assert.equal(eff.screensaver, 30)
 })
