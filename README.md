@@ -66,7 +66,8 @@ each. A gallery past four rows keeps four and ends in a **Show all** tile.
 | bar icon | right-click | toggle Stay awake (the coffee cup) |
 | bar icon | middle-click | preview the current saver |
 | panel | click a tile | make it the usual saver (with Shuffle on: check it in) |
-| panel | ⚙ on a tile | when it plays, how it looks, delete; for Wordmark and Original also the artwork |
+| panel | ⚙ on a tile | when it plays, how it looks, delete; for the Original also the artwork. The tile that plays keeps its ⚙ visible; every other tile shows it on hover |
+| panel | click another tile while a ⚙ panel is open | the panel follows to that tile |
 | panel | 󰅶 Stay awake | the coffee cup — top of the panel, same as Super+Ctrl+I |
 | panel | ▶ on a tile | preview it |
 | panel | the **Add** tile | a new saver from the clipboard, pictures, a folder, a clip, text or a description |

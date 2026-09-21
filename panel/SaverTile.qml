@@ -144,7 +144,9 @@ CursorSurface {
         anchors.top: parent.top
         anchors.margins: Style.space(2)
         spacing: 0
-        visible: root.hot && !root.plainTile && !root.importing
+        // Hovering reveals these on any tile, but the one that plays keeps
+        // them: a gear nobody can see is a gear nobody finds.
+        visible: (root.hot || root.open || (root.selected && !root.shuffleMode)) && !root.plainTile && !root.importing
         PanelActionButton {
           iconText: "󰐊"
           tooltipText: "Preview"

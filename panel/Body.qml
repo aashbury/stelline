@@ -238,6 +238,10 @@ Column {
     if (!svc) return
     var s = M.saverById(id, userSavers)
     if (s && s.series && (s.series.importing || s.series.error)) { toggleSettings(id); return }
+    // The panel below the grid is a detail view of a tile. Once it is open it
+    // has to follow the tile you touch, or it sits there editing something
+    // you stopped looking at.
+    if (openSettings !== "") openSettings = id
     if (cfg.shuffle) {
       var set = (cfg.shuffleFrom || []).slice()
       var at = set.indexOf(id)
