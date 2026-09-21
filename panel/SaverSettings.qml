@@ -52,13 +52,13 @@ Column {
       Text {
         anchors.verticalCenter: parent.verticalCenter
         textFormat: Text.PlainText
-        text: root.pinned.length === 0 ? "Every effect plays in turn — click to pin some" : root.pinned.length + " of " + E.EFFECTS.length + " effects pinned"
+        text: root.pinned.length === 0 ? "All the effects, in turn — click the ones you want" : root.pinned.length + " of " + E.EFFECTS.length + " effects chosen"
         color: root.dim
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
       }
       Button {
-        text: "Clear"
+        text: "All of them"
         bordered: true
         visible: root.pinned.length > 0
         foreground: root.foreground
@@ -94,7 +94,7 @@ Column {
     SliderRow {
       width: parent.width
       bar: root.bar
-      label: root.isSeries ? "Each piece" : "Each effect"
+      label: root.isSeries ? "Each piece stays" : "Each effect stays"
       value: root.isSeries ? (Number(root.settings.dwellSec) || Number(root.series.dwellSec) || 12) : (Number(root.settings.holdSec) || 15)
       minimum: 5
       maximum: 60
@@ -139,7 +139,7 @@ Column {
       visible: root.isImage
       width: parent.width
       bar: root.bar
-      label: "Each picture"
+      label: "Each picture stays"
       value: Number(root.settings.dwellSec) || (root.series ? Number(root.series.dwellSec) : 0) || 12
       minimum: 5
       maximum: 60
@@ -262,7 +262,7 @@ Column {
     SliderRow {
       width: parent.width
       bar: root.bar
-      label: "Frame rate"
+      label: "Speed"
       value: Number(root.settings.fps) || 15
       minimum: 6
       maximum: 30
@@ -272,7 +272,7 @@ Column {
       fontFamily: root.fontFamily
       onReleased: function(v) { root.patched({ fps: Math.round(v) }) }
     }
-    Text { textFormat: Text.PlainText; text: "Glyphs · frame rate halves on battery"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
+    Text { textFormat: Text.PlainText; text: "Characters · slower on battery"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
     ButtonGroup {
       options: ["katakana", "ascii", "binary"]
       value: root.settings.glyphs || "katakana"
@@ -293,13 +293,13 @@ Column {
       Text {
         anchors.verticalCenter: parent.verticalCenter
         textFormat: Text.PlainText
-        text: root.pinned.length === 0 ? "All 37 ttfx effects play" : root.pinned.length + " of 37 effects pinned"
+        text: root.pinned.length === 0 ? "All 37 of Omarchy's effects, at random — click the ones you want" : root.pinned.length + " of 37 effects chosen"
         color: root.dim
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
       }
       Button {
-        text: "Clear"
+        text: "All of them"
         bordered: true
         visible: root.pinned.length > 0
         foreground: root.foreground

@@ -25,6 +25,7 @@ BorderSurface {
   readonly property bool hasRule: !!rule && rule.enabled === true
   readonly property var when: rule && rule.when ? rule.when : ({})
   readonly property bool usual: cfg.saver === saverId && !cfg.shuffle
+  readonly property bool showsBranding: saverId === "wordmark" || saverId === "terminal"
   property bool timingsOpen: false
   property bool deleteArmed: false
 
@@ -121,8 +122,8 @@ BorderSurface {
           anchors.baseline: parent.children[0].baseline
           textFormat: Text.PlainText
           text: root.usual
-            ? (root.hasRule ? "usually, and whenever the conditions below hold" : "usually — whenever no other saver's conditions hold")
-            : (root.hasRule ? "when all the conditions below hold" : (root.cfg.shuffle ? "in the shuffle, if checked" : "not scheduled — click its tile to make it the usual saver"))
+            ? (root.hasRule ? "usually, and whenever all of these are true" : "usually — whenever nothing else is due")
+            : (root.hasRule ? "whenever all of these are true" : (root.cfg.shuffle ? "in the shuffle, if checked" : "only if you switch something on below, or click its tile"))
           color: root.dim
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
@@ -231,7 +232,7 @@ BorderSurface {
       // Timings only make sense once there is a rule to hang them on.
       Button {
         visible: root.hasRule
-        text: "Also change the timings then"
+        text: "Different timings at those times"
         iconText: root.timingsOpen ? "󰅀" : "󰅂"
         leftAlign: true
         foreground: root.foreground
@@ -248,7 +249,7 @@ BorderSurface {
           spacing: Style.space(8)
           NumberField {
             id: screensaverField
-            label: "Screensaver after (s, 0 = keep)"
+            label: "Screensaver after (seconds)"
             value: root.rule && isFinite(Number(root.rule.screensaver)) && root.rule.screensaver !== null && root.rule.screensaver !== "" ? Number(root.rule.screensaver) : 0
             from: 0
             to: 3600
@@ -259,7 +260,7 @@ BorderSurface {
           }
           NumberField {
             id: lockField
-            label: "Lock after (s, 0 = keep)"
+            label: "Lock after (seconds)"
             enabled: !root.rule || root.rule.lock !== "never"
             value: root.rule && root.rule.lock !== "never" && isFinite(Number(root.rule.lock)) && root.rule.lock !== null && root.rule.lock !== "" ? Number(root.rule.lock) : 0
             from: 0
@@ -270,14 +271,41 @@ BorderSurface {
             onModified: function(v) { root.patchRule({ lock: v > 0 ? v : null }) }
           }
         }
+        Text { textFormat: Text.PlainText; text: "0 keeps the usual timing"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
         Toggle {
           width: parent.width - parent.leftPadding
-          label: "Never lock then"
+          label: "Don't lock at those times"
           checked: !!root.rule && root.rule.lock === "never"
           foreground: root.foreground
           fontFamily: root.fontFamily
           onClicked: root.patchRule({ lock: checked ? null : "never" })
         }
+      }
+    }
+
+    // ---- artwork: the branding file, same as Style › Screensaver ----
+    Column {
+      visible: root.showsBranding
+      width: parent.width
+      spacing: Style.space(6)
+      Row {
+        spacing: Style.space(8)
+        PanelSectionHeader { text: "ARTWORK"; foreground: root.foreground; fontFamily: root.fontFamily }
+        Text {
+          anchors.baseline: parent.children[0].baseline
+          textFormat: Text.PlainText
+          text: "shared by Wordmark and Original — the same art as Style › Screensaver"
+          color: root.dim
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.caption
+        }
+      }
+      Flow {
+        width: parent.width
+        spacing: Style.space(6)
+        Button { text: "Use a picture…"; iconText: "󰋩"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; tooltipText: "A PNG or SVG, turned into text art"; onClicked: if (root.svc) root.svc.brandingImage() }
+        Button { text: "Edit the text…"; iconText: "󰏫"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; tooltipText: "Opens the art in your editor"; onClicked: if (root.svc) root.svc.brandingText() }
+        Button { text: "Back to the Omarchy logo"; iconText: "󰕌"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: if (root.svc) root.svc.brandingReset() }
       }
     }
 

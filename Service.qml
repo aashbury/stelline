@@ -193,6 +193,27 @@ Item {
   }
   function summonPanel() { Quickshell.execDetached(["omarchy-shell", "shell", "summon", root.pluginId, "{}"]) }
 
+  // The screensaver artwork (~/.config/omarchy/branding/screensaver.txt) — the
+  // same file Style › Screensaver edits, shown by Wordmark and the Original.
+  // The same three edits as the stock menu, without its forced terminal preview:
+  // Wordmark shows the change live.
+  readonly property string brandingPath: home + "/.config/omarchy/branding/screensaver.txt"
+  function brandingImage() {
+    if (brandingProcess.running) return "busy"
+    runProcess(brandingProcess, "branding-image", "f=$(omarchy-file-select --title " + M.shellQuote("Pick a PNG or SVG for the screensaver") + " --extensions 'png svg') && omarchy-transcode-ascii \"$f\" " + M.shellQuote(root.brandingPath))
+    return "ok"
+  }
+  function brandingText() {
+    Quickshell.execDetached(["omarchy-launch-editor", root.brandingPath])
+    return "ok"
+  }
+  function brandingReset() {
+    if (brandingProcess.running) return "busy"
+    runProcess(brandingProcess, "branding-reset", "cp " + M.shellQuote(root.omarchyPath + "/logo.txt") + " " + M.shellQuote(root.brandingPath))
+    return "ok"
+  }
+  Process { id: brandingProcess; onExited: function(exitCode) { root.logEvent("process-exit", "branding exitCode=" + exitCode) } }
+
   // Who answers "Describe it": Omarchy's default coding agent (`omarchy
   // default agent`) when one is set and installed, else Claude Code, else the
   // API with a key. "" when nothing is there. Re-probed whenever the panel opens.
@@ -205,6 +226,8 @@ Item {
   }
 
   readonly property string home: Quickshell.env("HOME")
+  // Injected by the shell when it knows better; the env is the fallback.
+  property string omarchyPath: Quickshell.env("OMARCHY_PATH") || "/usr/share/omarchy"
   readonly property string stayAwakeStateDir: home + "/.local/state/omarchy/indicators"
   readonly property string stayAwakeStatePath: stayAwakeStateDir + "/stay-awake"
   readonly property int defaultScreensaverSeconds: 150
@@ -1122,6 +1145,12 @@ Item {
     }
     function deleteSaver(saverId: string): string { return root.deleteSaver(saverId) }
     function cancelAdd(): string { root.importDraft = null; return "ok" }
+    function branding(action: string): string {
+      if (action === "image") return root.brandingImage()
+      if (action === "text") return root.brandingText()
+      if (action === "reset") return root.brandingReset()
+      return "unknown-action"
+    }
     function rescan(): string { root.rescan(); return "ok" }
     function pick(kind: string): string { return root.pickFiles(kind) }
     function setRule(saverId: string, key: string, on: string): string {

@@ -29,7 +29,7 @@ Column {
     Text {
       anchors.baseline: parent.children[0].baseline
       textFormat: Text.PlainText
-      text: "every tile's rule, in priority order — the first that holds wins"
+      text: "every tile's rule, in order — the first one that fits wins"
       color: root.dim
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
@@ -68,37 +68,40 @@ Column {
     Text {
       visible: root.cfg.situations.length === 0
       textFormat: Text.PlainText
-      text: "No rules yet — the usual saver and timings always apply. Open a tile's gear to give it one."
+      text: "No rules yet — the usual saver always plays. Open a tile's gear to give it one."
       color: root.dim
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
     }
   }
 
-  Row {
-    spacing: Style.space(6)
+  Column {
+    width: parent.width
+    spacing: Style.space(4)
     Text {
-      anchors.verticalCenter: parent.verticalCenter
       textFormat: Text.PlainText
-      text: "A rule with no saver only changes the timings:"
+      text: "Or just change the timings at certain times:"
       color: root.dim
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
     }
+    Row {
+    spacing: Style.space(6)
     Button { text: "+ On battery"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: if (root.body) root.body.addSituation("battery") }
     Button { text: "+ Night"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: if (root.body) root.body.addSituation("night") }
     Button { text: "+ Theme"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: if (root.body) root.body.addSituation("theme") }
+    }
   }
 
   PanelSeparator { width: parent.width; foreground: root.foreground }
 
   // ---- status card ----
-  PanelSectionHeader { text: "STATUS CARD"; foreground: root.foreground; fontFamily: root.fontFamily }
+  PanelSectionHeader { text: "WHILE YOU'RE AWAY"; foreground: root.foreground; fontFamily: root.fontFamily }
 
   Toggle {
     width: parent.width
-    label: "Show on the screensaver"
-    description: "Notification counts by app, hidden while Do Not Disturb is on"
+    label: "Show what came in"
+    description: "A small note on the screensaver: how many notifications, from which apps. Hidden while Do Not Disturb is on."
     checked: root.card.enabled !== false
     foreground: root.foreground
     fontFamily: root.fontFamily
@@ -109,9 +112,9 @@ Column {
     spacing: Style.space(12)
     Column {
       spacing: Style.space(3)
-      Text { textFormat: Text.PlainText; text: "Detail"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
+      Text { textFormat: Text.PlainText; text: "How much"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
       ButtonGroup {
-        options: ["counts", "summaries", "bodies"]
+        options: [{ value: "counts", label: "how many" }, { value: "summaries", label: "what about" }, { value: "bodies", label: "in full" }]
         value: root.card.detail || "counts"
         foreground: root.foreground
         fontFamily: root.fontFamily
@@ -132,8 +135,8 @@ Column {
 
   Toggle {
     width: parent.width
-    label: "Show agent state"
-    description: "Reads ~/.local/state/omarchy/agent-ambient (working, needs, done, error)"
+    label: "Show what your coding agent is up to"
+    description: "Working, waiting for you, done, or stuck"
     checked: root.card.showAgent !== false
     foreground: root.foreground
     fontFamily: root.fontFamily
@@ -143,16 +146,16 @@ Column {
   PanelSeparator { width: parent.width; foreground: root.foreground }
 
   // ---- integration ----
-  PanelSectionHeader { text: "INTEGRATION"; foreground: root.foreground; fontFamily: root.fontFamily }
+  PanelSectionHeader { text: "SHORTCUTS"; foreground: root.foreground; fontFamily: root.fontFamily }
 
   Toggle {
     width: parent.width
-    label: "System › Screensaver opens Stelline"
-    description: root.menuNote !== "" ? root.menuNote : "Super+Esc › Screensaver previews this saver instead of the stock terminal one (edits ~/.config/omarchy/extensions/omarchy-menu.jsonc)"
+    label: "Super+Esc › Screensaver shows this one"
+    description: root.menuNote !== "" ? root.menuNote : "Omarchy's menu entry previews Stelline instead of the original"
     checked: root.svc ? root.svc.menuOverrideActive === true : false
     foreground: root.foreground
     fontFamily: root.fontFamily
-    onClicked: if (root.svc) { var r = root.svc.setMenuEntry(!checked); root.menuNote = r === "unparseable" ? "Refused: that file does not parse — fix it or paste the entry by hand" : "" }
+    onClicked: if (root.svc) { var r = root.svc.setMenuEntry(!checked); root.menuNote = r === "unparseable" ? "Couldn't: your menu extensions file has a mistake in it" : "" }
   }
   property string menuNote: ""
 
@@ -160,7 +163,7 @@ Column {
     width: parent.width
     textFormat: Text.PlainText
     wrapMode: Text.WordWrap
-    text: "A hotkey for the screensaver — add to ~/.config/hypr/bindings.lua:"
+    text: "A keyboard shortcut for the screensaver — copy this line into your Hyprland bindings (~/.config/hypr/bindings.lua):"
     color: root.dim
     font.family: root.fontFamily
     font.pixelSize: Style.font.caption
@@ -201,13 +204,13 @@ Column {
 
   Button {
     visible: root.svc ? root.svc.setupDone === true : false
-    text: "Undo setup"
+    text: "Put the old coffee cup back"
     iconText: "󰕌"
     bordered: true
     foreground: root.foreground
     fontFamily: root.fontFamily
     fontSize: Style.font.caption
-    tooltipText: "Put the stock StayAwake indicator back and remove the menu entry"
+    tooltipText: "Undoes Finish setup: the original indicator returns and the menu entry goes"
     onClicked: if (root.svc) root.svc.undoSetup()
   }
 }

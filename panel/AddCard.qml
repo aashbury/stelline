@@ -123,7 +123,7 @@ BorderSurface {
           width: Style.space(260)
           foreground: root.foreground
           font.family: root.fontFamily
-          placeholderText: "Robot Inc."
+          placeholderText: "Acme Co."
         }
       }
       Column {
@@ -162,7 +162,7 @@ BorderSurface {
         width: Style.space(320)
         foreground: root.foreground
         font.family: root.fontFamily
-        placeholderText: "Robot Inc."
+        placeholderText: "Hello"
         onAccepted: root.create()
       }
     }

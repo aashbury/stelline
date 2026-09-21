@@ -46,7 +46,7 @@ BorderSurface {
       wrapMode: Text.WordWrap
       text: root.stale
         ? "The stock idle service still answers until the shell restarts; the bar blinks once."
-        : "Omarchy's coffee cup watches the idle service Stelline replaces, so this icon takes over that job — same glyph, same Super+Ctrl+I. Finish setup retires the dead cup; Undo in Advanced puts it back."
+        : "The coffee cup already in your bar only works with the original screensaver. Finish setup swaps it for this icon — same cup, same Super+Ctrl+I. More › Put the old coffee cup back undoes it."
       color: root.dim
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
@@ -89,7 +89,7 @@ BorderSurface {
       width: parent.width
       textFormat: Text.PlainText
       wrapMode: Text.WordWrap
-      text: "In ~/.config/omarchy/shell.json: removes \"StayAwake\" from the omarchy.indicators items and records the previous list on this plugin's entry. Nothing else is touched; no files are created."
+      text: "One line in your shell settings: the old cup comes off the bar's list of indicators, and what was there is remembered so it can go back. Nothing else changes."
       color: root.dim
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption

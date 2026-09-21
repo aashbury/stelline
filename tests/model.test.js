@@ -168,7 +168,7 @@ const scanRow = (dir, json, extra) => JSON.stringify({ dir, json, files: ["saver
 test("parseScan turns saver folders into picker entries and rejects bad ids", () => {
   const root = "/home/x/.config/omarchy/stelline/savers"
   const nd = [
-    scanRow(root + "/robot-inc", { name: "Robot Inc.", kind: "ascii", pieces: ["001.txt", "002.txt"], play: "slideshow" }, { thumb: "AB\nCD\f" + "EF" }),
+    scanRow(root + "/acme-co", { name: "Acme Co.", kind: "ascii", pieces: ["001.txt", "002.txt"], play: "slideshow" }, { thumb: "AB\nCD\f" + "EF" }),
     scanRow(root + "/dance", { name: "Dance", kind: "ascii", pieces: ["frames.txt"], play: "animation", fps: 12 }, { thumb: "x\n\fy" }),
     scanRow(root + "/photos", { name: "Photos", kind: "image", folder: "/home/x/Pictures" }, { folderFiles: ["/home/x/Pictures/a.jpg", "/home/x/Pictures/notes.txt", "/home/x/Pictures/b.png"] }),
     scanRow(root + "/clip", { name: "Clip", kind: "image", pieces: ["clip.gif"] }),
@@ -178,13 +178,13 @@ test("parseScan turns saver folders into picker entries and rejects bad ids", ()
     "garbage"
   ].join("\n")
   const list = M.parseScan(nd)
-  assert.deepEqual(list.map((s) => s.id), ["clip", "dance", "half", "photos", "robot-inc"])
-  const robot = list.find((s) => s.id === "robot-inc")
-  assert.equal(robot.kind, "series")
-  assert.equal(robot.file, "savers/Series.qml")
-  assert.deepEqual(robot.series.pieces, [root + "/robot-inc/001.txt", root + "/robot-inc/002.txt"])
-  assert.equal(robot.series.thumbArt, "AB\nCD")
-  assert.equal(robot.meta, "2 ASCII pieces")
+  assert.deepEqual(list.map((s) => s.id), ["acme-co", "clip", "dance", "half", "photos"])
+  const acme = list.find((s) => s.id === "acme-co")
+  assert.equal(acme.kind, "series")
+  assert.equal(acme.file, "savers/Series.qml")
+  assert.deepEqual(acme.series.pieces, [root + "/acme-co/001.txt", root + "/acme-co/002.txt"])
+  assert.equal(acme.series.thumbArt, "AB\nCD")
+  assert.equal(acme.meta, "2 ASCII pieces")
   const dance = list.find((s) => s.id === "dance")
   assert.equal(dance.series.play, "animation")
   assert.equal(dance.series.fps, 12)
@@ -196,13 +196,13 @@ test("parseScan turns saver folders into picker entries and rejects bad ids", ()
   assert.equal(list.find((s) => s.id === "clip").meta, "animated picture")
   assert.ok(list.find((s) => s.id === "half").series.importing)
   // the registry sees them
-  assert.equal(M.saverById("robot-inc", list).name, "Robot Inc.")
-  assert.equal(M.saverFile("robot-inc", list), "savers/Series.qml")
-  assert.equal(M.saverById("robot-inc"), null)
-  assert.deepEqual(M.rotation(M.defaults(), list), ["wordmark", "clock", "matrix", "blank", "clip", "dance", "photos", "robot-inc"])
-  assert.equal(M.mergeSettings({ saver: "robot-inc" }, list).saver, "robot-inc")
-  assert.equal(M.mergeSettings({ saver: "robot-inc" }).saver, "wordmark")
-  assert.equal(M.mergeSettings({ savers: { "robot-inc": { dwellSec: 5 } } }).savers["robot-inc"].dwellSec, 5)
+  assert.equal(M.saverById("acme-co", list).name, "Acme Co.")
+  assert.equal(M.saverFile("acme-co", list), "savers/Series.qml")
+  assert.equal(M.saverById("acme-co"), null)
+  assert.deepEqual(M.rotation(M.defaults(), list), ["wordmark", "clock", "matrix", "blank", "acme-co", "clip", "dance", "photos"])
+  assert.equal(M.mergeSettings({ saver: "acme-co" }, list).saver, "acme-co")
+  assert.equal(M.mergeSettings({ saver: "acme-co" }).saver, "wordmark")
+  assert.equal(M.mergeSettings({ savers: { "acme-co": { dwellSec: 5 } } }).savers["acme-co"].dwellSec, 5)
   // an importing saver is never picked
   assert.equal(M.pickSaver(M.mergeSettings({ saver: "half" }, list), null, "", 0, list), "wordmark")
   assert.equal(M.pickSaver(M.defaults(), { saver: "half" }, "", 0, list), "wordmark")
@@ -210,7 +210,7 @@ test("parseScan turns saver folders into picker entries and rejects bad ids", ()
 })
 
 test("names, ids and frames", () => {
-  assert.equal(M.slugify("Robot Inc. (2026)"), "robot-inc-2026")
+  assert.equal(M.slugify("Acme Co. (2026)"), "acme-co-2026")
   assert.equal(M.slugify("Clock"), "clock-2")
   assert.equal(M.slugify("   "), "saver")
   assert.equal(M.uniqueId("dance", ["dance", "dance-2"]), "dance-3")
@@ -227,7 +227,7 @@ test("names, ids and frames", () => {
 
 test("import scripts: each source produces a self-contained bash pipeline", () => {
   const root = "/home/x/.config/omarchy/stelline/savers"
-  const base = { ...M.importDefaults(), id: "robot-inc", name: "Robot Inc." }
+  const base = { ...M.importDefaults(), id: "acme-co", name: "Acme Co." }
   const imgs = M.importScript({ ...base, source: "images", paths: ["/p/a.png", "/p/it's.png"] }, root)
   assert.match(imgs, /^#!\/bin\/bash/)
   assert.match(imgs, /omarchy-transcode-ascii "\$f" "\$dir\/\$n\.txt" --width "\$cols" --height "\$rows" --mode braille/)
@@ -244,7 +244,7 @@ test("import scripts: each source produces a self-contained bash pipeline", () =
   const gif = M.importScript({ ...base, source: "video", paths: ["/v/dance.mp4"], style: "image" }, root)
   assert.match(gif, /palettegen/)
   assert.match(gif, /\.pieces=\["clip\.gif"\]/)
-  const txt = M.importScript({ ...base, source: "text", text: "Robot Inc." }, root)
+  const txt = M.importScript({ ...base, source: "text", text: "Acme Co." }, root)
   assert.match(txt, /label:"\$text"/)
   assert.match(txt, /--mode block/)
   const ai = M.importScript({ ...base, source: "prompt", prompt: "a robot waving", animated: true, frames: 8 }, root)
@@ -265,7 +265,7 @@ test("import scripts: each source produces a self-contained bash pipeline", () =
   assert.match(ai, /\.fps=6/)
   assert.match(M.aiPrompt("a robot waving", 8), /Produce 8 frames/)
   assert.match(M.aiPrompt("a robot", 1), /Produce one piece/)
-  assert.equal(M.deleteScript("robot-inc", root), "d='/home/x/.config/omarchy/stelline/savers/robot-inc'; root='/home/x/.config/omarchy/stelline/savers'; [[ -d $d && $d == \"$root\"/* ]] && rm -rf -- \"$d\"; touch \"$root/.stamp\"")
+  assert.equal(M.deleteScript("acme-co", root), "d='/home/x/.config/omarchy/stelline/savers/acme-co'; root='/home/x/.config/omarchy/stelline/savers'; [[ -d $d && $d == \"$root\"/* ]] && rm -rf -- \"$d\"; touch \"$root/.stamp\"")
   assert.equal(M.deleteScript("../etc", root), null)
   assert.equal(M.deleteScript("", root), null)
   assert.match(M.scanScript(root), /saver\.json/)
@@ -296,7 +296,7 @@ test("rules: one per saver, conditions AND together, last one off removes it, la
   assert.equal(two[1].saver, "blank")
   // labels
   const cfg = M.mergeSettings({ saver: "blank", situations: on })
-  assert.equal(M.playsLabel(cfg, "blank"), "usually")
+  assert.equal(M.playsLabel(cfg, "blank"), "usually plays")
   assert.equal(M.playsLabel(cfg, "matrix"), "night 22:00–07:00")
   assert.equal(M.playsLabel(cfg, "clock"), "")
   const both = M.mergeSettings({ saver: "matrix", situations: on })

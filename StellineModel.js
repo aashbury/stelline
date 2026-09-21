@@ -11,7 +11,7 @@ var SAVERS = [
   { id: "clock",    name: "Clock",    glyph: "󰥔", meta: "big monospace time and date", file: "savers/Clock.qml",    kind: "native" },
   { id: "matrix",   name: "Matrix rain", glyph: "󰘨", meta: "falling glyphs in theme colours", file: "savers/Matrix.qml", kind: "native" },
   { id: "blank",    name: "Blank",    glyph: "󰹏", meta: "black — for battery", file: "savers/Blank.qml",  kind: "native" },
-  { id: "terminal", name: "Terminal", glyph: "󰆍", meta: "stock ttfx in a terminal", file: "",                   kind: "external" }
+  { id: "terminal", name: "Original", glyph: "󰆍", meta: "Omarchy's own, in a terminal", file: "", thumb: "savers/Wordmark.qml", kind: "external" }
 ]
 
 // Every saver the user can pick: the built-ins, then their own (imported
@@ -586,7 +586,7 @@ function stripExtension(name) {
   return String(name || "").replace(/\.[A-Za-z0-9]+$/, "")
 }
 
-// "Robot Inc. (2026)" → "robot-inc-2026". Built-in ids are reserved.
+// "Acme Co. (2026)" → "acme-co-2026". Built-in ids are reserved.
 function slugify(name) {
   var s = String(name || "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "")
   if (s === "") s = "saver"
@@ -996,7 +996,7 @@ function playsLabel(cfg, saverId, userSavers) {
     var inSet = Array.isArray(c.shuffleFrom) && c.shuffleFrom.indexOf(saverId) !== -1
     return ruleText !== "" ? ruleText : (inSet ? "in the shuffle" : "")
   }
-  if (c.saver === saverId) return ruleText !== "" ? "usually · " + ruleText : "usually"
+  if (c.saver === saverId) return ruleText !== "" ? "usually · " + ruleText : "usually plays"
   return ruleText
 }
 

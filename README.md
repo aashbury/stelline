@@ -49,7 +49,7 @@ Then click the new icon in the bar and press **Finish setup**. Omarchy's
 coffee-cup indicator watches the stock idle service, so under Stelline it can
 never light up or respond; Finish setup removes it from the indicators list
 (remembering what was there) and Stelline's own icon takes over the job — same
-glyph, same hotkey. **Undo setup** in Advanced restores the list exactly.
+glyph, same hotkey. **Put the old coffee cup back**, under More, restores the list exactly.
 
 Requires Omarchy 4.x. Stelline's id is `io.github.aashbury.stelline`.
 
@@ -61,7 +61,8 @@ Requires Omarchy 4.x. Stelline's id is `io.github.aashbury.stelline`.
 | bar icon | right-click | toggle Stay awake (the coffee cup) |
 | bar icon | middle-click | preview the current saver |
 | panel | click a tile | make it the usual saver (with Shuffle on: check it in) |
-| panel | ⚙ on a tile | when it plays, how it looks, delete |
+| panel | ⚙ on a tile | when it plays, how it looks, delete; for Wordmark and Original also the artwork |
+| panel | 󰅶 Stay awake | the coffee cup — top of the panel, same as Super+Ctrl+I |
 | panel | ▶ on a tile | preview it |
 | panel | the **Add** tile | a new saver from pictures, a folder, a clip, text or a description |
 | saver | any key, click, wheel or pointer movement | dismiss |
@@ -69,7 +70,7 @@ Requires Omarchy 4.x. Stelline's id is `io.github.aashbury.stelline`.
 
 Keyboard in the panel: `h`/`j`/`k`/`l` or arrows move (through the grid too),
 `Enter` activates, `h`/`l` also step a slider, `p` previews the tile under the
-cursor, `g` opens it, `n` adds, `s` toggles Shuffle, `a` opens Advanced, `x`
+cursor, `g` opens it, `n` adds, `s` toggles Shuffle, `a` opens More, `x`
 deletes (twice for a saver, once for a rule), `Esc` closes. Fields inside
 editors take the mouse.
 
@@ -79,7 +80,7 @@ A hotkey, if you want one, goes in `~/.config/hypr/bindings.lua`:
 o.bind("SUPER + CTRL + S", "Screensaver", "omarchy-shell stelline preview")
 ```
 
-Advanced › Integration can also point *System › Screensaver* (`Super+Esc`) at
+More › Shortcuts can also point *System › Screensaver* (`Super+Esc`) at
 Stelline. That edits `~/.config/omarchy/extensions/omarchy-menu.jsonc` by
 inserting two marked lines before the final brace; it refuses to touch a file
 that does not parse, and the toggle removes exactly those lines again.
@@ -92,7 +93,7 @@ that does not parse, and the toggle removes exactly those lines again.
 | **Clock** | Time and date in the terminal font; repaints once a minute unless you turn seconds on. |
 | **Matrix rain** | Heads in the foreground colour, trails in the accent; density, frame rate and glyph set are settings. Frame rate halves on battery. |
 | **Blank** | Black. Exists so a battery rule has somewhere free to point. |
-| **Terminal** | The stock `ttfx` screensaver in your terminal. Pin any subset of its 37 effects in ⚙ — with pins, Stelline starts the terminal itself running a copy of Omarchy's loop with `--include-effects`; without, it runs the stock launcher untouched. |
+| **Original** | Omarchy's own screensaver, exactly as it ships: `ttfx` in your terminal, cycling through its 37 effects at random. Choose a subset in ⚙ — with a choice, Stelline starts the terminal itself running a copy of Omarchy's loop with `--include-effects`; without, it runs the stock launcher untouched. Its ⚙ also has the same three artwork edits as *Style › Screensaver* (a picture, the text, back to the logo), shown live by Wordmark. |
 
 Every saver drifts a few pixels every half minute. Colours follow the theme
 live; the font is the shell's monospace font.
@@ -125,7 +126,7 @@ text by hand, it shows. Delete in ⚙ removes the folder and every rule and
 setting that named it; pictures shown as-is are never touched.
 
 ```json
-{ "name": "Robot Inc.", "kind": "ascii", "pieces": ["001.txt", "002.txt"], "play": "slideshow",
+{ "name": "Acme Co.", "kind": "ascii", "pieces": ["001.txt", "002.txt"], "play": "slideshow",
   "source": { "type": "images", "paths": ["/home/you/Pictures/logo.svg", "…"] } }
 ```
 
@@ -157,13 +158,15 @@ fields once it is on. A rule can also change the timings while it holds.
 | On battery | unplugged, optionally only below a percentage |
 | With a theme | `~/.local/state/omarchy/current/theme.name` equals the chosen slug |
 
-So the dancing clip 17:00–08:30 and the company suite the rest of the day is
-two tiles: give the clip a night rule from 17:00 to 08:30 and click the suite.
+So a clip for the evenings and a set of company logos for the working day is
+two tiles: give the clip a night rule from 17:00 to 08:30 and click the logos.
 
 One rule per tile; when two tiles' rules hold at once, the older rule wins.
-Advanced › Rules lists every rule in that order, together with any rule that
+More › Rules lists every rule in that order, together with any rule that
 only changes the timings (say, a shorter screensaver on battery) — those are
-added there. Nothing ships enabled, so a fresh install behaves exactly like
+added there. Nothing in the package is anyone's content: the built-ins draw
+your own branding file, the clock, rain, or nothing; every other saver is one
+you made. Nothing ships enabled, so a fresh install behaves exactly like
 stock. Unknown condition types never match, so a rule written by a newer
 version is inert on an older one.
 
@@ -218,11 +221,12 @@ focus), `list`, `get`, `set`, `set64`, `setSaver`, `toggleShuffle`,
 `images|folder|video|text|prompt`, `paths`, `text`, `prompt`, `style`
 `ascii|image`, `name`, `fps`, `seconds`, `animated`, `frames`), `deleteSaver
 <id>`, `rescan`, `pick <images|folder|video>`, `cancelAdd`, `finishSetup`, `undoSetup`,
-`setMenuEntry <on|off>`, `simulateIdle`, `simulateLock [dry-run|off|real]`,
+`setMenuEntry <on|off>`, `branding <image|text|reset>` (the artwork edits),
+`simulateIdle`, `simulateLock [dry-run|off|real]`,
 `reloadCard`, `ping`.
 
 ```sh
-omarchy-shell stelline import64 "$(printf '%s' '{"source":"text","text":"Robot Inc.","style":"ascii"}' | base64 -w0)"
+omarchy-shell stelline import64 "$(printf '%s' '{"source":"text","text":"Acme Co.","style":"ascii"}' | base64 -w0)"
 ```
 
 `omarchy-shell idle status|enable|disable|toggle` keep working exactly as with
@@ -254,7 +258,7 @@ the stock service; `status` reports `"clone": "stelline"`.
 ## Uninstall
 
 ```sh
-# in the panel: Advanced › Undo setup   (or: omarchy-shell stelline undoSetup)
+# in the panel: More › Put the old coffee cup back   (or: omarchy-shell stelline undoSetup)
 omarchy plugin remove io.github.aashbury.stelline
 omarchy restart shell
 ```

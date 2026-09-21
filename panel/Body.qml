@@ -3,10 +3,11 @@ import qs.Commons
 import qs.Ui
 import "../StellineModel.js" as M
 
-// The panel body. Level 1: hero + preview, the saver grid (click a tile = that
-// one plays), timings and stay awake. Level 2: a tile's gear opens it below
-// the grid — when it plays, how it looks, delete. Level 3: the Advanced
-// section — every rule in priority order, the status card, integration.
+// The panel body. Level 1: hero, stay awake (the coffee cup — changed often,
+// so it sits at the top), preview, the saver grid (click a tile = that one
+// plays), timings. Level 2: a tile's gear opens it below the grid — when it
+// plays, how it looks, delete. Level 3: More — every rule in order, the
+// while-you're-away note, shortcuts.
 //
 // One cursor, shared by keyboard and mouse: rows bind `hasCursor` to
 // `cursorActive && cursorIndex === <row>` and never read hover themselves.
@@ -48,28 +49,28 @@ Column {
   readonly property int tileWidth: Math.floor((width - tileGap * (columns - 1)) / columns)
 
   // Cursor rows, in visual order. Tiles are one row each; the add tile is
-  // the last of them. Situations follow Advanced when it is open.
+  // the last of them. Rules follow More when it is open.
   readonly property int rowHero: 0
-  readonly property int rowPreview: 1
-  readonly property int rowTileFirst: 2
+  readonly property int rowStayAwake: 1
+  readonly property int rowPreview: 2
+  readonly property int rowTileFirst: 3
   readonly property int tileCount: savers.length + 1
   readonly property int rowShuffle: rowTileFirst + tileCount
   readonly property int rowScreensaver: rowShuffle + 1
   readonly property int rowLock: rowShuffle + 2
-  readonly property int rowStayAwake: rowShuffle + 3
-  readonly property int rowAdvanced: rowShuffle + 4
+  readonly property int rowAdvanced: rowShuffle + 3
   readonly property int rowSituationFirst: rowAdvanced + 1
   readonly property int rowCount: rowSituationFirst + (advancedOpen ? cfg.situations.length : 0)
 
   // The item that owns a cursor row, for scrolling it into view.
   function rowItem(index) {
     if (index === rowHero) return hero
+    if (index === rowStayAwake) return stayAwakeToggle
     if (index === rowPreview) return previewButton
     if (index >= rowTileFirst && index < rowShuffle) return tileRepeater.itemAt(index - rowTileFirst)
     if (index === rowShuffle) return shuffleToggle
     if (index === rowScreensaver) return screensaverRow
     if (index === rowLock) return lockRow
-    if (index === rowStayAwake) return stayAwakeToggle
     if (index === rowAdvanced) return advancedButton
     if (index >= rowSituationFirst) return advanced.situationItem(index - rowSituationFirst)
     return null
@@ -167,11 +168,11 @@ Column {
     if (!cursorActive) { cursorActive = true; return }
     if (!svc) return
     if (cursorIndex === rowHero) setStage("screensaverEnabled", !cfg.screensaverEnabled)
+    else if (cursorIndex === rowStayAwake) toggleStayAwake()
     else if (cursorIndex === rowPreview) preview("")
     else if (inTiles(cursorIndex)) { var id = cursorSaverId(); if (id === "") startAdd(); else chooseSaver(id) }
     else if (cursorIndex === rowShuffle) toggleShuffle()
     else if (cursorIndex === rowLock) setStage("lockEnabled", !cfg.lockEnabled)
-    else if (cursorIndex === rowStayAwake) toggleStayAwake()
     else if (cursorIndex === rowAdvanced) advancedOpen = !advancedOpen
     else if (cursorIndex >= rowSituationFirst) toggleSituationEditor(cursorIndex - rowSituationFirst)
   }
@@ -308,11 +309,10 @@ Column {
     width: parent.width
     title: "Stelline"
     meta: root.serviceOk
-      ? root.saver.name.toLowerCase() + " · " + root.minutes(root.screensaverSeconds)
-        + (root.cfg.lockEnabled ? " → lock " + root.minutes(root.lockSeconds) : " · no lock")
-        + (root.svc.situation ? " · " + M.situationLabel(root.svc.situation).toLowerCase() : "")
-        + (root.stayAwake ? " · staying awake" : "")
-      : "service not loaded — omarchy restart shell"
+      ? (root.stayAwake ? "staying awake" : root.saver.name.toLowerCase() + " after " + root.minutes(root.screensaverSeconds)
+          + (root.cfg.lockEnabled ? ", lock at " + root.minutes(root.lockSeconds) : ", no lock")
+          + (root.svc.situation ? " · " + M.situationLabel(root.svc.situation).toLowerCase() : ""))
+      : "not running yet — restart the shell"
     foreground: root.foreground
     fontFamily: root.fontFamily
     iconComponent: Component {
@@ -344,6 +344,19 @@ Column {
     fontFamily: root.fontFamily
   }
 
+  Toggle {
+    id: stayAwakeToggle
+    width: parent.width
+    label: "󰅶  Stay awake"
+    description: root.stayAwake ? "No screensaver, no lock, until you turn this off" : "Keeps the screen on — also Super+Ctrl+I"
+    checked: root.stayAwake
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    hasCursor: root.cursorActive && root.cursorIndex === root.rowStayAwake
+    onClicked: root.toggleStayAwake()
+    onHovered: function(h) { root.hoverRow(root.rowStayAwake, h) }
+  }
+
   Row {
     spacing: Style.space(8)
     Button {
@@ -369,7 +382,7 @@ Column {
     Text {
       anchors.baseline: parent.children[0].baseline
       textFormat: Text.PlainText
-      text: root.cfg.shuffle ? "check the ones to shuffle between" : "click one to make it the usual saver"
+      text: root.cfg.shuffle ? "check the ones to shuffle between" : "click the one that should usually play"
       color: root.dim
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
@@ -440,7 +453,7 @@ Column {
     id: shuffleToggle
     width: parent.width
     label: "Shuffle"
-    description: root.cfg.shuffle ? "A different checked saver each time" : "Always the usual saver"
+    description: root.cfg.shuffle ? "A different checked one each time" : "Always the usual one"
     checked: root.cfg.shuffle
     foreground: root.foreground
     fontFamily: root.fontFamily
@@ -452,7 +465,19 @@ Column {
   PanelSeparator { width: parent.width; foreground: root.foreground }
 
   // ---- timings ----
-  PanelSectionHeader { text: "TIMINGS"; foreground: root.foreground; fontFamily: root.fontFamily }
+  Row {
+    width: parent.width
+    spacing: Style.space(8)
+    PanelSectionHeader { text: "TIMINGS"; foreground: root.foreground; fontFamily: root.fontFamily }
+    Text {
+      anchors.baseline: parent.children[0].baseline
+      textFormat: Text.PlainText
+      text: "how long after you stop"
+      color: root.dim
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+    }
+  }
 
   SliderRow {
     id: screensaverRow
@@ -491,25 +516,12 @@ Column {
     onHovered: function(h) { root.hoverRow(root.rowLock, h) }
   }
 
-  Toggle {
-    id: stayAwakeToggle
-    width: parent.width
-    label: "Stay awake"
-    description: root.stayAwake ? "No screensaver, no lock — until you switch this off" : "Same switch as Super+Ctrl+I"
-    checked: root.stayAwake
-    foreground: root.foreground
-    fontFamily: root.fontFamily
-    hasCursor: root.cursorActive && root.cursorIndex === root.rowStayAwake
-    onClicked: root.toggleStayAwake()
-    onHovered: function(h) { root.hoverRow(root.rowStayAwake, h) }
-  }
-
   PanelSeparator { width: parent.width; foreground: root.foreground }
 
-  // ---- advanced ----
+  // ---- more ----
   Button {
     id: advancedButton
-    text: "Advanced"
+    text: "More"
     iconText: root.advancedOpen ? "󰅀" : "󰅂"
     leftAlign: true
     foreground: root.foreground

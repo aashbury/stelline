@@ -67,8 +67,9 @@ CursorSurface {
       Loader {
         id: loader
         anchors.fill: parent
-        active: root.live && !root.addTile && !!(root.saver && root.saver.file) && !root.importing
-        source: active ? Qt.resolvedUrl("../" + root.saver.file) : ""
+        readonly property string thumbFile: root.saver ? String(root.saver.thumb || root.saver.file || "") : ""
+        active: root.live && !root.addTile && thumbFile !== "" && !root.importing
+        source: active ? Qt.resolvedUrl("../" + thumbFile) : ""
         onLoaded: {
           item.service = root.svc
           if ("thumbnail" in item) item.thumbnail = true
@@ -85,7 +86,7 @@ CursorSurface {
       // tile, and anything still on its way.
       Text {
         anchors.centerIn: parent
-        visible: root.addTile || !(root.saver && root.saver.file) || root.importing || root.failed
+        visible: root.addTile || !(root.saver && (root.saver.file || root.saver.thumb)) || root.importing || root.failed
         textFormat: Text.PlainText
         text: root.addTile ? "+" : (root.importing ? "󰔟" : (root.failed ? "󰀦" : (root.saver && root.saver.glyph ? root.saver.glyph : "")))
         color: root.failed ? Color.urgent : (root.addTile ? root.dim : root.foreground)
