@@ -188,13 +188,20 @@ Item {
     stdout: SplitParser { onRead: function(line) { var t = String(line).trim(); if (t !== "") root.pickedPaths = root.pickedPaths.concat([t]) } }
     onExited: function(exitCode) {
       root.logEvent("pick-exit", root.pickKind + " exitCode=" + exitCode + " picked=" + root.pickedPaths.length)
-      // Only while the Add card is still open: a cancelled Add ignores a late answer.
-      if (exitCode === 0 && root.pickedPaths.length > 0 && M.isPlainObject(root.importDraft)) {
+      // Only while the Add card is still waiting on this chooser: a cancelled
+      // Add ignores a late answer.
+      if (M.isPlainObject(root.importDraft) && root.importDraft.step === "picking") {
         var draft = M.cloneJson(root.importDraft)
-        draft.source = root.pickKind === "folder" ? "folder" : (root.pickKind === "video" ? "video" : "images")
-        draft.paths = root.pickedPaths.slice()
-        if (!draft.name || draft.nameAuto !== false) { draft.name = M.suggestName(draft.paths, "New saver"); draft.nameAuto = true }
-        draft.step = "confirm"
+        if (exitCode === 0 && root.pickedPaths.length > 0) {
+          draft.source = root.pickKind === "folder" ? "folder" : (root.pickKind === "video" ? "video" : "images")
+          draft.paths = root.pickedPaths.slice()
+          if (!draft.name || draft.nameAuto !== false) { draft.name = M.suggestName(draft.paths, "New saver"); draft.nameAuto = true }
+          draft.step = "confirm"
+        } else {
+          // Chooser closed with nothing. Back to the start: a card that only
+          // offers Cancel is a dead end you cannot get out of forwards.
+          draft.step = "start"
+        }
         root.importDraft = draft
         root.summonPanel()
       }

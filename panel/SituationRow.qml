@@ -17,6 +17,19 @@ Column {
   property string fontFamily: Style.font.family
   readonly property color dim: Qt.darker(foreground, 1.4)
   readonly property var when: situation && situation.when ? situation.when : ({})
+  // A rule reads as "this saver, in this situation" — the saver is the
+  // subject, so the row leads with it and the tile it came from is obvious.
+  // A rule with no saver changes the timings for whatever is playing.
+  property bool highlighted: false
+  readonly property var ruleSaver: M.ruleSaver(situation, userSavers)
+  readonly property string subjectName: ruleSaver ? String(ruleSaver.name) : "Any screensaver"
+  readonly property string subjectGlyph: ruleSaver ? String(ruleSaver.glyph || "󰊄") : "󰅐"
+  readonly property string detail: {
+    var when = M.situationLabel(situation)
+    var timings = M.situationTimings(situation)
+    return timings !== "" ? when + " · " + timings : when
+  }
+
   readonly property string kind: when.battery ? "battery" : (when.night ? "night" : (when.theme ? "theme" : (when.docked ? "docked" : "unknown")))
   readonly property bool editing: fromField.activeFocus || toField.activeFocus || belowField.field.activeFocus
     || screensaverField.field.activeFocus || lockField.field.activeFocus
@@ -34,7 +47,9 @@ Column {
     width: parent.width
     implicitHeight: Style.space(44)
     hasCursor: root.hasCursor
-    current: root.expanded
+    // Marked while the saver's own panel is open, so the two views of the
+    // same rule point at each other.
+    current: root.expanded || root.highlighted
     foreground: root.foreground
 
     MouseArea {
@@ -54,9 +69,21 @@ Column {
       onToggled: root.toggled()
     }
 
-    Column {
+    Text {
+      id: subjectMark
       anchors.left: enabledSwitch.right
       anchors.leftMargin: Style.space(10)
+      anchors.verticalCenter: parent.verticalCenter
+      textFormat: Text.PlainText
+      text: root.subjectGlyph
+      color: root.situation.enabled === true ? root.foreground : root.dim
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.subtitle
+    }
+
+    Column {
+      anchors.left: subjectMark.right
+      anchors.leftMargin: Style.space(8)
       anchors.right: removeButton.left
       anchors.rightMargin: Style.space(8)
       anchors.verticalCenter: parent.verticalCenter
@@ -65,7 +92,7 @@ Column {
       Text {
         width: parent.width
         textFormat: Text.PlainText
-        text: M.situationLabel(root.situation)
+        text: root.subjectName
         color: root.situation.enabled === true ? root.foreground : root.dim
         font.family: root.fontFamily
         font.pixelSize: Style.font.subtitle
@@ -74,7 +101,7 @@ Column {
       Text {
         width: parent.width
         textFormat: Text.PlainText
-        text: "→ " + (M.situationEffect(root.situation, root.userSavers) || "no change")
+        text: root.detail !== "" ? root.detail : "no change"
         color: root.dim
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption

@@ -32,7 +32,7 @@ Column {
     // A saver rule names the saver; a timings-only rule says what it does:
     // "Docked → never locks".
     if (s.saver) return (M.saverById(s.saver, root.userSavers) || { name: s.saver }).name + " " + M.situationLabel(s).toLowerCase()
-    return M.situationLabel(s) + " → " + (M.situationEffect(s, root.userSavers) || "no change")
+    return M.situationLabel(s) + " → " + (M.situationTimings(s) || "no change")
   }
 
   // What each row says while closed. One rule reads out in full; more than
@@ -93,6 +93,7 @@ Column {
           foreground: root.foreground
           fontFamily: root.fontFamily
           hasCursor: root.cursorOn(root.body ? root.body.rowSituationFirst + index : -1)
+          highlighted: !!(root.body && root.body.openSettings !== "" && root.cfg.situations[index] && root.cfg.situations[index].saver === root.body.openSettings)
           expanded: root.body ? root.body.expandedSituation === index : false
           onClicked: if (root.body) root.body.toggleSituationEditor(index)
           onToggled: if (root.body) root.body.toggleSituation(index)

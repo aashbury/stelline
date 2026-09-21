@@ -119,7 +119,10 @@ BorderSurface {
 
       Row {
         spacing: Style.space(8)
-        PanelSectionHeader { text: "PLAYS"; foreground: root.foreground; fontFamily: root.fontFamily }
+        // Naming the saver here is the whole point: every switch below writes
+        // a rule that belongs to it, and that rule shows up in Rules under
+        // this same name.
+        PanelSectionHeader { text: "WHEN " + (root.saver && root.saver.name ? String(root.saver.name).toUpperCase() : "IT") + " PLAYS"; foreground: root.foreground; fontFamily: root.fontFamily }
         Text {
           anchors.baseline: parent.children[0].baseline
           textFormat: Text.PlainText

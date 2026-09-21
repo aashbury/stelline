@@ -425,3 +425,21 @@ test("never-lock-while-docked is a switch over an ordinary rule", () => {
   assert.equal(eff.lockEnabled, false)
   assert.equal(eff.screensaver, 30)
 })
+
+test("a rule's subject is the saver it belongs to; a timings-only rule has none", () => {
+  const list = [{ id: "dance", name: "Dancing", glyph: "󰊄", kind: "series", series: {} }]
+  const saverRule = { id: "a", enabled: true, when: { night: { from: "22:00", to: "07:00" } }, saver: "dance" }
+  const timingsRule = { id: "b", enabled: true, when: { docked: {} }, lock: "never" }
+  assert.equal(M.ruleSaver(saverRule, list).name, "Dancing")
+  assert.equal(M.ruleSaver(timingsRule, list), null)
+  assert.equal(M.ruleSaver({ saver: "gone" }, list), null)      // a deleted saver has no subject
+  assert.equal(M.ruleSaver(null, list), null)
+  // the row's second line: the condition, plus only what it changes
+  assert.equal(M.situationTimings(saverRule), "")
+  assert.equal(M.situationTimings(timingsRule), "never locks")
+  assert.equal(M.situationTimings({ screensaver: 90, lock: 180 }), "screensaver 1:30 · lock 3:00")
+  assert.equal(M.situationTimings({}), "")
+  // and the older one-line form still names the saver, for the hero and TIMINGS
+  assert.equal(M.situationEffect(saverRule, list), "Dancing")
+  assert.equal(M.situationEffect({ saver: "dance", lock: "never" }, list), "Dancing · never locks")
+})

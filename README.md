@@ -202,6 +202,12 @@ applies. Open a tile's ⚙ and switch on the conditions under **Plays** to give 
 a rule; all the conditions of one rule have to hold, and each shows its own
 fields once it is on. A rule can also change the timings while it holds.
 
+A rule belongs to a saver, and both views of it say so: a tile's ⚙ heads its
+switches with **WHEN <SAVER> PLAYS**, and every row in **Rules** leads with the
+saver it is about — its glyph, its name, then the situation underneath. While a
+tile's ⚙ is open, that saver's rule is marked in the list. A rule with no saver
+changes the timings for whatever is playing and reads as **Any screensaver**.
+
 | Condition | Holds when |
 |---|---|
 | At night | the clock is inside a window, wrapping midnight |

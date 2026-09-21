@@ -345,17 +345,33 @@ function situationLabel(s) {
   return keys.map(function(k) { return conditionLabel(k, s.when[k]) }).join(" · ")
 }
 
-function situationEffect(s, userSavers) {
+// A rule belongs to a saver: that is its subject, and the condition is what
+// it says about it. A rule with no saver changes the timings for whatever is
+// playing.
+function ruleSaver(s, userSavers) {
+  if (!isPlainObject(s) || !s.saver) return null
+  return saverById(s.saver, userSavers)
+}
+
+// Only what a rule does to the timings. Where the saver is already the
+// subject, naming it again in the same breath reads as a stutter.
+function situationTimings(s) {
   if (!isPlainObject(s)) return ""
   var parts = []
-  var saver = s.saver ? saverById(s.saver, userSavers) : null
-  if (saver) parts.push(saver.name)
-  // Timings read as sentences, not a fraction: "never locks", "screensaver
-  // 1:30 · lock 3:00". Only what the rule actually changes is mentioned.
   var hasScr = s.screensaver !== undefined && s.screensaver !== null && s.screensaver !== ""
   var hasLock = s.lock !== undefined && s.lock !== null && s.lock !== ""
   if (hasScr) parts.push("screensaver " + mmss(s.screensaver))
   if (hasLock) parts.push(s.lock === "never" ? "never locks" : "lock " + mmss(s.lock))
+  return parts.join(" · ")
+}
+
+function situationEffect(s, userSavers) {
+  if (!isPlainObject(s)) return ""
+  var parts = []
+  var saver = ruleSaver(s, userSavers)
+  if (saver) parts.push(saver.name)
+  var timings = situationTimings(s)
+  if (timings !== "") parts.push(timings)
   return parts.join(" · ")
 }
 
@@ -1278,6 +1294,8 @@ if (typeof module !== "undefined") {
     activeSituation: activeSituation,
     situationLabel: situationLabel,
     situationEffect: situationEffect,
+    situationTimings: situationTimings,
+    ruleSaver: ruleSaver,
     mmss: mmss,
     digest: digest,
     displayAppName: displayAppName,
