@@ -28,6 +28,17 @@ Item {
   property real driftY: 0
   property int fps: 15
 
+  // The cycle: the art arrives, lives (a cheap band rolling over it, so the
+  // screen is never a still picture), then departs. `cycleToken` forces a
+  // replay even when the same effect comes round again.
+  property string ambientStyle: ""
+  property int cycleToken: 0
+  property string phase: "in"
+  signal exitFinished()
+
+  property var ambientPlan: null
+  property double ambientAt: 0
+
   property color muted: Color.muted
   readonly property bool accentShows: Math.abs(accent.r - fg.r) + Math.abs(accent.g - fg.g) + Math.abs(accent.b - fg.b) > 0.12
   readonly property color trail: accentShows ? accent : muted
@@ -36,20 +47,29 @@ Item {
   property var plan: null
   property double startedAt: 0
   property string overlay: ""
+  property string hotOverlay: ""
+  property string dimOverlay: ""
   property bool running: false
   property real pulseMix: 0
+  readonly property bool ticking: running || (phase === "live" && ambientPlan !== null)
 
   // Planned from this item's own art: when `art` changes, the painter's copy
   // of it may not have updated yet.
+  function artLines() { return root.art === "" ? [] : root.art.replace(/\s+$/, "").split("\n") }
+  function clearOverlays() { root.overlay = ""; root.hotOverlay = ""; root.dimOverlay = "" }
+  function show(f) { root.overlay = f.overlay; root.hotOverlay = f.hot; root.dimOverlay = f.dim }
+
   function restart() {
     root.pulseMix = 0
-    root.overlay = ""
-    var lines = root.art === "" ? [] : root.art.replace(/\s+$/, "").split("\n")
+    root.phase = "in"
+    clearOverlays()
+    var lines = artLines()
     if (!root.entrance || lines.length === 0) {
       root.plan = null
       root.running = false
       view.progressive = false
       view.invalidate()
+      beginAmbient()
       return
     }
     view.progressive = true
@@ -60,23 +80,56 @@ Item {
     step()
   }
 
-  function step() {
-    if (!root.plan) return
-    var f = E.frame(root.plan, Date.now() - root.startedAt)
-    if (f.resolved.length) view.resolve(f.resolved)
-    root.overlay = f.overlay
-    if (f.done) { root.running = false; root.overlay = "" }
+  // The art goes again. Everything is drawn in the overlay for this, because
+  // the cached canvas can only ever be added to.
+  function playExit(style) {
+    var lines = artLines()
+    if (lines.length === 0) { root.exitFinished(); return }
+    root.phase = "out"
+    root.ambientPlan = null
+    view.progressive = true
+    view.reset()
+    root.plan = E.planExit(style, lines, Date.now() % 100000)
+    root.startedAt = Date.now()
+    root.running = true
+    step()
   }
 
-  onActiveChanged: if (active) restart(); else { running = false; overlay = "" }
+  function beginAmbient() {
+    root.phase = "live"
+    clearOverlays()
+    var lines = artLines()
+    root.ambientPlan = (root.ambientStyle === "" || lines.length === 0) ? null : E.planAmbient(root.ambientStyle, lines, Date.now() % 100000)
+    root.ambientAt = Date.now()
+  }
+
+  function step() {
+    if (root.plan) {
+      var f = E.frame(root.plan, Date.now() - root.startedAt)
+      if (f.resolved.length) view.resolve(f.resolved)
+      show(f)
+      if (f.done) {
+        root.running = false
+        clearOverlays()
+        if (root.phase === "out") { root.plan = null; root.exitFinished() }
+        else beginAmbient()
+      }
+      return
+    }
+    if (root.phase === "live" && root.ambientPlan) show(E.ambientFrame(root.ambientPlan, Date.now() - root.ambientAt))
+  }
+
+  onCycleTokenChanged: if (active) restart()
+  onActiveChanged: if (active) restart(); else { running = false; plan = null; ambientPlan = null; clearOverlays() }
   onArtChanged: if (active) restart()
   onEffectChanged: if (active) restart()
   Component.onCompleted: if (active) restart()
 
   Timer {
-    interval: Math.round(1000 / Math.max(5, Math.min(30, root.fps)))
+    // The resting art does not need the frame rate an arrival does.
+    interval: root.phase === "live" ? 110 : Math.round(1000 / Math.max(5, Math.min(30, root.fps)))
     repeat: true
-    running: root.active && root.running
+    running: root.active && root.ticking
     onTriggered: root.step()
   }
 
@@ -105,18 +158,23 @@ Item {
   // In-flight glyphs on the same grid: the font's advance is padded out to
   // the cell width and lines are fixed to the cell height, so column 120 of
   // the overlay sits over column 120 of the canvas.
-  Text {
-    x: view.artX
-    y: view.artY
-    visible: root.overlay !== ""
-    textFormat: Text.PlainText
-    renderType: Text.NativeRendering
-    text: root.overlay
-    color: root.trail
-    font.family: root.fontFamily
-    font.pixelSize: view.pixelSize
-    font.letterSpacing: view.cellW - view.advance
-    lineHeightMode: Text.FixedHeight
-    lineHeight: view.cellH
+  Repeater {
+    model: 3
+    Text {
+      required property int index
+      readonly property string body: index === 0 ? root.dimOverlay : (index === 1 ? root.overlay : root.hotOverlay)
+      x: view.artX
+      y: view.artY
+      visible: body !== ""
+      textFormat: Text.PlainText
+      renderType: Text.NativeRendering
+      text: body
+      color: index === 0 ? Qt.darker(root.trail, 1.9) : (index === 1 ? root.trail : Qt.lighter(root.fg, 1.25))
+      font.family: root.fontFamily
+      font.pixelSize: view.pixelSize
+      font.letterSpacing: view.cellW - view.advance
+      lineHeightMode: Text.FixedHeight
+      lineHeight: view.cellH
+    }
   }
 }

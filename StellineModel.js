@@ -103,9 +103,9 @@ function defaults() {
     screensaverEnabled: true,
     lockEnabled: true,
     savers: {
-      // A default, not a hardcoding: type over the text and it is yours. The
-      // quiet effects are also a named mood, so a fresh panel reads "Calm".
-      wordmark: { text: DEFAULT_WORDMARK, effect: "cycle", effects: ["reveal", "wipe", "typewriter", "slit", "pulse"], holdSec: 15, background: "theme" },
+      // A default, not a hardcoding: type over the text and it is yours. Every
+      // animation is on out of the box, because that is the thing to look at.
+      wordmark: { text: DEFAULT_WORDMARK, effect: "cycle", effects: [], holdSec: 4, background: "theme" },
       clock: { format: "HH:mm", showDate: true, showSeconds: false },
       blank: {},
       terminal: { effects: [] }

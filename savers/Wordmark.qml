@@ -55,9 +55,12 @@ Item {
     var next = E.pick(root.effectList)
     if (next === root.cycled && root.effectList.length > 1) next = E.pick(root.effectList)
     root.cycled = next
-    // `pulse` has nothing to animate, so it never "lands"; give the timer a
-    // chance to see that and keep the cycle turning either way.
-    Qt.callLater(root.scheduleNext)
+    // A different ambient and a different way out each time round, so the
+    // same arrival never plays the same cycle twice.
+    root.ambient = E.pick(E.AMBIENTS)
+    root.exitStyle = E.pick(E.EXITS)
+    // The token replays even when the same effect comes round again.
+    root.token++
     if (!root.thumbnail) {
       root.driftX = Math.round((Math.random() * 2 - 1) * root.width * 0.03)
       root.driftY = Math.round((Math.random() * 2 - 1) * root.height * 0.03)
@@ -92,19 +95,28 @@ Item {
 
   // Started when an effect lands, so the rest is between animations rather
   // than shared with them: a long effect no longer means a short pause.
-  function scheduleNext() { if (root.cycling && !show.running) rest.restart() }
+  property string ambient: ""
+  property string exitStyle: ""
+  property int token: 0
+
+  // The rest is what the art does between arriving and leaving, and it is
+  // never a still picture: something quiet rolls over it until time is up.
+  function scheduleNext() { if (root.cycling && show.phase === "live") rest.restart() }
 
   Timer {
     id: rest
     interval: Math.max(120, root.holdSec * 1000)
     running: false
-    onTriggered: if (root.cycling) root.nextEffect()
+    onTriggered: if (root.cycling) show.playExit(root.exitStyle)
   }
 
   AsciiShow {
     id: show
     anchors.fill: parent
-    onRunningChanged: if (!running) root.scheduleNext()
+    ambientStyle: root.thumbnail ? "" : root.ambient
+    cycleToken: root.token
+    onPhaseChanged: if (phase === "live") root.scheduleNext()
+    onExitFinished: if (root.cycling) root.nextEffect()
     art: root.art
     effect: root.effect
     active: root.active && !root.thumbnail
