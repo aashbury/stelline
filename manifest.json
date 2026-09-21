@@ -5,6 +5,8 @@
   "version": "0.2.0",
   "author": "aashbury",
   "license": "MIT",
+  "homepage": "https://github.com/aashbury/stelline",
+  "repository": "https://github.com/aashbury/stelline",
   "description": "A native screensaver manager: a grid of savers — Omarchy's own, your branding redrawn, a clock, and your own from the clipboard, pictures, folders, clips, text or a description — with ttfx-style effects in theme colours, per-saver rules (night, battery, theme), and a status card for notifications and agents. Takes over the idle service and keeps its timings, lock, and stay-awake.",
   "kinds": [
     "service",
