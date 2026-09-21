@@ -551,8 +551,27 @@ Item {
     if (root.locked) { logEvent("screensaver-skip", "session locked"); return }
     if (root.screensaverOff) { logEvent("screensaver-skip", "screensaver-off toggle"); return }
     var id = M.pickSaver(root.cfg, root.situation, root.lastSaver, undefined, root.userSavers)
-    if (id === "terminal") { launchTerminal(); return }
+    if (id === "terminal") { startTerminalSaver(false); return }
     showOverlay(id, "idle")
+  }
+
+  // The stock terminal saver needs focus: Omarchy's own loop exits after a
+  // second without it, and a window that opens while our panel — a layer
+  // surface holding the keyboard — is up comes up floating at 700×500,
+  // unfocused, and dies: the "small clipped window". The stock menu never
+  // hits this because it closes before its action runs. So the panel closes
+  // first, and the launch waits a beat for the surface to go.
+  signal panelCloseRequested()
+  property bool terminalForce: false
+  function startTerminalSaver(force) {
+    root.terminalForce = !!force
+    root.panelCloseRequested()
+    terminalStart.restart()
+  }
+  Timer {
+    id: terminalStart
+    interval: 250
+    onTriggered: root.launchTerminal(root.terminalForce)
   }
 
   // The stock terminal saver. With no effects pinned this is the stock
@@ -565,10 +584,13 @@ Item {
   property var terminalPendingScreens: []
   property string terminalFocusedMonitor: ""
 
-  function launchTerminal() {
+  function launchTerminal(force) {
     var effects = root.cfg.savers && root.cfg.savers.terminal ? root.cfg.savers.terminal.effects : []
     if (!Array.isArray(effects) || effects.length === 0 || root.terminalId === "") {
-      runProcess(screensaverProcess, "screensaver", "[[ $(omarchy-shell lock isLocked 2>/dev/null) == \"true\" ]] || omarchy-launch-screensaver")
+      // `force` is a preview: it bypasses the screensaver-off toggle the way
+      // the stock menu entry does.
+      runProcess(screensaverProcess, "screensaver", force ? "omarchy-launch-screensaver force"
+        : "[[ $(omarchy-shell lock isLocked 2>/dev/null) == \"true\" ]] || omarchy-launch-screensaver")
       return
     }
     var argv = M.terminalArgv(root.terminalId, root.omarchyPath || "/usr/share/omarchy", root.terminalLoopPath)
@@ -630,11 +652,7 @@ Item {
     if (!saver) return "unknown-saver"
     if (saver.series && saver.series.importing) return "importing"
     if (!M.isNativeSaver(saver)) {
-      // Terminal previews go through the same path as idle, bypassing the
-      // screensaver-off toggle the way the stock menu entry does.
-      var effects = root.cfg.savers && root.cfg.savers.terminal ? root.cfg.savers.terminal.effects : []
-      if (!Array.isArray(effects) || effects.length === 0 || root.terminalId === "") runProcess(screensaverProcess, "screensaver", "omarchy-launch-screensaver force")
-      else launchTerminal()
+      startTerminalSaver(true)
       return "ok"
     }
     root.overlaySaver = id

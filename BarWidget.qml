@@ -30,6 +30,14 @@ Panel {
   Component.onCompleted: if (svc) svc.barSettings = settings
   Component.onDestruction: if (svc) svc.barSettings = null
 
+  // The stock terminal saver cannot come up under an open panel (see the
+  // service); it asks for the panel to close first.
+  Connections {
+    target: root.svc
+    ignoreUnknownSignals: true
+    function onPanelCloseRequested() { if (root.opened) root.close() }
+  }
+
   onOpenedChanged: if (opened) {
     body.reset()
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })

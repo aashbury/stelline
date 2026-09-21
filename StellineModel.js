@@ -9,12 +9,13 @@ var PLUGIN_ID = "io.github.aashbury.stelline"
 // The stock saver first and as the default: installing Stelline changes
 // nothing until you choose. `meta` is the line under the name on a tile with
 // no rule to report, so it has to fit a tile: about twenty characters. The
-// Wordmark's tile shows its own art (`thumbArt`) so it cannot be mistaken for
-// the Original, which shows the same branding file the stock saver plays.
+// Wordmark draws Stelline's own art (`fallbackArt`) until the branding file
+// has been changed from the stock logo, on its tile and full screen alike;
+// the Original always shows the branding file, since that is what it plays.
 var DEFAULT_SAVER = "terminal"
 var SAVERS = [
   { id: "terminal", name: "Original", glyph: "󰆍", meta: "Omarchy's own", file: "", thumb: "savers/Wordmark.qml", kind: "external" },
-  { id: "wordmark", name: "Wordmark", glyph: "󰊄", meta: "your art, redrawn", file: "savers/Wordmark.qml", thumbArt: "savers/stelline.txt", kind: "native" },
+  { id: "wordmark", name: "Wordmark", glyph: "󰊄", meta: "your art, redrawn", file: "savers/Wordmark.qml", fallbackArt: "savers/stelline.txt", kind: "native" },
   { id: "clock",    name: "Clock",    glyph: "󰥔", meta: "time and date", file: "savers/Clock.qml",    kind: "native" },
   { id: "blank",    name: "Blank",    glyph: "󰹏", meta: "black, saves power", file: "savers/Blank.qml",  kind: "native" }
 ]

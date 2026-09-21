@@ -20,13 +20,20 @@ Item {
   readonly property color bg: settings && settings.background === "black" ? "black" : Color.background
   readonly property color accent: Color.accent
 
-  // On its tile the Wordmark shows art of its own (the tile sets `thumbArt`),
-  // so it cannot be mistaken for the Original, whose tile shows the branding
-  // file the stock saver plays. Full screen it always draws the branding file.
-  property string thumbArt: ""
+  // Until the branding file has been changed from the stock logo, the
+  // Wordmark draws Stelline's own art (`fallbackArt`, set by the tile and the
+  // full-screen surface for this saver only) — otherwise it would be the
+  // Omarchy logo twice over, here and on the Original, which always shows the
+  // branding file because that is what the stock saver plays. Set your own
+  // art (the ⚙ ARTWORK row, or Style › Screensaver) and it shows that instead.
+  property string fallbackArt: ""
   readonly property string brandingPath: Quickshell.env("HOME") + "/.config/omarchy/branding/screensaver.txt"
-  readonly property string artPath: thumbnail && thumbArt !== "" ? thumbArt : brandingPath
-  property string art: ""
+  readonly property string logoPath: (service && service.omarchyPath ? String(service.omarchyPath) : (Quickshell.env("OMARCHY_PATH") || "/usr/share/omarchy")) + "/logo.txt"
+  property string branding: ""
+  property string logo: ""
+  property string ownArt: ""
+  readonly property bool brandingIsStock: branding.trim() === "" || (logo.trim() !== "" && branding.trim() === logo.trim())
+  readonly property string art: fallbackArt !== "" && brandingIsStock ? ownArt : branding
 
   // `cycle` (the default) plays a different effect every `holdSec`, drawn at
   // random from `effects` (all of them unless pinned) the way the stock saver
@@ -46,12 +53,24 @@ Item {
   }
 
   FileView {
-    path: root.artPath
+    path: root.brandingPath
     watchChanges: true
     printErrors: false
-    onLoaded: root.art = text()
+    onLoaded: root.branding = text()
     onFileChanged: reload()
-    onLoadFailed: root.art = ""
+    onLoadFailed: root.branding = ""
+  }
+  FileView {
+    path: root.logoPath
+    printErrors: false
+    onLoaded: root.logo = text()
+    onLoadFailed: root.logo = ""
+  }
+  FileView {
+    path: root.fallbackArt
+    printErrors: false
+    onLoaded: root.ownArt = text()
+    onLoadFailed: root.ownArt = ""
   }
 
   onActiveChanged: if (active) { driftX = 0; driftY = 0; nextEffect() }

@@ -294,7 +294,7 @@ BorderSurface {
         Text {
           anchors.baseline: parent.children[0].baseline
           textFormat: Text.PlainText
-          text: "shared by Wordmark and Original — the same art as Style › Screensaver"
+          text: "the same file as Style › Screensaver"
           color: root.dim
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
@@ -306,6 +306,15 @@ BorderSurface {
         Button { text: "Use a picture…"; iconText: "󰋩"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; tooltipText: "A PNG or SVG, turned into text art"; onClicked: if (root.svc) root.svc.brandingImage() }
         Button { text: "Edit the text…"; iconText: "󰏫"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; tooltipText: "Opens the art in your editor"; onClicked: if (root.svc) root.svc.brandingText() }
         Button { text: "Back to the Omarchy logo"; iconText: "󰕌"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: if (root.svc) root.svc.brandingReset() }
+      }
+      Text {
+        width: parent.width
+        textFormat: Text.PlainText
+        wrapMode: Text.WordWrap
+        text: "Original shows it as it is. Wordmark shows Stelline's own art until you set yours."
+        color: root.dim
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.caption
       }
     }
 
