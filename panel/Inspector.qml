@@ -210,6 +210,15 @@ BorderSurface {
 
       Toggle {
         width: parent.width
+        label: "Docked"
+        description: M.ruleHas(root.rule, "docked") ? "" : "A monitor is plugged in"
+        checked: M.ruleHas(root.rule, "docked")
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        onClicked: root.condition("docked", !checked)
+      }
+      Toggle {
+        width: parent.width
         label: "With a theme"
         description: M.ruleHas(root.rule, "theme") ? "" : "While a particular Omarchy theme is set"
         checked: M.ruleHas(root.rule, "theme")

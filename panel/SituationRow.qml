@@ -17,7 +17,7 @@ Column {
   property string fontFamily: Style.font.family
   readonly property color dim: Qt.darker(foreground, 1.4)
   readonly property var when: situation && situation.when ? situation.when : ({})
-  readonly property string kind: when.battery ? "battery" : (when.night ? "night" : (when.theme ? "theme" : "unknown"))
+  readonly property string kind: when.battery ? "battery" : (when.night ? "night" : (when.theme ? "theme" : (when.docked ? "docked" : "unknown")))
   readonly property bool editing: fromField.activeFocus || toField.activeFocus || belowField.field.activeFocus
     || screensaverField.field.activeFocus || lockField.field.activeFocus
 

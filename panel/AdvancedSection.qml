@@ -128,6 +128,7 @@ Column {
       Button { visible: root.addingTimings; text: "on battery"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: { root.addingTimings = false; if (root.body) root.body.addSituation("battery") } }
       Button { visible: root.addingTimings; text: "at night"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: { root.addingTimings = false; if (root.body) root.body.addSituation("night") } }
       Button { visible: root.addingTimings; text: "with a theme"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: { root.addingTimings = false; if (root.body) root.body.addSituation("theme") } }
+      Button { visible: root.addingTimings; text: "when docked"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; tooltipText: "On a monitor: starts as never locking"; onClicked: { root.addingTimings = false; if (root.body) root.body.addSituation("docked") } }
     }
   }
 

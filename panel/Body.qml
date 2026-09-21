@@ -289,6 +289,9 @@ Column {
     var s = { id: kind + "-" + Date.now().toString(36), enabled: true, when: {} }
     if (kind === "battery") { s.when.battery = { below: 100 }; s.screensaver = 90; s.lock = 180 }
     else if (kind === "night") s.when.night = { from: "22:00", to: "07:00" }
+    // The reason anyone adds a docked rule: at the desk, the saver plays and
+    // nothing locks. The row's editor can change that.
+    else if (kind === "docked") { s.when.docked = {}; s.lock = "never" }
     else s.when.theme = { name: svc && svc.themeName ? svc.themeName : "" }
     list.push(s)
     writeSituations(list)

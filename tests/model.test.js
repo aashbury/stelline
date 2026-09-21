@@ -372,3 +372,30 @@ test("wordmarkScript draws a word and refuses an empty one", () => {
   // a word with a quote in it cannot break out of the script
   assert.match(M.wordmarkScript("it's", "/tmp/x"), /text='it'\\''s'/)
 })
+
+test("docked: an external output makes the rule hold, the laptop panel alone does not", () => {
+  assert.equal(M.isDocked(["eDP-1"]), false)
+  assert.equal(M.isDocked(["eDP-1", "DP-1"]), true)
+  assert.equal(M.isDocked(["DP-1"]), true)          // clamshell: the panel is off
+  assert.equal(M.isDocked(["HDMI-A-1"]), true)
+  assert.equal(M.isDocked(["LVDS-1", "DSI-1"]), false)
+  assert.equal(M.isDocked([]), false)
+  assert.equal(M.isDocked(null), false)
+  const rule = { id: "d", enabled: true, when: { docked: {} }, lock: "never" }
+  assert.equal(M.situationMatches(rule, { docked: true }), true)
+  assert.equal(M.situationMatches(rule, { docked: false }), false)
+  assert.equal(M.situationMatches(rule, {}), false)
+  // it reads as one word, needs nothing set, and is a rule key like the others
+  assert.equal(M.situationLabel(rule), "Docked")
+  assert.deepEqual(M.defaultCondition("docked", {}), {})
+  assert.ok(M.RULE_KEYS.includes("docked"))
+  // the tile switch can turn it on for a saver, and a docked rule ANDs with the rest
+  const on = M.setRuleCondition([], "clock", "docked", true, { docked: true })
+  assert.deepEqual(on[0].when, { docked: {} })
+  const both = M.setRuleCondition(on, "clock", "battery", true, { docked: true })
+  assert.equal(M.situationMatches(both[0], { docked: true, onBattery: true, batteryPercent: 50 }), true)
+  assert.equal(M.situationMatches(both[0], { docked: true, onBattery: false }), false)
+  // and the timings a docked rule carries are honoured: never lock at the desk
+  const eff = M.effectiveTimeouts({ screensaver: 30, lock: 300 }, M.mergeSettings({ situations: [rule] }), rule)
+  assert.equal(eff.lockEnabled, false)
+})

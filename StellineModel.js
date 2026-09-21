@@ -288,7 +288,23 @@ var CONDITIONS = {
     var want = c && c.name ? String(c.name).trim().toLowerCase() : ""
     var have = ctx.themeName ? String(ctx.themeName).trim().toLowerCase() : ""
     return want !== "" && want === have
+  },
+  // At a desk: an external monitor is driving the session. Nothing to
+  // configure — it is either plugged in or it is not.
+  docked: function(c, ctx) {
+    return ctx.docked === true
   }
+}
+
+// Docked the way Omarchy's own clamshell logic sees it: any active output
+// that is not the laptop's own panel. Reactive off the compositor's screen
+// list, so no polling and no process.
+function isDocked(screenNames) {
+  if (!Array.isArray(screenNames)) return false
+  for (var i = 0; i < screenNames.length; i++) {
+    if (!/^(eDP|LVDS|DSI)-/i.test(String(screenNames[i] || ""))) return true
+  }
+  return false
 }
 
 function situationMatches(s, ctx) {
@@ -317,6 +333,7 @@ function conditionLabel(key, c) {
   }
   if (key === "night") return "Night " + ((c && c.from) || "?") + "–" + ((c && c.to) || "?")
   if (key === "theme") return "Theme " + ((c && c.name) || "?")
+  if (key === "docked") return "Docked"
   return key
 }
 
@@ -1099,7 +1116,7 @@ function deleteScript(id, rootDir) {
 
 // The tile view of situations: a saver has at most one rule, the first
 // situation that points at it. Its conditions AND together.
-var RULE_KEYS = ["night", "battery", "theme"]
+var RULE_KEYS = ["night", "battery", "theme", "docked"]
 
 function ruleIndexFor(situations, saverId) {
   if (!Array.isArray(situations)) return -1
@@ -1120,6 +1137,7 @@ function defaultCondition(key, ctx) {
   if (key === "night") return { from: "22:00", to: "07:00" }
   if (key === "battery") return { below: 100 }
   if (key === "theme") return { name: ctx && ctx.themeName ? String(ctx.themeName) : "" }
+  // docked, and anything else: a condition with nothing to set.
   return {}
 }
 
@@ -1276,6 +1294,7 @@ if (typeof module !== "undefined") {
     importScript: importScript,
     deleteScript: deleteScript,
     RULE_KEYS: RULE_KEYS,
+    isDocked: isDocked,
     ruleIndexFor: ruleIndexFor,
     ruleFor: ruleFor,
     ruleHas: ruleHas,

@@ -7,7 +7,7 @@ branding redrawn in the theme's colours, a digital clock, nothing at all, or
 **your own**: whatever you copied, pictures, a folder
 of them, a video clip, some text, or a description, turned into ASCII art in your theme's colours (or
 shown as they are). A grid of tiles, one click to choose, and a rule per tile —
-at night, on battery, with a theme — for when each one plays. Timings, a
+at night, on battery, with a theme, docked — for when each one plays. Timings, a
 shuffle, and a quiet corner card that tells you what arrived while you were
 away and whether an agent is waiting for you. Until you choose otherwise,
 what plays is the stock screensaver, untouched.
@@ -206,6 +206,15 @@ fields once it is on. A rule can also change the timings while it holds.
 |---|---|
 | At night | the clock is inside a window, wrapping midnight |
 | On battery | unplugged, optionally only below a percentage |
+| Docked | an external monitor is one of the active outputs — the laptop's own panel does not count, and whether the lid is open or closed makes no difference. Nothing to set. |
+
+A laptop on a desk is the common reason for a rule that changes only the
+timings: *Rules › Timings at certain times… › when docked* makes one that
+**never locks** while a monitor is plugged in, so the screensaver plays for as
+long as you are away and a nudge of the mouse is straight back in; the lock
+returns the moment the monitor is unplugged. Whether the lid closing sends
+the machine to sleep is logind's decision, not the screensaver's — see
+`HandleLidSwitchExternalPower` in `logind.conf(5)`.
 | With a theme | `~/.local/state/omarchy/current/theme.name` equals the chosen slug |
 
 So a clip for the evenings and a set of company logos for the working day is

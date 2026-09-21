@@ -372,7 +372,17 @@ Item {
     ? UPower.displayDevice.percentage * 100 : -1
   property int minuteOfDay: -1
   property string themeName: ""
-  readonly property var situationContext: ({ onBattery: onBattery, batteryPercent: batteryPercent, minuteOfDay: minuteOfDay, themeName: themeName })
+  // Docked: an external monitor is one of the compositor's active outputs.
+  // Follows Quickshell.screens, so plugging in or unplugging re-evaluates
+  // every rule at once.
+  readonly property var screenNames: {
+    var names = []
+    for (var i = 0; i < Quickshell.screens.length; i++) names.push(String(Quickshell.screens[i].name))
+    return names
+  }
+  readonly property bool docked: M.isDocked(screenNames)
+  onDockedChanged: logEvent("docked", docked ? "external monitor active" : "laptop panel only")
+  readonly property var situationContext: ({ onBattery: onBattery, batteryPercent: batteryPercent, minuteOfDay: minuteOfDay, themeName: themeName, docked: docked })
   readonly property var situation: M.activeSituation(cfg.situations, situationContext)
   onSituationChanged: logEvent("situation", situation ? situation.id : "none")
 
