@@ -3,10 +3,10 @@ import qs.Commons
 import qs.Ui
 import "../StellineModel.js" as M
 
-// The open tile, below the grid: when this saver plays (its rule), how it
-// looks (its knobs), and delete. One rule per saver; its conditions all have
-// to hold, and this is the rule's only editor — Rules lists it and links
-// back here. Editors only appear for conditions that are on.
+// The open tile, below the grid, the same three blocks for every saver:
+// when it plays (its rule — the only place a rule is edited), how it looks
+// (the knobs of its type), and what sits on top (the widgets). Delete for
+// anything but the Original. Editors only appear for what is switched on.
 BorderSurface {
   id: root
 
@@ -19,23 +19,14 @@ BorderSurface {
   readonly property color dim: Qt.darker(foreground, 1.4)
   readonly property var cfg: body ? body.cfg : M.defaults()
   readonly property string saverId: saver && saver.id ? String(saver.id) : ""
-  readonly property bool isUser: !!(saver && saver.kind === "series")
+  readonly property bool external: !!(saver && saver.kind === "external")
   readonly property bool failed: !!(saver && saver.series && saver.series.error)
   readonly property var rule: M.ruleFor(cfg.situations, saverId)
-  readonly property int ruleIndex: M.ruleIndexFor(cfg.situations, saverId)
-  readonly property bool hasRule: !!rule && rule.enabled === true
   readonly property var when: rule && rule.when ? rule.when : ({})
-  // The shared Omarchy artwork is the Original's subject; a wordmark has a
+  readonly property var settings: cfg.savers && cfg.savers[saverId] ? cfg.savers[saverId] : ({})
+  // The shared Omarchy artwork is the Original's subject; a text saver has a
   // word of its own instead, and shows this file only when that word is empty.
   readonly property bool showsBranding: saverId === "terminal"
-  // Its own timings while the rule holds; absent means the usual ones. The
-  // two sliders are the same two as at the top of the panel.
-  readonly property bool ownTimings: hasRule && (M.hasTiming(rule.screensaver) || M.hasTiming(rule.lock))
-  readonly property int usualScreensaver: body ? body.screensaverSeconds : 150
-  readonly property int usualLock: body ? body.lockSeconds : 300
-  readonly property int ruleScreensaver: hasRule && M.hasTiming(rule.screensaver) ? Number(rule.screensaver) : usualScreensaver
-  readonly property bool ruleLocks: !(hasRule && rule.lock === "never")
-  readonly property int ruleLock: hasRule && M.hasTiming(rule.lock) && rule.lock !== "never" ? Number(rule.lock) : usualLock
   property bool deleteArmed: false
 
   readonly property bool editing: fromField.activeFocus || toField.activeFocus || belowField.field.activeFocus || look.editing
@@ -46,7 +37,6 @@ BorderSurface {
 
   function condition(key, on) { if (svc) svc.setRuleCondition(saverId, key, on) }
   function patchCondition(key, patch) { if (svc) svc.patchRuleCondition(saverId, key, patch) }
-  function patchRule(patch) { if (body && ruleIndex >= 0) body.updateSituation(ruleIndex, patch) }
 
   implicitHeight: column.implicitHeight + padding * 2
   padding: Style.space(12)
@@ -62,12 +52,12 @@ BorderSurface {
     anchors.margins: root.padding
     spacing: Style.space(8)
 
-    // ---- title and actions ----
+    // ---- title and delete ----
     Row {
       width: parent.width
       spacing: Style.space(8)
       Column {
-        width: parent.width - actions.width - (actions.visible ? Style.space(8) : 0)
+        width: parent.width - (actions.visible ? actions.width + Style.space(8) : 0)
         spacing: Style.space(1)
         Text {
           width: parent.width
@@ -91,10 +81,9 @@ BorderSurface {
       }
       Row {
         id: actions
-        visible: root.isUser
+        visible: !root.external
         spacing: Style.space(4)
         Button {
-          visible: root.isUser
           text: root.deleteArmed ? "Really delete" : "Delete"
           iconText: "󰆴"
           bordered: true
@@ -102,7 +91,7 @@ BorderSurface {
           foreground: root.deleteArmed ? Color.urgent : root.foreground
           fontFamily: root.fontFamily
           fontSize: Style.font.caption
-          tooltipText: root.deleteArmed ? "Removes its folder and every rule pointing at it" : "Delete this saver"
+          tooltipText: root.deleteArmed ? "Removes it and every rule pointing at it" : "Delete this saver; Add can make another"
           onClicked: { if (root.deleteArmed) { if (root.body) root.body.deleteSaver(root.saverId) } else root.armDelete() }
         }
       }
@@ -115,7 +104,7 @@ BorderSurface {
       spacing: Style.space(2)
 
       // Naming the saver here is the whole point: every switch below writes
-      // a rule that belongs to it, and Rules lists it under this same name.
+      // a rule that belongs to it, and the tile's caption says so.
       PanelSectionHeader { text: "WHEN " + (root.saver && root.saver.name ? String(root.saver.name).toUpperCase() : "IT") + " PLAYS"; foreground: root.foreground; fontFamily: root.fontFamily }
 
       SwitchRow {
@@ -229,54 +218,6 @@ BorderSurface {
           onChanged: function(v) { root.patchCondition("theme", { name: v }) }
         }
       }
-
-      // Timings only make sense once there is a rule to hang them on. On
-      // starts from the usual values; the sliders take it from there.
-      SwitchRow {
-        visible: root.hasRule
-        width: parent.width
-        glyph: "󰅐"
-        label: "Different timings at those times"
-        checked: root.ownTimings
-        foreground: root.foreground
-        fontFamily: root.fontFamily
-        onClicked: root.patchRule(checked ? { screensaver: null, lock: null } : { screensaver: root.usualScreensaver, lock: root.usualLock })
-      }
-      Column {
-        visible: root.hasRule && root.ownTimings
-        width: parent.width
-        leftPadding: Style.space(24)
-        spacing: Style.space(2)
-        SliderRow {
-          width: parent.width - parent.leftPadding
-          bar: root.bar
-          label: "Screensaver"
-          value: root.ruleScreensaver
-          minimum: 30
-          maximum: 1800
-          step: 30
-          format: function(v) { return M.mmss(v) }
-          foreground: root.foreground
-          fontFamily: root.fontFamily
-          onReleased: function(v) { root.patchRule({ screensaver: Math.round(v) }) }
-        }
-        SliderRow {
-          width: parent.width - parent.leftPadding
-          bar: root.bar
-          label: "Lock"
-          value: root.ruleLock
-          minimum: 60
-          maximum: 3600
-          step: 60
-          format: function(v) { return M.mmss(v) }
-          showSwitch: true
-          switchChecked: root.ruleLocks
-          foreground: root.foreground
-          fontFamily: root.fontFamily
-          onReleased: function(v) { root.patchRule({ lock: Math.round(v) }) }
-          onSwitchToggled: root.patchRule({ lock: root.ruleLocks ? "never" : root.usualLock })
-        }
-      }
     }
 
     // ---- artwork: the branding file, same as Style › Screensaver ----
@@ -294,20 +235,32 @@ BorderSurface {
       }
     }
 
-    // ---- look ----
-    PanelSectionHeader { visible: look.hasKnobs; text: "LOOK"; foreground: root.foreground; fontFamily: root.fontFamily }
+    // ---- look: the knobs of this saver's type ----
+    PanelSectionHeader { visible: look.hasKnobs && !root.failed; text: "LOOK"; foreground: root.foreground; fontFamily: root.fontFamily }
     SaverSettings {
       id: look
       visible: hasKnobs && !root.failed
       width: parent.width
       saverId: root.saverId
       saver: root.saver
-      settings: root.cfg.savers[root.saverId] || ({})
+      settings: root.settings
       svc: root.svc
       bar: root.bar
       foreground: root.foreground
       fontFamily: root.fontFamily
       leftPadding: 0
+      onPatched: function(patch) { if (root.body) root.body.writeSaverSettings(root.saverId, patch) }
+    }
+
+    // ---- on top: the widgets. The Original is Omarchy's own window and
+    // carries none. ----
+    WidgetRows {
+      visible: !root.external && !root.failed
+      width: parent.width
+      settings: root.settings
+      cfg: root.cfg
+      foreground: root.foreground
+      fontFamily: root.fontFamily
       onPatched: function(patch) { if (root.body) root.body.writeSaverSettings(root.saverId, patch) }
     }
   }

@@ -5,7 +5,7 @@ import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
 import "StellineModel.js" as M
-import "overlay"
+import "savers"
 
 // The screensaver surface: one full-screen Overlay-layer window per monitor,
 // every one showing the same saver. Any key, click, wheel or deliberate
@@ -22,43 +22,19 @@ Item {
   readonly property bool miniShown: service ? service.miniVisible === true : false
   readonly property string miniSaverId: service ? String(service.miniSaver || "") : ""
 
-  // One saver instance: background in the saver's own colour, the component
-  // loaded only while running, settings and `active` bound through.
+  // One saver instance: the same Scene a tile draws, full size, loaded only
+  // while running. The cards show on the focused monitor only.
   component SaverStage: Item {
     id: stage
     property string saverId: ""
     property bool running: false
     property bool showCard: true
-    Rectangle {
+    Scene {
       anchors.fill: parent
-      color: loader.item && loader.item.bg !== undefined ? loader.item.bg : Color.background
-    }
-    Loader {
-      id: loader
-      anchors.fill: parent
-      active: stage.running && stage.saverId !== ""
-      source: stage.saverId !== "" ? M.saverFile(stage.saverId, host.service ? host.service.userSavers : []) : ""
-      onLoaded: {
-        item.service = host.service
-        var def = M.saverById(stage.saverId, host.service ? host.service.userSavers : [])
-        if ("fallbackArt" in item && def && def.fallbackArt)
-          item.fallbackArt = String(Qt.resolvedUrl(def.fallbackArt)).replace(/^file:\/\//, "")
-        if ("wordmarkId" in item && def && M.saverType(def) === "wordmark") item.wordmarkId = String(def.id)
-        item.settings = Qt.binding(function() {
-          var all = host.service ? host.service.cfg.savers : null
-          return all && all[stage.saverId] ? all[stage.saverId] : ({})
-        })
-        if ("series" in item) item.series = Qt.binding(function() {
-          var s = M.saverById(stage.saverId, host.service ? host.service.userSavers : [])
-          return s && s.series ? s.series : ({})
-        })
-        item.active = Qt.binding(function() { return stage.running })
-      }
-    }
-    NotificationCard {
-      visible: stage.showCard && stage.running && host.service && host.service.cardVisible === true
       service: host.service
-      corner: host.service && host.service.cfg && host.service.cfg.card && host.service.cfg.card.corner ? host.service.cfg.card.corner : "bottom-right"
+      saver: M.saverById(stage.saverId, host.service ? host.service.userSavers : []) || ({})
+      active: stage.running && stage.saverId !== ""
+      showCards: stage.showCard
     }
   }
 

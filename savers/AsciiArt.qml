@@ -206,8 +206,8 @@ Item {
       onPaint: root.paintArt(fgCanvas, getContext("2d"), root.fg)
       opacity: root.pulse ? 1 - root.pulseMix : 1
       // A resized canvas starts blank.
-      onWidthChanged: dirty = true
-      onHeightChanged: dirty = true
+      onWidthChanged: { dirty = true; requestPaint() }
+      onHeightChanged: { dirty = true; requestPaint() }
     }
 
     Canvas {
@@ -222,8 +222,8 @@ Item {
       onPaint: root.paintArt(accentCanvas, getContext("2d"), root.pulseTo)
       opacity: root.pulseMix
       onVisibleChanged: if (visible) { dirty = true; requestPaint() }
-      onWidthChanged: dirty = true
-      onHeightChanged: dirty = true
+      onWidthChanged: { dirty = true; requestPaint() }
+      onHeightChanged: { dirty = true; requestPaint() }
     }
   }
 

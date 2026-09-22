@@ -51,6 +51,14 @@ BorderSurface {
     update({ step: "picking", source: kind === "folder" ? "folder" : (kind === "video" ? "video" : "images") })
     if (svc) svc.pickFiles(kind)
   }
+  // A clock, or an empty screen for widgets: nothing to pick, nothing to
+  // convert, so no confirm step.
+  function createNow(source) {
+    if (!svc) return
+    var spec = M.importDefaults()
+    spec.source = source
+    svc.importSaver(spec)
+  }
   function create() {
     if (!svc) return
     var spec = draft ? M.cloneJson(draft) : M.importDefaults()
@@ -126,6 +134,8 @@ BorderSurface {
       Button { width: sources.cell; leftAlign: true; text: "A video or GIF…"; iconText: "󰕧"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: root.pick("video") }
       Button { width: sources.cell; leftAlign: true; text: "Some text"; iconText: "󰊄"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: root.update({ step: "text" }) }
       Button { visible: root.ai !== ""; width: sources.cell; leftAlign: true; text: "A description"; iconText: "󰚩"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; tooltipText: "Asks your default coding agent for the art"; onClicked: root.update({ step: "prompt" }) }
+      Button { width: sources.cell; leftAlign: true; text: "A clock"; iconText: "󰥔"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; tooltipText: "An empty screen with the clock in the middle"; onClicked: root.createNow("clock") }
+      Button { width: sources.cell; leftAlign: true; text: "An empty screen"; iconText: "󰹏"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; tooltipText: "Nothing of its own — for what you put on top"; onClicked: root.createNow("empty") }
     }
 
     // ---- confirm (after the chooser) ----

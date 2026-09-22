@@ -1,7 +1,7 @@
 import QtQuick
 import qs.Commons
 import qs.Ui
-import "../StellineModel.js" as M
+import "../savers"
 
 // One saver in the grid: a live thumbnail, the name, and one line saying when
 // it plays. Click makes it the usual saver (or checks it into the shuffle);
@@ -64,36 +64,30 @@ CursorSurface {
       id: thumb
       width: parent.width
       height: Math.round(width * 9 / 16)
-      clip: true
 
       Rectangle {
         anchors.fill: parent
-        color: root.plainTile ? "transparent" : (loader.item && loader.item.bg !== undefined ? loader.item.bg : Color.background)
+        color: root.plainTile ? "transparent" : Color.background
         border.width: root.plainTile ? 1 : 0
         border.color: root.dim
         radius: root.plainTile ? Style.cornerRadius : 0
       }
 
-      Loader {
-        id: loader
+      // Only the saver is clipped. A border drawn on the clip's own edge
+      // loses its top row to rounding at fractional display scales, so the
+      // box that draws it sits outside.
+      Item {
         anchors.fill: parent
-        readonly property string thumbFile: root.saver ? String(root.saver.thumb || root.saver.file || "") : ""
-        active: root.live && !root.plainTile && thumbFile !== "" && !root.importing
-        source: active ? Qt.resolvedUrl("../" + thumbFile) : ""
-        onLoaded: {
-          item.service = root.svc
-          if ("thumbnail" in item) item.thumbnail = true
-          if ("fallbackArt" in item && root.saver && root.saver.fallbackArt)
-            item.fallbackArt = String(Qt.resolvedUrl("../" + root.saver.fallbackArt)).replace(/^file:\/\//, "")
-          // Only the wordmark entry names itself; the Original borrows this
-          // renderer for its thumbnail and wants the branding file as it is.
-          if ("wordmarkId" in item && root.saver && M.saverType(root.saver) === "wordmark") item.wordmarkId = String(root.saver.id)
-          item.settings = Qt.binding(function() {
-            var all = root.svc ? root.svc.cfg.savers : null
-            return all && all[root.saver.id] ? all[root.saver.id] : ({})
-          })
-          if ("series" in item) item.series = Qt.binding(function() { return root.saver && root.saver.series ? root.saver.series : ({}) })
-          item.active = true
+        clip: true
+
+        // The same composition the screen gets — base and widgets — small.
+        Scene {
+          anchors.fill: parent
+          visible: !root.plainTile && !root.importing && !root.failed
+          service: root.svc
+          saver: root.saver
+          thumbnail: true
+          active: root.live && visible && !!(root.saver && (root.saver.file || root.saver.thumb))
         }
       }
 

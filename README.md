@@ -3,14 +3,15 @@
 A native screensaver manager for [Omarchy](https://omarchy.org) 4 (Quattro).
 
 Stelline keeps Omarchy's own screensaver as the default and adds to it — your
-branding redrawn in the theme's colours, a digital clock, nothing at all, or
-**your own**: whatever you copied, pictures, a folder
-of them, a video clip, some text, or a description, turned into ASCII art in your theme's colours (or
-shown as they are). A grid of tiles, one click to choose, and a rule per tile —
-at night, on battery, with a theme, docked — for when each one plays. Timings, a
-shuffle, and a quiet corner card that tells you what arrived while you were
-away and whether an agent is waiting for you. Until you choose otherwise,
-what plays is the stock screensaver, untouched.
+branding redrawn in the theme's colours, a clock, nothing at all, or
+**your own**: whatever you copied, pictures, a folder of them, a video clip,
+some text, or a description, turned into ASCII art in your theme's colours (or
+shown as they are). Every tile is an instance of a type anyone can add, and on
+top of any of them sit **widgets** — a clock, what arrived while you were away,
+whether your coding agent is waiting — in a corner or in the middle. A grid of
+tiles, one click to choose, and a rule per tile — at night, on battery, with a
+theme, docked — for when each one plays. Until you choose otherwise, what plays
+is the stock screensaver, untouched.
 
 ![Stelline](preview.png)
 
@@ -56,9 +57,8 @@ Requires Omarchy 4.x. Stelline's id is `io.github.aashbury.stelline`.
 ## Use
 
 The panel is ordered by how often you touch a thing: the master switch and
-**Stay awake** at the top, then the timings, then the gallery, then the rows
-you set once (Rules, While you're away, Shortcuts) collapsed to one line
-each. It opens at the top with nothing unfolded, every time. Rows are plain:
+**Stay awake** at the top, then the timings, then the gallery, then the one
+row you set once (Shortcuts) collapsed to one line. It opens at the top with nothing unfolded, every time. Rows are plain:
 a glyph, a label, a switch — the only boxes are the one open detail card and
 the Add card, and nothing carries a sentence of explanation, the way Omarchy's
 own panels don't. A gallery past four rows keeps four and ends in a **Show
@@ -70,9 +70,8 @@ all** tile.
 | bar icon | right-click | toggle Stay awake (the coffee cup) |
 | bar icon | middle-click | preview the current saver |
 | panel | click a tile | make it the usual saver (with Shuffle on: check it in) |
-| panel | ⚙ on a tile | when it plays (its rule, and its own timings while the rule holds), how it looks, delete; for the Original also the artwork. ▶ and ⚙ appear while the pointer or the keyboard cursor is on a tile |
+| panel | ⚙ on a tile | the same three blocks on every tile: **WHEN … PLAYS** (its rule), **LOOK** (the knobs of its type), **ON TOP** (its widgets), and Delete; for the Original, the artwork instead of widgets. ▶ and ⚙ appear while the pointer or the keyboard cursor is on a tile |
 | panel | click another tile while a ⚙ panel is open | the panel follows to that tile |
-| panel | a row in **Rules** | goes to where that rule is edited: the saver's ⚙, or its switch under Timings |
 | panel | **Different timings on battery**, **Never lock while docked** | laptops only; each is an ordinary rule underneath |
 | panel | 󰅶 Stay awake | the coffee cup — top of the panel, same as Super+Ctrl+I |
 | panel | ▶ on a tile | preview it |
@@ -82,8 +81,8 @@ all** tile.
 
 Keyboard in the panel: `h`/`j`/`k`/`l` or arrows move (through the grid too),
 `Enter` activates, `h`/`l` also step a slider, `p` previews the tile under the
-cursor, `g` opens it, `n` adds, `s` toggles Shuffle, `x`
-deletes (twice for a saver, once for a rule), `Esc` closes. Fields inside
+cursor, `g` opens it, `n` adds, `s` toggles Shuffle, `x` deletes (twice),
+`Esc` closes. Fields inside
 editors take the mouse.
 
 A hotkey, if you want one, goes in `~/.config/hypr/bindings.lua`:
@@ -103,8 +102,12 @@ that does not parse, and the toggle removes exactly those lines again.
 |---|---|
 | **Original** | Omarchy's own screensaver, exactly as it ships and the default: `ttfx` in your terminal, cycling through its 37 effects at random. Choose a subset in ⚙ — with a choice, Stelline starts the terminal itself running a copy of Omarchy's loop with `--include-effects`; without, it runs the stock launcher untouched. Its ⚙ also has the same three artwork edits as *Style › Screensaver* (a picture, the text, back to the logo). |
 | **Wordmark** | A word you type — **Text** in its ⚙, `stelline` to begin with — drawn by Stelline instead of `ttfx`: whole-pixel cells in the theme's foreground colour, with one of **eighteen animations of Stelline's own** every few seconds — `decrypt`, `rain`, `beams`, `scatter`, `wipe`, `typewriter`, `reveal`, `pulse`, and six that assemble the art rather than fade it in: `scanline` (a bright bar sweeps down), `grid` (a lattice snaps in, then fills), `shockwave` (an expanding ring), `slit` (opens from one column and widens), `glitch` (bands tear sideways and lock back), `dust` (particles drift in and converge), `spotlight` (a beam crosses and leaves the letters lit behind it), `cascade` (columns fall and each drops a letter as its head goes by), `derez` (diagonal shards slide in from alternating sides), `collapse` (spun in from far out and tightened onto the letterform), `storm` (rain in the dark, the sky going off behind it). Five of them animate the **whole canvas** rather than the letters alone — a beam crossing the dark, rain falling past the word, a ring expanding through the emptiness — the way Omarchy's own effects use the whole terminal. They are not Omarchy's 37 — those run only inside `ttfx`, so only the Original has them. What you get instead is the cost: almost nothing, against several cores. Clear the field and it shows Omarchy's shared artwork instead, the same file the Original plays. |
-| **Clock** | Seven-segment digits built from block characters, the colon blinking in the accent, the date in small wide-tracked capitals beneath. Repaints only when the text changes. |
-| **Blank** | Black. Exists so a battery rule has somewhere free to point. |
+| **Clock** | An empty screen with the clock widget in the middle: seven-segment digits built from block characters, the colon blinking in the accent, the date in small wide-tracked capitals beneath. Repaints only when the text changes. *Add › A clock* makes another. |
+| **Blank** | An empty screen, black. Exists so a battery rule has somewhere free to point, and for whatever you put on top of it. *Add › An empty screen* makes another. |
+
+Every one of these but the Original is an ordinary instance of a type — text,
+empty — with its defaults in the settings and nothing special of its own.
+Delete any of them; Add makes the same thing again.
 
 It is a screensaver, so it never settles into a picture. Every cycle is
 **arrive → live → depart**: an animation brings the art in, something quiet
@@ -138,13 +141,25 @@ two. Plenty of Omarchy themes set the accent *to* the foreground, which would
 leave the motion one flat colour — on those the muted tone stands in, so an
 animation always reads as an animation. The font is the shell's monospace font.
 
-**A saver's settings follow its type**, so two savers of the same kind are
-configured the same way whether they shipped with Stelline or you made them.
-A **wordmark** — the built-in one, or anything you make from *Add › Some text*
-— has a **Text** field: type a different word and it is redrawn. **Pictures**
-get a fit and a crossfade, an **animation** gets a frame rate, the **Original**
-gets Omarchy's effects. Nothing is hardcoded; the built-in wordmark is simply
-defaulted to `Stelline` so there is something to look at on day one.
+**A saver's settings follow its type**, so two savers of the same type are
+configured the same way whether they shipped with Stelline or you made them,
+and every ⚙ has the same three blocks. **LOOK** holds the type's knobs: a
+**text** saver — the built-in Wordmark, or anything from *Add › Some text* —
+has a **Text** field and Stelline's animations; **pictures** get a fit and a
+crossfade; **art** gets the animations and a dwell; an **animation** gets a
+frame rate; an **empty** screen has only its background; the **Original** has
+Omarchy's effects and the artwork. Nothing is hardcoded; the built-in wordmark
+is simply defaulted to `stelline` so there is something to look at on day one.
+
+**ON TOP** holds the widgets, the same three on every tile: a **clock**, the
+**notifications** that arrived since you went idle, and your **coding
+agents**, as a small figure acting out what they are doing. Each is a switch,
+and when it is on you say where it goes by clicking a
+little picture of the screen: four corners and the middle, where a widget is
+drawn large. The agent also picks its figure from the figures themselves,
+side by side and at work, the chosen one lit. Two widgets in the same spot stack. A clock in the middle of an
+empty screen is the Clock tile; the agent in the middle of an empty screen is
+a status board. The Original is Omarchy's own window and carries none.
 
 **Which animations play** is one control in a saver's ⚙, for Stelline's
 fourteen and Omarchy's thirty-seven alike: **Everything**, or a mood —
@@ -165,6 +180,8 @@ The **Add** tile makes a saver from:
 | **A video or GIF** | one file | an ASCII animation, frame by frame (the first 20 s at 10 fps) — or the clip as it is, as an animated picture |
 | **Some text** | you type it | big letters as block art — a wordmark of your own, with the same **Text** field in its ⚙ afterwards |
 | **A description** | you describe it | ASCII art, still or an animation loop, drawn by your **default coding agent** (`omarchy default agent` — Claude Code, Codex, Gemini, OpenCode, Copilot, Crush, Pi, Oh My Pi or Grok), each in its one-shot mode with tools off or read-only where it has such a switch. Claude Code if no default is set; the Claude API with `ANTHROPIC_API_KEY` as a last resort. Shown only when one of those is there. |
+| **A clock** | nothing | an empty screen with the clock widget in the middle — the same as the shipped Clock |
+| **An empty screen** | nothing | an empty screen in the theme's background, for whatever you put on top |
 
 Imports run in the background — the tile appears at once and fills in; a
 notification says when it is ready — one after another. ASCII conversion is
@@ -186,10 +203,11 @@ setting that named it; pictures shown as-is are never touched.
   "source": { "type": "images", "paths": ["/home/you/Pictures/logo.svg", "…"] } }
 ```
 
-`kind` is `ascii` or `image`; `play` is `slideshow` or `animation` (with `fps`);
-`folder` instead of `pieces` means "every picture in that folder, live". The
-per-saver knobs — dwell, speed, effects, order, fit, motion, background — live
-with the plugin's other settings, not in the folder.
+`kind` is `ascii`, `image` or `empty`; `play` is `slideshow` or `animation`
+(with `fps`); `folder` instead of `pieces` means "every picture in that folder,
+live". The per-saver knobs — dwell, speed, effects, order, fit, motion,
+background, the widgets — live with the plugin's other settings, not in the
+folder.
 
 ## Timings and stages
 
@@ -230,11 +248,6 @@ moment the monitor is unplugged). Whether the lid closing sends the machine
 to sleep is logind's decision, not the screensaver's — see
 `HandleLidSwitchExternalPower` in `logind.conf(5)`.
 
-**Rules** lists every rule in one place, each leading with the saver it is
-about (a timings-only one reads **Any screensaver**), with a switch to pause
-it and ✕ to remove it. Clicking a row goes to where it is edited. While a
-tile's ⚙ is open, that saver's rule is marked in the list.
-
 Every rule that fits applies at once: the saver comes from the first rule
 that names one, each timing from the first rule that sets it, and *never
 lock* beats any number another rule sets. So a clip for the evenings and a
@@ -246,16 +259,41 @@ saver is one you made. Nothing ships enabled, so a fresh install behaves
 exactly like stock. Unknown condition types never match, so a rule written
 by a newer version is inert on an older one.
 
-## Status card
+## Widgets
 
-A small card in a corner of the saver: how many notifications arrived since you
-went idle, from which apps (counts by default; summaries or bodies are opt-in —
-it is an unattended screen), and one line of agent state read from
-`~/.local/state/omarchy/agent-ambient` (`working`, `needs`, `done`, `error` —
-the convention several agent plugins already write). Hidden while Do Not
-Disturb is on, and when there is nothing to say. It reads Omarchy's own
-notification mirror under `~/.local/state/omarchy/notifications/`; it never
-talks to the notification daemon.
+What sits on top of a saver, set per tile under **ON TOP**. The **clock** is
+the seven-segment face, small in a corner or large in the middle, with the
+time written both ways to pick from, and date and seconds as check boxes.
+**Notifications** is a quiet card: how many arrived since you went idle, from
+which apps (counts by default; summaries or bodies are opt-in — it is an
+unattended screen).
+
+The **coding agent** is a figure that acts out what your agents are doing,
+drawn in the theme's foreground with its lights in the accent. It types while
+one works, keys lighting under its fingers; takes its hands off the keys,
+under a blinking beacon, when one needs you; stays at the keys in the rain
+when it has finished and is waiting for you; crosses and throws sparks when
+one hit an error; and goes dark, pulsing slowly, when there is nothing.
+Two figures come with it — **Hands**, a pair of prosthetic hands at a
+keyboard, and **Robot**, a visored figure at the same desk — and the choice
+is the tile's own. Under it, which agent and what it is on, and a
+line for every other session, so the one that is stuck is never hidden behind
+the one that is busy. Large in the middle of an empty screen it is a status
+board. Claude Code is read exactly, from the registry it keeps of its own
+running sessions (`~/.claude/sessions/`, honouring `CLAUDE_CONFIG_DIR`):
+its status, what it is waiting for, and the session's title from the
+transcript. Every other agent Omarchy knows — Codex, Gemini, OpenCode,
+Copilot, Crush, Pi, Oh My Pi, Grok — is a running process, and whether it has
+done anything in the last few seconds says working or waiting for you. The
+probe runs every few seconds while a saver is up and the widget is on, and
+never otherwise; nothing here talks to an agent. Unlike the notifications, it
+does not hide under Do Not Disturb: it is status, not an interruption. Widgets sharing a spot stack, clock first; the cards hide while Do Not
+Disturb is on and when there is nothing to say, and show on the focused
+monitor only. Notifications
+are read from Omarchy's own mirror under `~/.local/state/omarchy/notifications/`;
+nothing here talks to the notification daemon. A tile with no widget settings
+of its own uses the old global `card` settings as its defaults, so an upgrade
+changes nothing.
 
 ## Settings
 
@@ -274,16 +312,25 @@ Defaults:
 ```json
 { "saver": "terminal", "shuffle": false, "shuffleFrom": ["wordmark", "clock"],
   "screensaverEnabled": true, "lockEnabled": true,
-  "savers": { "wordmark": { "effect": "cycle", "effects": [], "holdSec": 15, "background": "theme" },
-              "clock": { "format": "HH:mm", "showDate": true, "showSeconds": false },
-              "blank": {}, "terminal": { "effects": [] } },
-  "situations": [], "card": { "enabled": true, "corner": "bottom-right", "detail": "counts", "showAgent": true, "maxApps": 4 },
+  "savers": { "wordmark": { "text": "stelline", "effect": "cycle", "effects": [], "holdSec": 4, "background": "theme" },
+              "clock": { "background": "theme", "widgets": { "clock": { "on": true, "place": "centre" } } },
+              "blank": { "background": "black" }, "terminal": { "effects": [] } },
+  "hidden": [], "situations": [],
+  "card": { "enabled": true, "corner": "bottom-right", "detail": "counts", "showAgent": true, "maxApps": 4 },
   "integration": { "menuEntry": false } }
 ```
 
-A user saver's knobs sit under `savers.<id>`: `play`, `dwellSec`, `fps`,
+A saver's knobs sit under `savers.<id>`: `text`, `play`, `dwellSec`, `fps`,
 `effects`, `order` (`sequence`/`shuffle`), `fit` (`contain`/`cover`), `motion`
-(`none`/`zoom`), `background`. `effects` empty means all of them.
+(`none`/`zoom`), `background`, and `widgets` — `clock` (`on`, `place`,
+`format`, `showDate`, `showSeconds`), `notifications` (`on`, `place`,
+`detail` `counts`/`summaries`/`bodies`), `agent` (`on`, `place`, `figure`
+`deck`/`visor`). A `place`
+is `top-left`, `top-right`, `bottom-left`, `bottom-right` or `centre`;
+anything else (including the older `corner`) means the tile's `corner`, which
+in turn defaults to the `card` below. `effects` empty means all of them.
+`hidden` lists shipped tiles that were deleted. `card` is only the widgets'
+default now.
 
 ## IPC
 

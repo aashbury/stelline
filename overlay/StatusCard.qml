@@ -3,42 +3,29 @@ import qs.Commons
 import qs.Ui
 import "../StellineModel.js" as M
 
-// A quiet corner card on the screensaver: how many notifications arrived, from
-// whom, and whether an agent is waiting. Drawn with the notification surface
-// tokens so it reads as part of the desktop, not an app.
+// A quiet card on the screensaver: how many notifications arrived and from
+// whom. Drawn with the notification surface tokens so it reads as part of
+// the desktop, not an app. The widget layer places it; `large` is the
+// middle-of-the-screen size.
 BorderSurface {
   id: root
 
   property var service: null
-  property string corner: "bottom-right"
+  property bool shown: true
+  property string detail: "counts"
+  property bool large: false
+  property real maxWidth: 480
   readonly property var groups: service ? service.cardGroups : []
-  readonly property string agentState: service ? String(service.agentState || "") : ""
-  readonly property var card: service && service.cfg && service.cfg.card ? service.cfg.card : ({})
-  readonly property string detail: card.detail || "counts"
-  readonly property bool showAgent: card.showAgent !== false && agentState !== "" && agentState !== "idle"
   readonly property int total: M.totalCount(groups)
+  readonly property real k: large ? 1.6 : 1
   readonly property color fg: Color.notifications.text
   readonly property color dim: Qt.darker(fg, 1.4)
   readonly property string fontFamily: Style.font.family
 
-  function agentLine(state) {
-    if (state === "needs") return "agent · needs your input"
-    if (state === "error") return "agent · hit an error"
-    if (state === "done") return "agent · finished"
-    if (state === "working") return "agent · working"
-    return "agent · " + state
-  }
-
-  visible: total > 0 || showAgent
-  anchors.top: corner.indexOf("top") === 0 ? parent.top : undefined
-  anchors.bottom: corner.indexOf("bottom") === 0 ? parent.bottom : undefined
-  anchors.left: corner.indexOf("left") !== -1 ? parent.left : undefined
-  anchors.right: corner.indexOf("right") !== -1 ? parent.right : undefined
-  anchors.margins: Style.gapsOut * 4
-
-  implicitWidth: Math.min(parent ? parent.width * 0.4 : 480, Math.max(Style.space(220), column.implicitWidth + padding * 2))
+  visible: shown && total > 0
+  implicitWidth: Math.min(maxWidth, Math.max(Style.space(220) * k, column.implicitWidth + padding * 2))
   implicitHeight: column.implicitHeight + padding * 2
-  padding: Style.space(14)
+  padding: Style.space(14) * k
   radius: Style.cornerRadius
   color: Color.notifications.background
   borderSpec: Border.surfaceSpec("notifications", "border", Color.notifications.border, Style.normalBorderWidth)
@@ -49,7 +36,7 @@ BorderSurface {
     anchors.top: parent.top
     anchors.margins: root.padding
     width: root.width - root.padding * 2
-    spacing: Style.space(4)
+    spacing: Style.space(4) * root.k
 
     Text {
       visible: root.total > 0
@@ -57,7 +44,7 @@ BorderSurface {
       text: "󰂚 " + root.total + (root.total === 1 ? " notification" : " notifications")
       color: root.fg
       font.family: root.fontFamily
-      font.pixelSize: Style.font.body
+      font.pixelSize: Style.font.body * root.k
       font.bold: true
     }
 
@@ -76,7 +63,7 @@ BorderSurface {
             + (root.detail !== "counts" && modelData.latestSummary ? " — " + modelData.latestSummary : "")
           color: modelData.urgency >= 2 ? Color.urgent : root.fg
           font.family: root.fontFamily
-          font.pixelSize: Style.font.bodySmall
+          font.pixelSize: Style.font.bodySmall * root.k
         }
         Text {
           visible: root.detail === "bodies" && modelData.latestBody !== ""
@@ -86,18 +73,9 @@ BorderSurface {
           text: "  " + modelData.latestBody
           color: root.dim
           font.family: root.fontFamily
-          font.pixelSize: Style.font.caption
+          font.pixelSize: Style.font.caption * root.k
         }
       }
-    }
-
-    Text {
-      visible: root.showAgent
-      textFormat: Text.PlainText
-      text: root.agentLine(root.agentState)
-      color: root.agentState === "needs" || root.agentState === "error" ? Color.urgent : Color.accent
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.bodySmall
     }
   }
 }

@@ -6,9 +6,8 @@ import "../StellineModel.js" as M
 // The panel body. Level 1: hero, stay awake (the coffee cup — changed often,
 // so it sits at the top), the timings, the saver grid (click a tile = that
 // one plays). Level 2: a tile's gear opens it below the grid — when it
-// plays, how it looks, delete. Level 3: three rows that say what they are
-// set to — the rules, the while-you're-away note, shortcuts — one open at
-// a time.
+// plays, how it looks, what sits on top, delete. Level 3: the Shortcuts row,
+// set once, collapsed to what it says.
 //
 // Nothing here explains itself in a sentence: the stock panels don't, and a
 // row that needs a caption is a row that needs a better label.
@@ -36,10 +35,12 @@ Column {
 
   signal closeRequested()
   signal ensureVisible(real y, real h)
+  // A wheel that a control caught and did not want; the panel scrolls by it.
+  signal scrollBy(real delta)
 
   readonly property var cfg: svc ? svc.cfg : M.defaults()
   readonly property var userSavers: svc ? svc.userSavers : []
-  readonly property var savers: M.allSavers(userSavers)
+  readonly property var savers: M.allSavers(userSavers, cfg.hidden)
   readonly property var saver: M.saverById(cfg.saver, userSavers) || M.SAVERS[0]
   readonly property bool serviceOk: !!svc
   readonly property bool stayAwake: svc ? svc.stayAwake === true : false
@@ -81,8 +82,7 @@ Column {
   // Cursor rows, in visual order — most-used first: the master switch, stay
   // awake, the timings (with the two laptop rows, and the battery pair while
   // it is open), then the gallery, then what gets set once. Tiles are one
-  // row each and end with "Show all" (when capped) and Add. Rule rows follow
-  // the Rules row while it is open.
+  // row each and end with "Show all" (when capped) and Add.
   readonly property int rowHero: 0
   readonly property int rowStayAwake: 1
   readonly property int rowScreensaver: 2
@@ -96,10 +96,7 @@ Column {
   readonly property int tileCount: shownSavers.length + (gridCapped ? 1 : 0) + 1
   readonly property int rowMore: gridCapped ? rowTileFirst + shownSavers.length : -1
   readonly property int rowShuffle: rowTileFirst + tileCount
-  readonly property int rowRules: rowShuffle + 1
-  readonly property int rowSituationFirst: rowRules + 1
-  readonly property int rowAway: rowSituationFirst + (openSection === "rules" ? cfg.situations.length : 0)
-  readonly property int rowShortcuts: rowAway + 1
+  readonly property int rowShortcuts: rowShuffle + 1
   readonly property int rowCount: rowShortcuts + 1
 
   // The item that owns a cursor row, for scrolling it into view.
@@ -115,11 +112,7 @@ Column {
     if (index === rowBatteryScreensaver) return batteryScreensaverRow
     if (index === rowBatteryLock) return batteryLockRow
     if (index === rowDockedLock) return dockedLockRow
-
-    if (index === rowRules) return advanced.children[0]
-    if (index === rowAway) return advanced.children[1]
-    if (index === rowShortcuts) return advanced.children[2]
-    if (index >= rowSituationFirst && index < rowAway) return advanced.situationItem(index - rowSituationFirst)
+    if (index === rowShortcuts) return shortcuts
     return null
   }
 
@@ -152,7 +145,7 @@ Column {
     id: revealSection
     interval: 60
     onTriggered: {
-      var item = root.rowItem(root.openSection === "rules" ? root.rowRules : (root.openSection === "away" ? root.rowAway : root.rowShortcuts))
+      var item = root.rowItem(root.rowShortcuts)
       if (!item) return
       var p = item.mapToItem(root, 0, 0)
       root.ensureVisible(p.y, Math.min(item.height, Style.space(420)))
@@ -232,20 +225,16 @@ Column {
     else if (cursorIndex === rowBattery) setBatteryTimings(!batteryTimings)
     else if (cursorIndex === rowBatteryLock) patchBatteryTimings({ lock: batteryLocks ? "never" : lockSeconds })
     else if (cursorIndex === rowDockedLock) svc.setDockedNoLock(!svc.dockedNoLock)
-    else if (cursorIndex === rowRules) toggleSection("rules")
-    else if (cursorIndex === rowAway) toggleSection("away")
     else if (cursorIndex === rowShortcuts) toggleSection("shortcuts")
-    else if (cursorIndex >= rowSituationFirst && cursorIndex < rowAway) openRule(cursorIndex - rowSituationFirst)
   }
 
-  // Delete: a user saver under the cursor opens its inspector with Delete
-  // armed; the second press deletes. Rules delete at once.
+  // Delete: the saver under the cursor opens its inspector with Delete
+  // armed; the second press deletes. The Original cannot go.
   function remove() {
     if (!cursorActive) return
-    if (cursorIndex >= rowSituationFirst && cursorIndex < rowAway) { removeSituation(cursorIndex - rowSituationFirst); return }
     var id = cursorSaverId()
     var s = id !== "" ? M.saverById(id, userSavers) : null
-    if (!s || s.kind !== "series") return
+    if (!s || s.kind === "external") return
     if (openSettings === id && inspector.deleteArmed) deleteSaver(id)
     else { openSettings = id; inspector.armDelete() }
   }
@@ -310,13 +299,6 @@ Column {
     svc.writeSettings({ savers: savers })
   }
 
-  function writeCard(patch) {
-    if (!svc) return
-    var card = M.cloneJson(cfg.card)
-    for (var k in patch) card[k] = patch[k]
-    svc.writeSettings({ card: card })
-  }
-
   function writeSituations(list) { if (svc) svc.writeSettings({ situations: list }) }
 
   function updateSituation(index, patch) {
@@ -330,34 +312,6 @@ Column {
     writeSituations(list)
   }
 
-  function toggleSituation(index) {
-    var list = M.cloneJson(cfg.situations)
-    if (index < 0 || index >= list.length) return
-    list[index].enabled = list[index].enabled !== true
-    writeSituations(list)
-  }
-
-  function removeSituation(index) {
-    var list = M.cloneJson(cfg.situations)
-    if (index < 0 || index >= list.length) return
-    list.splice(index, 1)
-    writeSituations(list)
-    if (cursorIndex >= rowCount) cursorIndex = Math.max(0, rowCount - 1)
-  }
-
-  // A rule is edited where it lives: a saver's rule in that saver's gear, a
-  // timings-only one at its switch under the sliders.
-  function openRule(index) {
-    var s = cfg.situations[index]
-    if (!s) return
-    if (s.saver && M.saverById(s.saver, userSavers)) {
-      if (openSettings === s.saver) revealEditor.restart(); else openSettings = s.saver
-      return
-    }
-    if (M.timingsRuleIndex(cfg.situations, "battery") === index && rowBattery >= 0) scrollToRow(rowBattery)
-    else if (M.dockedNoLockIndex(cfg.situations) === index && rowDockedLock >= 0) scrollToRow(rowDockedLock)
-  }
-
   function setBatteryTimings(on) { writeSituations(M.setTimingsRule(cfg.situations, "battery", !!on, svc ? svc.situationContext : null)) }
   function patchBatteryTimings(patch) { var at = M.timingsRuleIndex(cfg.situations, "battery"); if (at >= 0) updateSituation(at, patch) }
 
@@ -365,6 +319,17 @@ Column {
     var s = Math.max(0, Math.round(Number(seconds) || 0))
     var m = Math.floor(s / 60), r = s % 60
     return m + ":" + (r < 10 ? "0" : "") + r
+  }
+
+  // The other way: what someone typed into a readout, back into seconds.
+  // "2:30" is two and a half minutes, and a bare number is minutes, because
+  // that is what the readout shows. Anything else is NaN and changes nothing.
+  function fromMinutes(text) {
+    var t = String(text).trim()
+    var parts = t.match(/^(\d+)\s*:\s*([0-5]?\d)$/)
+    if (parts) return Number(parts[1]) * 60 + Number(parts[2])
+    if (/^\d+(\.\d+)?$/.test(t)) return Math.round(Number(t) * 60)
+    return NaN
   }
 
   spacing: Style.space(8)
@@ -441,11 +406,14 @@ Column {
     maximum: 1800
     step: 30
     format: function(v) { return root.minutes(v) }
+    parse: function(t) { return root.fromMinutes(t) }
     foreground: root.foreground
     fontFamily: root.fontFamily
     hasCursor: root.cursorActive && root.cursorIndex === root.rowScreensaver
     onReleased: function(v) { root.setSeconds("screensaver", v) }
     onHovered: function(h) { root.hoverRow(root.rowScreensaver, h) }
+    onWheeled: function(d) { root.scrollBy(d) }
+    onEditingChanged: root.setEditing("screensaver", editing)
   }
 
   SliderRow {
@@ -458,6 +426,7 @@ Column {
     maximum: 3600
     step: 60
     format: function(v) { return root.minutes(v) }
+    parse: function(t) { return root.fromMinutes(t) }
     showSwitch: true
     switchChecked: root.cfg.lockEnabled
     foreground: root.foreground
@@ -466,6 +435,8 @@ Column {
     onReleased: function(v) { root.setSeconds("lock", v) }
     onSwitchToggled: root.setStage("lockEnabled", !root.cfg.lockEnabled)
     onHovered: function(h) { root.hoverRow(root.rowLock, h) }
+    onWheeled: function(d) { root.scrollBy(d) }
+    onEditingChanged: root.setEditing("lock", editing)
   }
 
   // A laptop's two exceptions, where you look when the timings bother you.
@@ -499,11 +470,14 @@ Column {
       maximum: 1800
       step: 30
       format: function(v) { return root.minutes(v) }
+      parse: function(t) { return root.fromMinutes(t) }
       foreground: root.foreground
       fontFamily: root.fontFamily
       hasCursor: root.cursorActive && root.cursorIndex === root.rowBatteryScreensaver
       onReleased: function(v) { root.patchBatteryTimings({ screensaver: Math.round(v) }) }
       onHovered: function(h) { root.hoverRow(root.rowBatteryScreensaver, h) }
+      onWheeled: function(d) { root.scrollBy(d) }
+      onEditingChanged: root.setEditing("batteryScreensaver", editing)
     }
     SliderRow {
       id: batteryLockRow
@@ -515,6 +489,7 @@ Column {
       maximum: 3600
       step: 60
       format: function(v) { return root.minutes(v) }
+      parse: function(t) { return root.fromMinutes(t) }
       showSwitch: true
       switchChecked: root.batteryLocks
       foreground: root.foreground
@@ -523,6 +498,8 @@ Column {
       onReleased: function(v) { root.patchBatteryTimings({ lock: Math.round(v) }) }
       onSwitchToggled: root.patchBatteryTimings({ lock: root.batteryLocks ? "never" : root.lockSeconds })
       onHovered: function(h) { root.hoverRow(root.rowBatteryLock, h) }
+      onWheeled: function(d) { root.scrollBy(d) }
+      onEditingChanged: root.setEditing("batteryLock", editing)
     }
   }
 
@@ -654,13 +631,12 @@ Column {
 
   PanelSeparator { width: parent.width; foreground: root.foreground }
 
-  // ---- rules · while you're away · shortcuts ----
-  AdvancedSection {
-    id: advanced
+  // ---- shortcuts ----
+  ShortcutsSection {
+    id: shortcuts
     width: parent.width
     body: root
     svc: root.svc
-    bar: root.bar
     foreground: root.foreground
     fontFamily: root.fontFamily
   }

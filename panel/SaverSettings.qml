@@ -4,9 +4,11 @@ import qs.Ui
 import "../StellineModel.js" as M
 import "../savers/Effects.js" as E
 
-// One saver's knobs. Every control reports a patch; the body merges it into
-// the saver's settings object. Only what applies to this saver is shown: a
-// single picture gets no "each piece" slider, a still gets no frame rate.
+// The knobs of one saver's type. Every control reports a patch; the body
+// merges it into the saver's settings object. What is shown follows the type
+// alone — a shipped tile and one you added of the same type get exactly the
+// same rows — and only what applies: a single picture gets no "each piece"
+// slider, a still gets no frame rate.
 Column {
   id: root
 
@@ -25,11 +27,11 @@ Column {
   readonly property int frameCount: isSeries && Number(series.frameCount) > 0 ? Number(series.frameCount) : 1
   readonly property string play: settings && settings.play ? String(settings.play) : (series && series.play ? String(series.play) : "slideshow")
   readonly property bool animation: isAscii && play === "animation" && frameCount > 1
-  readonly property bool hasKnobs: saverId !== "" && saverId !== "blank" && !(isImage && frameCount === 1 && M.extensionOf(series.pieces[0] || "") === "gif")
-  // What this saver is decides what it is configured with. A wordmark has a
-  // word, whether it shipped with Stelline or you typed it into Add.
+  readonly property bool hasKnobs: saverId !== "" && !(isImage && frameCount === 1 && M.extensionOf(series.pieces[0] || "") === "gif")
+  // What this saver is decides what it is configured with. A text saver has
+  // a word, whether it shipped with Stelline or you typed it into Add.
   readonly property string type: M.saverType(root.saver)
-  readonly property bool isWordmark: type === "wordmark"
+  readonly property bool isWordmark: type === "text"
   readonly property string word: M.wordmarkText(root.saver, root.settings)
   property var svc: null
   readonly property bool editing: wordField.activeFocus
@@ -193,50 +195,19 @@ Column {
     }
   }
 
-  // ---- background: wordmark and every series ----
+  // ---- background: everything Stelline draws itself ----
   Column {
-    visible: root.isWordmark || root.isSeries
+    visible: root.type !== "original"
     width: parent.width - root.leftPadding - root.rightPadding
     spacing: Style.space(3)
     Text { textFormat: Text.PlainText; text: "Background"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
     ButtonGroup {
       options: [{ value: "theme", label: "theme" }, { value: "black", label: "black" }]
-      value: root.settings.background || (root.isImage ? "black" : "theme")
+      value: root.settings.background || (root.isImage || root.type === "empty" ? "black" : "theme")
       foreground: root.foreground
       fontFamily: root.fontFamily
       focusable: false
       onChanged: function(v) { root.patched({ background: v }) }
-    }
-  }
-
-  // ---- clock ----
-  Column {
-    visible: root.type === "clock"
-    width: parent.width - root.leftPadding - root.rightPadding
-    spacing: Style.space(4)
-    SwitchRow {
-      width: parent.width
-      label: "24-hour clock"
-      checked: (root.settings.format || "HH:mm") === "HH:mm"
-      foreground: root.foreground
-      fontFamily: root.fontFamily
-      onClicked: root.patched({ format: checked ? "h:mm AP" : "HH:mm" })
-    }
-    SwitchRow {
-      width: parent.width
-      label: "Show the date"
-      checked: root.settings.showDate !== false
-      foreground: root.foreground
-      fontFamily: root.fontFamily
-      onClicked: root.patched({ showDate: !checked })
-    }
-    SwitchRow {
-      width: parent.width
-      label: "Show seconds"
-      checked: root.settings.showSeconds === true
-      foreground: root.foreground
-      fontFamily: root.fontFamily
-      onClicked: root.patched({ showSeconds: !checked })
     }
   }
 

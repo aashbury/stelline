@@ -15,13 +15,23 @@ test("findEntry walks bar layout sections and plugins[]", () => {
   assert.equal(M.findEntry({ plugins: [{ id: "other" }] }, M.PLUGIN_ID), null)
 })
 
-test("mergeSettings coerces strings from `omarchy bar set` and merges per-saver objects", () => {
-  const cfg = M.mergeSettings({ saver: "clock", shuffle: "true", savers: { clock: { showSeconds: "true" } } })
+test("mergeSettings coerces strings from `omarchy bar set` and merges per-saver objects all the way down", () => {
+  const cfg = M.mergeSettings({ saver: "clock", shuffle: "true", savers: { wordmark: { holdSec: "6" }, clock: { widgets: { clock: { on: "true", showSeconds: "true" } } } } })
   assert.equal(cfg.saver, "clock")
   assert.equal(cfg.shuffle, true)
-  assert.equal(cfg.savers.clock.showSeconds, true)
-  assert.equal(cfg.savers.clock.format, "HH:mm")
-  assert.equal(cfg.savers.clock.format, "HH:mm")
+  assert.equal(cfg.savers.wordmark.holdSec, 6)
+  assert.equal(cfg.savers.wordmark.background, "theme")
+  // a partial widget keeps the shipped tile's defaults around it
+  assert.equal(cfg.savers.clock.background, "theme")
+  assert.equal(cfg.savers.clock.widgets.clock.place, "centre")
+  assert.equal(cfg.savers.clock.widgets.clock.on, true)
+  assert.equal(M.widgetsOf(cfg.savers.clock, cfg).clock.showSeconds, true)
+  // a knob the defaults know nothing about stays what it is — a widget on the
+  // Wordmark used to come back as "[object Object]"
+  const wm = M.mergeSettings({ savers: { wordmark: { widgets: { clock: { on: true, place: "corner" } }, corner: "top-left" } } })
+  assert.equal(wm.savers.wordmark.widgets.clock.place, "corner")
+  assert.equal(M.widgetsOf(wm.savers.wordmark, wm).clock.on, true)
+  assert.equal(M.cornerOf(wm.savers.wordmark, wm), "top-left")
 })
 
 test("mergeSettings falls back to wordmark for an unknown saver", () => {
@@ -40,7 +50,7 @@ test("rotation is every native saver, or the shuffle set when shuffle is on", ()
   assert.deepEqual(M.rotation(M.mergeSettings({ shuffle: true, shuffleFrom: ["clock", "terminal", "nope"] })), ["clock"])
   assert.equal(M.nextSaver(M.defaults(), "blank"), "wordmark")
   assert.equal(M.nextSaver(M.defaults(), "unknown"), "wordmark")
-  assert.equal(M.saverFile("clock"), "savers/Clock.qml")
+  assert.equal(M.saverFile("clock"), "savers/Blank.qml")
   assert.equal(M.saverFile("terminal"), "")
 })
 
@@ -336,15 +346,16 @@ test("the clipboard scripts are one self-contained bash script each", () => {
   assert.equal(paste.split("rm -rf").length - 1, 1)
 })
 
-test("saverType decides how a saver is configured, and a typed word is a wordmark", () => {
+test("saverType decides how a saver is configured; shipped tiles are instances of types anyone can add", () => {
   const byId = id => M.SAVERS.find(s => s.id === id)
   assert.equal(M.saverType(byId("terminal")), "original")
-  assert.equal(M.saverType(byId("wordmark")), "wordmark")
-  assert.equal(M.saverType(byId("clock")), "clock")
-  assert.equal(M.saverType(byId("blank")), "blank")
+  assert.equal(M.saverType(byId("wordmark")), "text")
+  assert.equal(M.saverType(byId("clock")), "empty")
+  assert.equal(M.saverType(byId("blank")), "empty")
+  assert.equal(M.saverType({ id: "e", kind: "series", series: { kind: "empty", source: { type: "clock" } } }), "empty")
   const series = (kind, source, play) => ({ id: "x", kind: "series", series: { kind, play, source } })
   // made from typed text, so it is a wordmark and gets a Text field like the built-in
-  assert.equal(M.saverType(series("ascii", { type: "text", text: "Acme" })), "wordmark")
+  assert.equal(M.saverType(series("ascii", { type: "text", text: "Acme" })), "text")
   assert.equal(M.saverType(series("image", { type: "images" })), "pictures")
   assert.equal(M.saverType(series("ascii", { type: "video" }, "animation")), "animation")
   assert.equal(M.saverType(series("ascii", { type: "images" })), "art")
@@ -481,4 +492,126 @@ test("a timings-only rule is a switch under the sliders", () => {
   assert.equal(M.hasTiming(90), true)
   assert.equal(M.hasTiming(""), false)
   assert.equal(M.hasTiming(null), false)
+})
+
+test("widgets: defaults from the old card settings, a tile's own on top, old clock knobs still count", () => {
+  const cfg = M.mergeSettings({ card: { enabled: false, detail: "bodies", corner: "top-left" } })
+  const d = M.widgetsOf({}, cfg)
+  assert.equal(d.notifications.on, false)
+  assert.equal(d.notifications.detail, "bodies")
+  assert.equal(d.agent.on, true)
+  assert.equal(d.clock.on, false)
+  assert.equal(M.cornerOf({}, cfg), "top-left")
+  assert.equal(M.cornerOf({ corner: "bottom-left" }, cfg), "bottom-left")
+  assert.equal(M.cornerOf({ corner: "nowhere" }, M.defaults()), "bottom-right")
+  // every widget resolves to one of the five spots: "corner" (what was stored
+  // before, and still the default) means this tile's corner
+  assert.equal(d.notifications.place, "top-left")
+  assert.equal(M.widgetsOf({ widgets: { agent: { place: "top-right" } } }, cfg).agent.place, "top-right")
+  assert.equal(M.widgetsOf({ widgets: { agent: { place: "nowhere" } } }, M.defaults()).agent.place, "bottom-right")
+  assert.equal(M.placeLabel("bottom-left"), "Bottom left")
+  assert.equal(M.placeLabel("centre"), "Middle")
+  const w = M.widgetsOf({ format: "h:mm AP", showSeconds: true, widgets: { clock: { on: true, place: "centre" }, agent: { on: "false" } } }, cfg)
+  assert.equal(w.clock.on, true)
+  assert.equal(w.clock.place, "centre")
+  assert.equal(w.clock.format, "h:mm AP")
+  assert.equal(w.clock.showSeconds, true)
+  assert.equal(w.agent.on, false)
+  // the shipped Clock is an empty with the clock in the middle
+  const clock = M.widgetsOf(M.defaults().savers.clock, M.defaults())
+  assert.equal(clock.clock.on, true)
+  assert.equal(clock.clock.place, "centre")
+  assert.equal(M.widgetsOf(M.defaults().savers.blank, M.defaults()).clock.on, false)
+  // one widget's knobs change, the rest stays
+  const patch = M.patchWidget({ widgets: { clock: { on: true, place: "corner" }, agent: { on: false } } }, "clock", { place: "centre" })
+  assert.deepEqual(patch, { widgets: { clock: { on: true, place: "centre" }, agent: { on: false } } })
+  assert.deepEqual(M.patchWidget({}, "agent", { on: true }), { widgets: { agent: { on: true } } })
+})
+
+test("a shipped tile is deleted by hiding it, and hidden tiles leave every list", () => {
+  const cfg = M.mergeSettings({ saver: "clock", shuffleFrom: ["clock", "blank"], savers: { clock: { background: "black" } } })
+  const patch = M.hideSaver(cfg, "clock")
+  assert.deepEqual(patch.hidden, ["clock"])
+  assert.equal(patch.saver, "terminal")
+  assert.deepEqual(patch.shuffleFrom, ["blank"])
+  assert.equal(patch.savers.clock, undefined)
+  const hidden = M.mergeSettings({ hidden: ["clock", "wordmark"] })
+  assert.deepEqual(M.allSavers([], hidden.hidden).map(s => s.id), ["terminal", "blank"])
+  assert.deepEqual(M.rotation(hidden), ["blank"])
+  // idempotent
+  assert.deepEqual(M.hideSaver(hidden, "clock").hidden, ["clock", "wordmark"])
+})
+
+test("a clock or an empty screen is a saver with nothing to convert", () => {
+  const root = "/home/you/.config/omarchy/stelline/savers"
+  const base = { ...M.importDefaults(), id: "clock-2", name: "Clock" }
+  const script = M.importScript({ ...base, source: "clock" }, root)
+  assert.match(script, /"kind":"empty"/)
+  assert.match(script, /"type":"clock"/)
+  assert.doesNotMatch(script, /is ready/)
+  assert.doesNotMatch(script, /transcode/)
+  const row = { dir: root + "/clock-2", files: ["saver.json"], json: JSON.parse(M.metaJson({ ...base, source: "clock" }, {})) }
+  const s = M.userSaverFromScan(row)
+  assert.equal(M.saverType(s), "empty")
+  assert.equal(s.file, "savers/Blank.qml")
+  assert.equal(s.name, "Clock")
+  assert.equal(s.glyph, M.GLYPHS.clock)
+  const e = M.userSaverFromScan({ dir: root + "/empty", files: ["saver.json"], json: JSON.parse(M.metaJson({ ...base, name: "", source: "empty" }, {})) })
+  assert.equal(e.name, "Empty")
+  assert.equal(e.meta, "empty screen")
+})
+
+test("agent sessions: Claude's own status wins, waitingFor tells needs from waiting, others go by activity", () => {
+  const st = (s) => M.agentSessionState(s)
+  assert.equal(st({ agent: "claude", status: "busy" }), "working")
+  assert.equal(st({ agent: "claude", status: "idle", last: "end_turn" }), "waiting")
+  assert.equal(st({ agent: "claude", status: "idle", waitingFor: "permission" }), "needs")
+  assert.equal(st({ agent: "claude", status: "idle", waitingFor: "user_input" }), "needs")
+  assert.equal(st({ agent: "claude", status: "", last: "tool_use" }), "working")
+  assert.equal(st({ agent: "claude", status: "error" }), "error")
+  assert.equal(st({ agent: "codex", status: "busy" }), "working")
+  assert.equal(st({ agent: "codex", status: "idle" }), "waiting")
+  assert.equal(st(null), "idle")
+  // the probe's answer becomes sessions, most pressing first, named
+  const probe = JSON.stringify({ sessions: [
+    { agent: "codex", pid: 2, project: "acme", status: "busy" },
+    { agent: "claude", pid: 1, project: "acme", title: "Fix the login form", status: "idle", waitingFor: "permission", statusAt: 5 },
+    { agent: "claude", pid: 3, project: "docs", status: "busy", statusAt: 9 }
+  ] })
+  const list = M.parseAgentProbe(probe)
+  assert.deepEqual(list.map(s => s.state), ["needs", "working", "working"])
+  assert.equal(list[0].name, "Claude Code")
+  assert.equal(list[1].pid, 3)
+  assert.equal(list[2].name, "Codex")
+  const sum = M.agentSummary(list)
+  assert.equal(sum.state, "needs")
+  assert.equal(sum.count, 3)
+  assert.equal(sum.line, "Claude Code · Fix the login form · 3 sessions")
+  assert.equal(M.agentSummary([{ agent: "gemini", project: "site", state: "working" }]).line, "Gemini · site")
+  assert.deepEqual(M.agentSummary([]), { state: "idle", count: 0, line: "" })
+  assert.deepEqual(M.parseAgentProbe("nonsense"), [])
+  assert.equal(M.agentStateLabel("needs"), "needs you")
+  // the probe is one python program that prints one JSON object
+  const script = M.agentProbeScript()
+  assert.match(script, /sessions\/\*\.json/)
+  assert.match(script, /print\(json\.dumps/)
+})
+
+test("a clock that predates the widgets keeps showing, and the knobs count whether they are text or not", () => {
+  // What an older Stelline left behind: clock knobs on the tile, no widgets
+  // block at all. The tile was a clock, so it still is.
+  const old = { background: "theme", format: "HH:mm", showDate: "true", showSeconds: "false" }
+  const upgraded = M.widgetsOf(old, {}).clock
+  assert.equal(upgraded.on, true)
+  assert.equal(upgraded.showDate, true)
+  assert.equal(upgraded.showSeconds, false)
+  // Text from the IPC path reads as the boolean it means.
+  assert.equal(M.widgetsOf({ format: "HH:mm", showSeconds: "true" }, {}).clock.showSeconds, true)
+  assert.equal(M.boolish("false", true), false)
+  assert.equal(M.boolish(null, true), true)
+  // Switched off by hand is a later answer, and it wins.
+  const off = { widgets: { clock: { on: false, place: "centre" } }, format: "HH:mm", showDate: "true" }
+  assert.equal(M.widgetsOf(off, {}).clock.on, false)
+  // A saver that never had a clock does not grow one.
+  assert.equal(M.widgetsOf({ background: "black" }, {}).clock.on, false)
 })

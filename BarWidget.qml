@@ -89,6 +89,21 @@ Panel {
       onDeleteRequested: body.remove()
       onTextKey: function(text) { body.hotkey(text) }
 
+      // An open field stays open until something else takes the focus, and
+      // nothing else in the panel asks for it. So while one is open, a click
+      // anywhere hands the focus back to the panel: the field closes, keeping
+      // what was typed, and the click still lands on whatever it was aimed at.
+      MouseArea {
+        anchors.fill: parent
+        enabled: body.editing
+        z: 1
+        acceptedButtons: Qt.AllButtons
+        onPressed: function(mouse) {
+          keyCatcher.forceActiveFocus()
+          mouse.accepted = false
+        }
+      }
+
       Flickable {
         id: flick
         anchors.fill: parent
@@ -109,6 +124,12 @@ Panel {
           foreground: root.foreground
           fontFamily: root.fontFamily
           onCloseRequested: root.close()
+          // A wheel a control caught and handed back — scrolling past a
+          // slider must move the panel, not the setting.
+          onScrollBy: function(delta) {
+            var by = delta / 120 * Style.space(60)
+            flick.contentY = Math.max(0, Math.min(Math.max(0, flick.contentHeight - flick.height), flick.contentY - by))
+          }
           onEnsureVisible: function(y, h) {
             var pad = Style.space(8)
             if (y < flick.contentY + pad) flick.contentY = Math.max(0, y - pad)

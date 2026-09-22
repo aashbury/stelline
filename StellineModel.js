@@ -14,24 +14,31 @@ var PLUGIN_ID = "io.github.aashbury.stelline"
 // the Original always shows the branding file, since that is what it plays.
 var DEFAULT_SAVER = "terminal"
 var SAVERS = [
-  // `about` is the sentence under the name when a tile is open: what this
-  // one is, and — for the two that share the text — which animations it has.
-  { id: "terminal", name: "Original", glyph: "󰆍", meta: "Omarchy's own", file: "", thumb: "savers/Wordmark.qml", kind: "external",
+  // Nothing here is special: each is an instance of a type anyone can add
+  // (text, empty), with its defaults in defaults().savers, and each can be
+  // deleted (hidden) like anything else. Only the Original is fixed — it is
+  // Omarchy's own launcher, not a Stelline saver. `about` is the sentence
+  // under the name when a tile is open.
+  { id: "terminal", name: "Original", type: "original", glyph: "󰆍", meta: "Omarchy's own", file: "", thumb: "savers/Wordmark.qml", kind: "external",
     about: "Omarchy's own screensaver, untouched: your text with Omarchy's 37 animations, in a terminal. The full stock experience; it uses several CPU cores while it runs." },
-  { id: "wordmark", name: "Wordmark", glyph: "󰊄", meta: "drawn by Stelline", file: "savers/Wordmark.qml", fallbackArt: "savers/stelline.txt", kind: "native",
+  { id: "wordmark", name: "Wordmark", type: "text", glyph: "󰊄", meta: "drawn by Stelline", file: "savers/Wordmark.qml", fallbackArt: "savers/stelline.txt", kind: "native",
     about: "The same text, drawn by Stelline: theme colours, eight animations of its own, almost no CPU. Omarchy's animations only play in the Original." },
-  { id: "clock",    name: "Clock",    glyph: "󰥔", meta: "time and date", file: "savers/Clock.qml",    kind: "native",
-    about: "Seven-segment digits in text, the colon blinking in the accent, the date beneath." },
-  { id: "blank",    name: "Blank",    glyph: "󰹏", meta: "black, saves power", file: "savers/Blank.qml",  kind: "native",
-    about: "Nothing at all. Give it to a battery rule." }
+  { id: "clock",    name: "Clock",    type: "empty", glyph: "󰥔", meta: "time and date", file: "savers/Blank.qml",  kind: "native",
+    about: "An empty screen with the clock in the middle: seven-segment digits, the date beneath." },
+  { id: "blank",    name: "Blank",    type: "empty", glyph: "󰹏", meta: "black, saves power", file: "savers/Blank.qml",  kind: "native",
+    about: "An empty screen, black. Give it to a battery rule, or put something on top of it." }
 ]
+// The glyphs the two empties use, for the ones you add.
+var GLYPHS = { clock: SAVERS[2].glyph, empty: SAVERS[3].glyph }
 
 // Every saver the user can pick: the built-ins, then their own (imported
 // pictures, clips, text and generated art — "series"). User savers are
 // passed in explicitly: QML gives each importer of this file its own copy,
 // so module state would not be shared between the service and the panel.
-function allSavers(userSavers) {
-  return SAVERS.concat(Array.isArray(userSavers) ? userSavers : [])
+function allSavers(userSavers, hidden) {
+  var list = SAVERS.concat(Array.isArray(userSavers) ? userSavers : [])
+  if (!Array.isArray(hidden) || hidden.length === 0) return list
+  return list.filter(function(s) { return hidden.indexOf(s.id) === -1 })
 }
 
 function saverById(id, userSavers) {
@@ -47,15 +54,16 @@ function saverFile(id, userSavers) {
 
 // What kind of thing a saver is, which is what decides how it is configured:
 // two savers of the same type get the same settings, whether they shipped
-// with Stelline or you made one. Derived, never stored — a saver made from
-// typed text is a wordmark because its source says so.
+// with Stelline or you made one. text (a typed word), pictures, art, animation,
+// empty (nothing of its own — for the widgets), original (Omarchy's launcher).
 function saverType(saver) {
   if (!isPlainObject(saver)) return ""
+  if (typeof saver.type === "string" && saver.type !== "") return saver.type
   if (saver.kind === "external") return "original"
-  if (saver.kind === "native") return saver.id
   var series = isPlainObject(saver.series) ? saver.series : {}
   var source = isPlainObject(series.source) ? series.source : {}
-  if (source.type === "text") return "wordmark"
+  if (series.kind === "empty") return "empty"
+  if (source.type === "text") return "text"
   if (series.kind === "image") return "pictures"
   return series.play === "animation" ? "animation" : "art"
 }
@@ -81,7 +89,7 @@ function isNativeSaver(s) {
 // when shuffle is on, otherwise every native saver. Terminal is never in the
 // rotation — it lives in its own window. Savers still importing are skipped.
 function rotation(cfg, userSavers) {
-  var natives = allSavers(userSavers).filter(function(s) { return isNativeSaver(s) && !(s.series && s.series.importing) }).map(function(s) { return s.id })
+  var natives = allSavers(userSavers, cfg && cfg.hidden).filter(function(s) { return isNativeSaver(s) && !(s.series && s.series.importing) }).map(function(s) { return s.id })
   if (cfg && cfg.shuffle && Array.isArray(cfg.shuffleFrom)) {
     var picked = cfg.shuffleFrom.filter(function(id) { return natives.indexOf(id) !== -1 })
     if (picked.length) return picked
@@ -106,10 +114,12 @@ function defaults() {
       // A default, not a hardcoding: type over the text and it is yours. Every
       // animation is on out of the box, because that is the thing to look at.
       wordmark: { text: DEFAULT_WORDMARK, effect: "cycle", effects: [], holdSec: 4, background: "theme" },
-      clock: { format: "HH:mm", showDate: true, showSeconds: false },
-      blank: {},
+      // Two empties: one with the clock in the middle, one black.
+      clock: { background: "theme", widgets: { clock: { on: true, place: "centre" } } },
+      blank: { background: "black" },
       terminal: { effects: [] }
     },
+    hidden: [],
     situations: [],
     card: { enabled: true, corner: "bottom-right", detail: "counts", showAgent: true, maxApps: 4 },
     integration: { menuEntry: false },
@@ -157,6 +167,9 @@ function findEntry(config, id) {
 // against the default's type.
 function coerce(value, fallback) {
   if (value === undefined || value === null) return fallback
+  // No default to coerce against (a knob newer than the defaults, a widget on
+  // a shipped tile): the value is kept as it is, not turned into a string.
+  if (fallback === undefined) return value
   if (typeof fallback === "boolean") {
     if (typeof value === "boolean") return value
     var s = String(value).trim().toLowerCase()
@@ -167,7 +180,14 @@ function coerce(value, fallback) {
     return isFinite(n) ? n : fallback
   }
   if (Array.isArray(fallback)) return Array.isArray(value) ? value : fallback
-  if (isPlainObject(fallback)) return isPlainObject(value) ? value : fallback
+  if (isPlainObject(fallback)) {
+    // Objects merge all the way down, so a partial (a hand-edited widget,
+    // one knob written by an older version) keeps the rest of its defaults.
+    if (!isPlainObject(value)) return fallback
+    var out = cloneJson(fallback)
+    for (var k in value) out[k] = k in out ? coerce(value[k], out[k]) : cloneJson(value[k])
+    return out
+  }
   return String(value)
 }
 
@@ -772,6 +792,228 @@ function pickSaver(cfg, situation, last, random, userSavers) {
   return pool[Math.min(pool.length - 1, Math.floor(r * pool.length))]
 }
 
+// ---- widgets ------------------------------------------------------------------
+//
+// What sits on top of any saver: a clock, what arrived while you were away,
+// the coding agent's state. Each is on or off and sits in the tile's corner
+// (where they stack, in one fixed order) or in the middle, large. The corner
+// is one choice per tile. Defaults come from the old global card settings,
+// so nothing anyone had set is lost.
+var WIDGETS = ["clock", "notifications", "agent"]
+var CORNERS = ["bottom-right", "bottom-left", "top-right", "top-left"]
+// Where a widget sits: one of the four corners, or the middle of the screen,
+// where it is drawn large. Every widget picks its own spot; two in the same
+// one stack, in this list's order.
+var PLACES = ["top-left", "top-right", "bottom-left", "bottom-right", "centre"]
+
+function placeLabel(place) {
+  if (place === "centre") return "Middle"
+  var p = String(place).split("-")
+  if (p.length !== 2) return ""
+  return p[0].charAt(0).toUpperCase() + p[0].slice(1) + " " + p[1]
+}
+
+function widgetDefaults(cfg) {
+  var card = cfg && isPlainObject(cfg.card) ? cfg.card : {}
+  return {
+    clock: { on: false, place: "corner", format: "HH:mm", showDate: true, showSeconds: false },
+    notifications: { on: card.enabled !== false, place: "corner", detail: typeof card.detail === "string" ? card.detail : "counts" },
+    // Which figure the agent is drawn as. The shapes on offer live with the
+    // drawings, in savers/Robot.js; nothing stored here means the usual one,
+    // and a shape from a later version falls back to it.
+    agent: { on: card.showAgent !== false, place: "corner", figure: "" }
+  }
+}
+
+// "true" is as good as true: the knobs written over IPC arrive as text.
+function boolish(value, fallback) {
+  if (typeof value === "boolean") return value
+  if (value === "true") return true
+  if (value === "false") return false
+  return fallback
+}
+
+function widgetsOf(settings, cfg) {
+  var out = widgetDefaults(cfg)
+  var s = isPlainObject(settings) ? settings : {}
+  // A clock's knobs from before it was a widget still count — and a saver
+  // that carries them was showing a clock, so it still shows one. Anything
+  // stored under `widgets` below is a later answer and wins, so a clock
+  // that has since been switched off stays off.
+  if (typeof s.format === "string") { out.clock.format = s.format; out.clock.on = true }
+  if (s.showDate !== undefined) { out.clock.showDate = boolish(s.showDate, out.clock.showDate); out.clock.on = true }
+  if (s.showSeconds !== undefined) { out.clock.showSeconds = boolish(s.showSeconds, out.clock.showSeconds); out.clock.on = true }
+  var w = isPlainObject(s.widgets) ? s.widgets : {}
+  for (var i = 0; i < WIDGETS.length; i++) {
+    var key = WIDGETS[i]
+    if (isPlainObject(w[key]))
+      for (var leaf in w[key]) out[key][leaf] = out[key][leaf] === undefined ? w[key][leaf] : coerce(w[key][leaf], out[key][leaf])
+    // "corner" is what was stored before each widget picked its own spot,
+    // and it is still the default: it means this tile's corner.
+    if (PLACES.indexOf(out[key].place) === -1) out[key].place = cornerOf(settings, cfg)
+  }
+  return out
+}
+
+function cornerOf(settings, cfg) {
+  var s = isPlainObject(settings) ? settings : {}
+  if (CORNERS.indexOf(s.corner) !== -1) return s.corner
+  var card = cfg && isPlainObject(cfg.card) ? cfg.card : {}
+  return CORNERS.indexOf(card.corner) !== -1 ? card.corner : "bottom-right"
+}
+
+// The patch for one widget's knobs: everything stored stays, the given
+// leaves change. Hands back the whole `widgets` object, which is what the
+// settings writer replaces.
+function patchWidget(settings, key, patch) {
+  var s = isPlainObject(settings) ? cloneJson(settings) : {}
+  var w = isPlainObject(s.widgets) ? s.widgets : {}
+  var cur = isPlainObject(w[key]) ? w[key] : {}
+  for (var k in patch) cur[k] = patch[k]
+  w[key] = cur
+  return { widgets: w }
+}
+
+// ---- the coding agent -------------------------------------------------------------
+//
+// What the agent widget knows comes from one probe, run while a saver is up.
+// Claude Code keeps a registry of its own running sessions (one file per
+// process, with a status it maintains itself), so those are read exactly.
+// Every other agent is a running process: whether it has done anything in the
+// last few seconds says working or waiting. Nothing here talks to an agent.
+var AGENT_STATES = ["needs", "error", "working", "waiting", "idle"]
+
+function agentProbeScript() {
+  return [
+    "import json, os, re, glob, time",
+    "home = os.path.expanduser('~')",
+    "run = os.environ.get('XDG_RUNTIME_DIR') or '/tmp'",
+    "memo = run + '/stelline-agents.json'",
+    "try:",
+    "    prev = json.load(open(memo))",
+    "except Exception:",
+    "    prev = {}",
+    "out = []",
+    "ticks = {}",
+    "cdir = os.environ.get('CLAUDE_CONFIG_DIR') or home + '/.claude'",
+    "for p in glob.glob(cdir + '/sessions/*.json'):",
+    "    try:",
+    "        r = json.load(open(p))",
+    "    except Exception:",
+    "        continue",
+    "    pid = r.get('pid')",
+    "    if not isinstance(pid, int) or not os.path.exists('/proc/%d' % pid): continue",
+    "    if r.get('kind') not in (None, 'interactive'): continue",
+    "    cwd = str(r.get('cwd') or '')",
+    "    sid = str(r.get('sessionId') or '')",
+    "    title = ''",
+    "    last = ''",
+    "    tpath = cdir + '/projects/' + re.sub(r'[^A-Za-z0-9]', '-', cwd) + '/' + sid + '.jsonl'",
+    "    try:",
+    "        with open(tpath, 'rb') as fh:",
+    "            fh.seek(0, 2); size = fh.tell(); fh.seek(max(0, size - 240000))",
+    "            lines = fh.read().decode('utf-8', 'replace').split('\\n')",
+    "        for line in lines:",
+    "            if '\"aiTitle\"' not in line and '\"stop_reason\"' not in line and '\"type\":\"user\"' not in line: continue",
+    "            try:",
+    "                d = json.loads(line)",
+    "            except Exception:",
+    "                continue",
+    "            t = d.get('type')",
+    "            if t == 'ai-title' and d.get('aiTitle'): title = str(d['aiTitle'])",
+    "            elif t == 'assistant':",
+    "                sr = (d.get('message') or {}).get('stop_reason')",
+    "                if sr in ('end_turn', 'tool_use'): last = sr",
+    "            elif t == 'user':",
+    "                c = (d.get('message') or {}).get('content')",
+    "                if isinstance(c, str) or (isinstance(c, list) and c and isinstance(c[0], dict) and c[0].get('type') == 'text'): last = 'user'",
+    "    except Exception:",
+    "        pass",
+    "    out.append({'agent': 'claude', 'pid': pid, 'session': sid, 'project': os.path.basename(cwd) or cwd, 'title': title,",
+    "                'status': str(r.get('status') or ''), 'waitingFor': str(r.get('waitingFor') or ''), 'last': last,",
+    "                'statusAt': r.get('statusUpdatedAt') or 0, 'startedAt': r.get('startedAt') or 0})",
+    "others = ['codex', 'gemini', 'opencode', 'pi', 'omp', 'crush', 'copilot', 'grok']",
+    "for d in os.listdir('/proc'):",
+    "    if not d.isdigit(): continue",
+    "    try:",
+    "        comm = open('/proc/%s/comm' % d).read().strip()",
+    "        if comm not in others: continue",
+    "        st = open('/proc/%s/stat' % d).read().rsplit(')', 1)[1].split()",
+    "        cpu = int(st[11]) + int(st[12])",
+    "        cwd = os.readlink('/proc/%s/cwd' % d)",
+    "    except Exception:",
+    "        continue",
+    "    ticks[d] = cpu",
+    "    busy = d not in prev or cpu - int(prev.get(d, 0)) >= 2",
+    "    out.append({'agent': comm, 'pid': int(d), 'session': '', 'project': os.path.basename(cwd) or cwd, 'title': '',",
+    "                'status': 'busy' if busy else 'idle', 'waitingFor': '', 'last': '', 'statusAt': 0, 'startedAt': 0})",
+    "try:",
+    "    json.dump(ticks, open(memo, 'w'))",
+    "except Exception:",
+    "    pass",
+    "print(json.dumps({'sessions': out}))"
+  ].join("\n")
+}
+
+// One session's state, from what the probe saw. Claude's own status wins;
+// what it is waiting for tells "needs you" from "finished, waiting".
+function agentSessionState(s) {
+  if (!isPlainObject(s)) return "idle"
+  var status = String(s.status || "")
+  var waiting = String(s.waitingFor || "")
+  if (status === "busy" || status === "running") return "working"
+  if (/permission|approv|question|input|confirm|choice|answer/i.test(waiting)) return "needs"
+  if (status === "idle" || status === "") {
+    if (s.last === "tool_use" || s.last === "user") return status === "" ? "working" : "waiting"
+    return "waiting"
+  }
+  if (/error|fail|crash/i.test(status)) return "error"
+  return "working"
+}
+
+function agentUrgency(state) { var at = AGENT_STATES.indexOf(state); return at === -1 ? AGENT_STATES.length : at }
+
+function agentStateLabel(state) {
+  if (state === "needs") return "needs you"
+  if (state === "working") return "working"
+  if (state === "waiting") return "waiting for you"
+  if (state === "error") return "hit an error"
+  return "idle"
+}
+
+// What the probe printed, as sessions with a state each, most pressing first.
+function parseAgentProbe(text) {
+  var parsed
+  try { parsed = JSON.parse(String(text || "")) } catch (e) { return [] }
+  var list = parsed && Array.isArray(parsed.sessions) ? parsed.sessions : []
+  var out = []
+  for (var i = 0; i < list.length; i++) {
+    if (!isPlainObject(list[i])) continue
+    var s = cloneJson(list[i])
+    s.state = agentSessionState(s)
+    s.name = agentName(String(s.agent || ""))
+    out.push(s)
+  }
+  out.sort(function(a, b) { return agentUrgency(a.state) - agentUrgency(b.state) || Number(b.statusAt || 0) - Number(a.statusAt || 0) })
+  return out
+}
+
+// The one line under the robot: what the most pressing session is up to, and
+// how many others there are.
+function agentSummary(sessions) {
+  var list = Array.isArray(sessions) ? sessions : []
+  if (list.length === 0) return { state: "idle", count: 0, line: "" }
+  var top = list[0]
+  var what = top.title ? String(top.title) : (top.project ? String(top.project) : "")
+  var line = String(top.name || agentName(String(top.agent || "")))
+  if (what !== "") line += " · " + what
+  if (list.length > 1) {
+    var needs = list.filter(function(s) { return s.state === "needs" || s.state === "error" }).length
+    line += " · " + list.length + " sessions" + (needs > 1 ? ", " + needs + " need you" : "")
+  }
+  return { state: top.state, count: list.length, line: line }
+}
+
 // ---- user savers ("series") ----------------------------------------------------
 
 // Where the user's own screensavers live, one folder each with a saver.json
@@ -844,6 +1086,21 @@ function userSaverFromScan(row) {
   var j = row.json
   var id = baseName(row.dir)
   if (!/^[a-z0-9][a-z0-9-]*$/.test(id) || SAVERS.some(function(b) { return b.id === id })) return null
+  if (j.kind === "empty") {
+    var src = isPlainObject(j.source) ? j.source : {}
+    var isClock = src.type === "clock"
+    return {
+      id: id,
+      name: typeof j.name === "string" && j.name.trim() !== "" ? j.name.trim() : (isClock ? "Clock" : "Empty"),
+      glyph: isClock ? GLYPHS.clock : GLYPHS.empty,
+      meta: isClock ? "time and date" : "empty screen",
+      file: "savers/Blank.qml",
+      kind: "series",
+      type: "empty",
+      series: { dir: row.dir, kind: "empty", pieces: [], play: "slideshow", fps: 10, dwellSec: 12, frameCount: 0,
+        importing: j.importing === true, error: typeof j.error === "string" ? j.error : "", thumbArt: "", thumbImage: "", source: src }
+    }
+  }
   var kind = j.kind === "image" ? "image" : "ascii"
   var files = Array.isArray(row.files) ? row.files : []
   var pieces = []
@@ -937,7 +1194,8 @@ function scanScript(rootDir) {
 
 // ---- import -----------------------------------------------------------------------
 
-// What the panel collects before Create. `source`: images | folder | video | text | prompt.
+// What the panel collects before Create. `source`: images | folder | video |
+// text | prompt | clock | empty (the last two have nothing to convert).
 // `style`: ascii (theme-coloured text art) | image (the pictures as they are).
 function importDefaults() {
   return { id: "", name: "", source: "images", paths: [], text: "", prompt: "", style: "ascii", fps: 10, seconds: 20, animated: true, frames: 12 }
@@ -948,8 +1206,10 @@ function importDefaults() {
 var ASCII_COLUMNS = 160
 var ASCII_ROWS = 64
 
+function isEmptySource(source) { return source === "clock" || source === "empty" }
+
 function metaJson(spec, extra) {
-  var j = { name: spec.name, kind: spec.style === "image" ? "image" : "ascii", source: { type: spec.source }, created: Math.floor(Date.now() / 1000) }
+  var j = { name: spec.name, kind: isEmptySource(spec.source) ? "empty" : (spec.style === "image" ? "image" : "ascii"), source: { type: spec.source }, created: Math.floor(Date.now() / 1000) }
   if (spec.source === "images" || spec.source === "video") j.source.paths = spec.paths
   if (spec.source === "folder") j.source.paths = spec.paths
   if (spec.source === "text") j.source.text = spec.text
@@ -1206,10 +1466,16 @@ function importScript(spec, rootDir) {
       "[[ $(tr -d '\\f[:space:]' < \"$dir/frames.txt\" | wc -c) -gt 20 ]] || fail \"the answer had no art in it${agent:+ ($agent)}\"",
       finish("'.pieces=[\"frames.txt\"] | .play=" + (frames > 1 ? "\"animation\" | .fps=6" : "\"slideshow\"") + "'")
     )
+  } else if (isEmptySource(spec.source)) {
+    // Nothing to convert: the folder holds only its saver.json, and what
+    // shows is whatever is put on top of the empty screen.
+    lines.push(finish("."))
   } else {
     lines.push("fail 'unknown source'")
   }
-  lines.push("touch \"$root/.stamp\"", notify("󱄄", String(spec.name || id) + " is ready"), "exit 0", "")
+  lines.push("touch \"$root/.stamp\"")
+  if (!isEmptySource(spec.source)) lines.push(notify("󱄄", String(spec.name || id) + " is ready"))
+  lines.push("exit 0", "")
   return lines.join("\n")
 }
 
@@ -1299,6 +1565,16 @@ function playsLabel(cfg, saverId, userSavers) {
   return ruleText
 }
 
+// A shipped tile is deleted by hiding it: nothing on disk to remove, and
+// Add can always make another of the same type.
+function hideSaver(cfg, saverId) {
+  var patch = forgetSaver(cfg, saverId)
+  var hidden = Array.isArray(cfg && cfg.hidden) ? cfg.hidden.slice() : []
+  if (hidden.indexOf(saverId) === -1) hidden.push(saverId)
+  patch.hidden = hidden
+  return patch
+}
+
 // Drop every reference to a saver that is going away.
 function forgetSaver(cfg, saverId) {
   var c = cloneJson(cfg)
@@ -1357,6 +1633,26 @@ if (typeof module !== "undefined") {
     timingsRule: timingsRule,
     setTimingsRule: setTimingsRule,
     ruleSaver: ruleSaver,
+    GLYPHS: GLYPHS,
+    hideSaver: hideSaver,
+    WIDGETS: WIDGETS,
+    boolish: boolish,
+    CORNERS: CORNERS,
+    widgetDefaults: widgetDefaults,
+    widgetsOf: widgetsOf,
+    PLACES: PLACES,
+    placeLabel: placeLabel,
+    cornerOf: cornerOf,
+    patchWidget: patchWidget,
+    isEmptySource: isEmptySource,
+    metaJson: metaJson,
+    AGENT_STATES: AGENT_STATES,
+    agentProbeScript: agentProbeScript,
+    agentSessionState: agentSessionState,
+    agentUrgency: agentUrgency,
+    agentStateLabel: agentStateLabel,
+    parseAgentProbe: parseAgentProbe,
+    agentSummary: agentSummary,
     mmss: mmss,
     digest: digest,
     displayAppName: displayAppName,

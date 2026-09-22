@@ -92,10 +92,16 @@ Item {
     if (!M.isPlainObject(spec)) return "bad-spec"
     var next = M.cloneJson(spec)
     var name = String(next.name || "").trim()
-    if (name === "") name = M.suggestName(next.paths, next.source === "text" ? String(next.text || "").trim() : (next.source === "prompt" ? "Described" : "New saver"))
+    if (name === "") name = next.source === "clock" ? "Clock" : (next.source === "empty" ? "Empty"
+      : M.suggestName(next.paths, next.source === "text" ? String(next.text || "").trim() : (next.source === "prompt" ? "Described" : "New saver")))
     next.name = name
-    var taken = root.userSaverIds.concat(root.importQueue.map(function(q) { return q.id })).concat(root.importingIds)
+    // A shipped tile's id is taken too, hidden or not.
+    var taken = M.SAVERS.map(function(b) { return b.id }).concat(root.userSaverIds).concat(root.importQueue.map(function(q) { return q.id })).concat(root.importingIds)
     next.id = M.uniqueId(M.slugify(name), taken)
+    // An empty's defaults are its settings, written up front: a clock is an
+    // empty screen with the clock in the middle, the same as the shipped one.
+    if (next.source === "clock") writeSaverSetting(next.id, { background: "theme", widgets: { clock: { on: true, place: "centre" } } })
+    else if (next.source === "empty") writeSaverSetting(next.id, { background: "theme" })
     root.importQueue = root.importQueue.concat([next])
     root.importDraft = null
     runNextImport()
@@ -130,14 +136,17 @@ Item {
     }
   }
 
-  // Remove a user saver: its folder goes, and every setting that named it.
+  // Remove a saver: a shipped tile is hidden (nothing on disk, and Add can
+  // make another); one of your own loses its folder. Either way every
+  // setting that named it goes.
   function deleteSaver(id) {
     var s = M.saverById(id, root.userSavers)
-    if (!s || s.kind !== "series") return "unknown-saver"
-    var script = M.deleteScript(id, root.userSaversDir)
-    if (!script) return "bad-id"
+    if (!s || s.kind === "external") return "unknown-saver"
     if (root.overlayVisible && root.overlaySaver === id) hideScreensaver("deleted")
     if (root.miniVisible && root.miniSaver === id) root.miniVisible = false
+    if (s.kind !== "series") return writeSettings(M.hideSaver(root.cfg, id)) ? "ok" : "failed"
+    var script = M.deleteScript(id, root.userSaversDir)
+    if (!script) return "bad-id"
     var patch = M.forgetSaver(root.cfg, id)
     if (Object.keys(patch).length) writeSettings(patch)
     // One at a time: runProcess skips a busy process, so deleting several in
@@ -240,7 +249,7 @@ Item {
   // Omarchy artwork, which is what the Original plays.
   function setWordmarkText(id, text) {
     var saver = M.saverById(id, root.userSavers)
-    if (!saver || M.saverType(saver) !== "wordmark") return "not-a-wordmark"
+    if (!saver || M.saverType(saver) !== "text") return "not-a-wordmark"
     var want = String(text === undefined || text === null ? "" : text)
     if (!writeSaverSetting(id, { text: want })) return "failed"
     if (want.trim() === "") return "ok"
@@ -477,12 +486,15 @@ Item {
   // the notification files are digested only while a saver is up.
   readonly property string notificationsDir: home + "/.local/state/omarchy/notifications"
   property bool dnd: false
-  property string agentState: ""
+  readonly property string agentState: M.agentSummary(agentSessions).state
   property var cardGroups: []
-  readonly property bool cardEnabled: cfg.card && cfg.card.enabled !== false
-  readonly property bool cardVisible: cardEnabled && !dnd
-    && (cardGroups.length > 0 || (cfg.card.showAgent !== false && agentState !== "" && agentState !== "idle"))
   readonly property bool anySaverShown: overlayVisible || miniVisible
+  // The widgets of the saver on screen decide what is digested and shown.
+  readonly property string shownSaver: overlayVisible ? overlaySaver : (miniVisible ? miniSaver : cfg.saver)
+  readonly property var shownWidgets: M.widgetsOf(cfg.savers && cfg.savers[shownSaver] ? cfg.savers[shownSaver] : ({}), cfg)
+  readonly property bool agentActive: agentSessions.length > 0
+  readonly property bool cardEnabled: shownWidgets.notifications.on === true
+  readonly property bool cardVisible: !dnd && ((cardEnabled && cardGroups.length > 0) || (shownWidgets.agent.on === true && agentActive))
 
   function refreshCard() {
     if (!cardEnabled || dnd) { root.cardGroups = []; return }
@@ -504,13 +516,36 @@ Item {
     onLoadFailed: root.dnd = false
   }
 
+  // The coding agent: one probe, while a saver is up and the widget is on,
+  // every few seconds and the moment Claude Code's registry changes. Nothing
+  // is watched otherwise.
+  property var agentSessions: []
+  function refreshAgents() { if (!agentProbe.running) agentProbe.running = true }
+  Process {
+    id: agentProbe
+    command: ["python3", "-c", M.agentProbeScript()]
+    stdout: StdioCollector {
+      onStreamFinished: root.agentSessions = M.parseAgentProbe(text)
+    }
+  }
+  readonly property bool agentWatched: anySaverShown && shownWidgets.agent.on === true
+  onAgentWatchedChanged: if (agentWatched) refreshAgents(); else root.agentSessions = []
+  Timer {
+    interval: 4000
+    repeat: true
+    running: root.agentWatched
+    onTriggered: root.refreshAgents()
+  }
   FileView {
-    path: root.home + "/.local/state/omarchy/agent-ambient"
+    path: (Quickshell.env("CLAUDE_CONFIG_DIR") || root.home + "/.claude") + "/sessions"
     watchChanges: true
     printErrors: false
-    onLoaded: root.agentState = String(text()).trim().toLowerCase()
-    onFileChanged: reload()
-    onLoadFailed: root.agentState = ""
+    onFileChanged: agentDebounce.restart()
+  }
+  Timer {
+    id: agentDebounce
+    interval: 400
+    onTriggered: if (root.agentWatched) root.refreshAgents()
   }
 
   FileView {
@@ -1330,8 +1365,8 @@ Item {
     }
 
     function list(): string {
-      return JSON.stringify(M.allSavers(root.userSavers).map(function(s) {
-        return { id: s.id, name: s.name, kind: s.kind, current: s.id === root.cfg.saver, plays: M.playsLabel(root.cfg, s.id, root.userSavers),
+      return JSON.stringify(M.allSavers(root.userSavers, root.cfg.hidden).map(function(s) {
+        return { id: s.id, name: s.name, kind: s.kind, type: M.saverType(s), current: s.id === root.cfg.saver, plays: M.playsLabel(root.cfg, s.id, root.userSavers),
           importing: !!(s.series && s.series.importing), error: s.series ? s.series.error : "" }
       }))
     }
