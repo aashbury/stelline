@@ -19,12 +19,25 @@ var EXITS = ["fall", "shear", "implode", "dissolve", "sweepout"]
 
 // What happens while the art is resting: cheap, a few rows at a time, so the
 // screen is never a still picture.
-var AMBIENTS = ["scan", "interference", "flicker"]
+var AMBIENTS = ["scan", "interference", "flicker", "shimmer"]
+
+// The ambients that only change how brightly the art burns, never what it is
+// made of. Braille art is dots, not letters: scramble it and you get
+// katakana where a face was. A dot matrix rests with one of these.
+var STEADY_AMBIENTS = ["scan", "shimmer"]
 
 // The ones that animate the whole canvas rather than the letters alone. They
 // are the point of the thing and also most of its cost, so on battery they
 // step aside — the same bargain Series already makes with its frame rate.
 var FIELD_EFFECTS = ["spotlight", "cascade", "shockwave", "beams", "storm"]
+
+// `pulse` is the one entrance that is not an arrival: it shows the piece
+// whole and lets the colour breathe. A piece with nothing else to play has
+// nowhere to arrive from, so it should be left where it is rather than cycled.
+function onlyPulse(list) {
+  var pool = Array.isArray(list) ? list.filter(function(e) { return typeof e === "string" && e !== "" }) : []
+  return pool.length > 0 && pool.every(function(e) { return e === "pulse" })
+}
 
 function onlyCheap(list) {
   var pool = (Array.isArray(list) && list.length ? list : EFFECTS).filter(function(e) {
@@ -421,6 +434,18 @@ function ambientFrame(p, t) {
       var d = Math.abs(cell.r - head)
       if (d < 2.4) put(g, cell.r, cell.c, cell.ch, d < 0.7 ? HOT : (d < 1.5 ? MID : DIM))
     }
+  } else if (p.effect === "shimmer") {
+    // A slow swell of light travels across the dots on the diagonal, and a
+    // few catch it early and burn bright for a moment. Nothing moves and
+    // nothing is replaced: only how brightly each dot is lit.
+    var swell = t / 2400
+    for (k = 0; k < list.length; k++) {
+      cell = list[k]
+      var lift = Math.sin(cell.c * 0.055 + cell.r * 0.10 - swell)
+      if (lift < 0.2) continue
+      var spark = noise(cell.c, cell.r + Math.floor(t / 380))
+      put(g, cell.r, cell.c, cell.ch, lift > 0.9 && spark > 0.82 ? HOT : (lift > 0.55 ? MID : DIM))
+    }
   } else if (p.effect === "interference") {
     // A couple of rows tear sideways and snap back, over and over.
     var cycle = 2600
@@ -809,5 +834,5 @@ function pick(list, random) {
 }
 
 if (typeof module !== "undefined") {
-  module.exports = { EFFECTS: EFFECTS, FIELD_EFFECTS: FIELD_EFFECTS, onlyCheap: onlyCheap, EXITS: EXITS, AMBIENTS: AMBIENTS, MOODS: MOODS, planExit: planExit, planAmbient: planAmbient, ambientFrame: ambientFrame, CIPHER: CIPHER, cells: cells, rng: rng, plan: plan, frame: frame, pick: pick }
+  module.exports = { EFFECTS: EFFECTS, FIELD_EFFECTS: FIELD_EFFECTS, onlyCheap: onlyCheap, onlyPulse: onlyPulse, STEADY_AMBIENTS: STEADY_AMBIENTS, EXITS: EXITS, AMBIENTS: AMBIENTS, MOODS: MOODS, planExit: planExit, planAmbient: planAmbient, ambientFrame: ambientFrame, CIPHER: CIPHER, cells: cells, rng: rng, plan: plan, frame: frame, pick: pick }
 }

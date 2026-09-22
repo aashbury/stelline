@@ -18,6 +18,9 @@ Item {
   // A pulse toward an accent identical to the foreground is no pulse at all.
   readonly property color pulseTo: Math.abs(accent.r - fg.r) + Math.abs(accent.g - fg.g) + Math.abs(accent.b - fg.b) > 0.12 ? accent : muted
   property string fontFamily: Style.font.family
+  // Blocks drawn on the same dot grid as braille. Off for art too small for
+  // a dot to survive.
+  property bool dotted: true
   // How much of the surface the art may take.
   property real fitWidth: 0.8
   property real fitHeight: 0.6
@@ -36,11 +39,17 @@ Item {
   readonly property real advance: pixelSize * advanceAt100 / 100
 
   readonly property var lines: art === "" ? [] : art.replace(/\s+$/, "").split("\n")
+  // Art drawn on a fixed grid can say how big the grid is, so blank space
+  // trimmed off the right and the bottom still counts and the drawing stays
+  // where it was put. Left at 0, the art is as big as its longest line.
+  property int gridColumns: 0
+  property int gridRows: 0
   readonly property int columns: {
-    var m = 0
+    var m = gridColumns
     for (var i = 0; i < lines.length; i++) m = Math.max(m, lines[i].length)
     return m
   }
+  readonly property int rows: Math.max(gridRows, lines.length)
   readonly property int totalChars: {
     var n = 0
     for (var i = 0; i < lines.length; i++) n += lines[i].length + 1
@@ -58,15 +67,15 @@ Item {
   readonly property real advanceAt100: Math.max(1, probe.advanceWidth)
   readonly property real lineHeightAt100: Math.max(1, probe.height)
   readonly property int pixelSize: {
-    if (root.columns === 0 || root.lines.length === 0 || root.width === 0 || root.height === 0) return 24
+    if (root.columns === 0 || root.rows === 0 || root.width === 0 || root.height === 0) return 24
     var byWidth = (root.width * root.fitWidth) / (root.columns * root.advanceAt100 / 100)
-    var byHeight = (root.height * root.fitHeight) / (root.lines.length * root.lineHeightAt100 / 100)
+    var byHeight = (root.height * root.fitHeight) / (root.rows * root.lineHeightAt100 / 100)
     return Math.max(2, Math.floor(Math.min(byWidth, byHeight)))
   }
   readonly property int cellW: Math.max(1, Math.round(root.pixelSize * root.advanceAt100 / 100))
   readonly property int cellH: Math.max(1, Math.round(root.pixelSize * root.lineHeightAt100 / 100))
   readonly property int artW: root.columns * root.cellW
-  readonly property int artH: root.lines.length * root.cellH
+  readonly property int artH: root.rows * root.cellH
 
   // The cells resolved so far, in arrival order; each canvas remembers how
   // many of them it has painted.
@@ -92,6 +101,18 @@ Item {
       var bits = code - 0x2800
       var map = [[0, 0, 0x01], [0, 1, 0x02], [0, 2, 0x04], [0, 3, 0x40], [1, 0, 0x08], [1, 1, 0x10], [1, 2, 0x20], [1, 3, 0x80]]
       var dw = w / 2, dh = h / 4
+      // Under about three pixels apart, a round dot is wider than the gap
+      // it should leave, and the fractional spacing merges rows of them into
+      // stripes. There each dot is a square snapped to whole pixels, so the
+      // gap between them survives.
+      if (Math.min(dw, dh) < 3.2) {
+        var s = Math.max(1, Math.round(Math.min(dw, dh) * 0.55))
+        for (var j = 0; j < map.length; j++) {
+          if (!(bits & map[j][2])) continue
+          ctx.fillRect(Math.round(x + map[j][0] * dw), Math.round(y + map[j][1] * dh), s, s)
+        }
+        return true
+      }
       var r = Math.max(1, Math.min(dw, dh) * 0.42)
       for (var i = 0; i < map.length; i++) {
         if (!(bits & map[i][2])) continue
@@ -102,6 +123,42 @@ Item {
         ctx.fill()
       }
       return true
+    }
+    // Every other block lands on the same 2x4 grid of dots that braille
+    // uses, so a photograph, a word and the agent's little figure are all
+    // made of the same lights rather than some of them being solid slabs.
+    // `dotted` turns it off where the art is better as geometry — a
+    // thumbnail too small to resolve a dot, say.
+    // Below about two pixels a dot cannot be told from its neighbour, so
+    // small art stays solid geometry: a tile thumbnail or the little figure
+    // in a corner reads better, and costs one rectangle instead of eight
+    // circles.
+    if (root.dotted && Math.min(w / 2, h / 4) >= 1.7) {
+      switch (ch) {
+      case "█": return root.dots(ctx, x, y, w, h, 0, 2, 0, 4)
+      case "▀": return root.dots(ctx, x, y, w, h, 0, 2, 0, 2)
+      case "▄": return root.dots(ctx, x, y, w, h, 0, 2, 2, 4)
+      case "▌": return root.dots(ctx, x, y, w, h, 0, 1, 0, 4)
+      case "▐": return root.dots(ctx, x, y, w, h, 1, 2, 0, 4)
+      case "▘": return root.dots(ctx, x, y, w, h, 0, 1, 0, 2)
+      case "▝": return root.dots(ctx, x, y, w, h, 1, 2, 0, 2)
+      case "▖": return root.dots(ctx, x, y, w, h, 0, 1, 2, 4)
+      case "▗": return root.dots(ctx, x, y, w, h, 1, 2, 2, 4)
+      case "▚": root.dots(ctx, x, y, w, h, 0, 1, 0, 2); return root.dots(ctx, x, y, w, h, 1, 2, 2, 4)
+      case "▞": root.dots(ctx, x, y, w, h, 1, 2, 0, 2); return root.dots(ctx, x, y, w, h, 0, 1, 2, 4)
+      case "▙": root.dots(ctx, x, y, w, h, 0, 1, 0, 2); return root.dots(ctx, x, y, w, h, 0, 2, 2, 4)
+      case "▛": root.dots(ctx, x, y, w, h, 0, 2, 0, 2); return root.dots(ctx, x, y, w, h, 0, 1, 2, 4)
+      case "▜": root.dots(ctx, x, y, w, h, 0, 2, 0, 2); return root.dots(ctx, x, y, w, h, 1, 2, 2, 4)
+      case "▟": root.dots(ctx, x, y, w, h, 1, 2, 0, 2); return root.dots(ctx, x, y, w, h, 0, 2, 2, 4)
+      }
+      // Lower eighths ▁▂▃▄▅▆▇ and left eighths ▏▎▍▌▋▊▉, to the nearest dot.
+      if (code >= 0x2581 && code <= 0x2587) return root.dots(ctx, x, y, w, h, 0, 2, 4 - Math.max(1, Math.round((code - 0x2580) / 2)), 4)
+      if (code >= 0x2589 && code <= 0x258F) return root.dots(ctx, x, y, w, h, 0, Math.max(1, Math.round((0x2590 - code) / 4)), 0, 4)
+      // The three shades become how many of the eight are lit, in a fixed
+      // order, so a shaded area reads as a coarser field of the same dots
+      // rather than as a dimmer slab.
+      if (ch === "░" || ch === "▒" || ch === "▓") return root.shade(ctx, x, y, w, h, ch === "░" ? 2 : (ch === "▒" ? 4 : 6))
+      return false
     }
     var half = Math.round(h / 2), halfW = Math.round(w / 2)
     switch (ch) {
@@ -121,7 +178,6 @@ Item {
     case "▜": ctx.fillRect(x, y, w, half); ctx.fillRect(x + halfW, y + half, w - halfW, h - half); return true
     case "▟": ctx.fillRect(x + halfW, y, w - halfW, half); ctx.fillRect(x, y + half, w, h - half); return true
     }
-    // Lower eighths ▁▂▃▄▅▆▇ (0x2581-0x2587) and left eighths ▏▎▍▌▋▊▉ (0x258F-0x2589).
     if (code >= 0x2581 && code <= 0x2587) { var k = (code - 0x2580) / 8; ctx.fillRect(x, y + Math.round(h * (1 - k)), w, Math.round(h * k)); return true }
     if (code >= 0x2589 && code <= 0x258F) { var kk = (0x2590 - code) / 8; ctx.fillRect(x, y, Math.round(w * kk), h); return true }
     if (ch === "░" || ch === "▒" || ch === "▓") {
@@ -130,6 +186,31 @@ Item {
       return true
     }
     return false
+  }
+
+  // A rectangle of the cell's dot grid, lit.
+  function dots(ctx, x, y, w, h, c0, c1, r0, r1) {
+    var dw = w / 2, dh = h / 4
+    var rad = Math.max(0.6, Math.min(dw, dh) * 0.42)
+    for (var c = c0; c < c1; c++) for (var r = r0; r < r1; r++) {
+      ctx.beginPath()
+      ctx.arc(x + (c + 0.5) * dw, y + (r + 0.5) * dh, rad, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    return true
+  }
+
+  // How many of the eight are lit, spread so the pattern never clumps.
+  readonly property var shadeOrder: [[0, 0], [1, 2], [1, 0], [0, 2], [0, 1], [1, 3], [1, 1], [0, 3]]
+  function shade(ctx, x, y, w, h, n) {
+    var dw = w / 2, dh = h / 4
+    var rad = Math.max(0.6, Math.min(dw, dh) * 0.42)
+    for (var i = 0; i < n && i < root.shadeOrder.length; i++) {
+      ctx.beginPath()
+      ctx.arc(x + (root.shadeOrder[i][0] + 0.5) * dw, y + (root.shadeOrder[i][1] + 0.5) * dh, rad, 0, Math.PI * 2)
+      ctx.fill()
+    }
+    return true
   }
 
   // Incremental: a canvas keeps what it has, so an effect step paints only

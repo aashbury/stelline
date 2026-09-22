@@ -15,6 +15,11 @@ Item {
   property real fitHeight: 0.85
   property real driftX: 0
   property real driftY: 0
+  // An animation lays every frame on one grid (the widest and tallest of
+  // them), pinned at its top left, so a frame a line short of the next
+  // does not resize or recentre the picture. 0 = this art's own size.
+  property int gridColumns: 0
+  property int gridRows: 0
 
   readonly property var lines: art === "" ? [] : art.replace(/\s+$/, "").split("\n")
   readonly property int columns: {
@@ -22,6 +27,8 @@ Item {
     for (var i = 0; i < lines.length; i++) m = Math.max(m, lines[i].length)
     return m
   }
+  readonly property int fitColumns: gridColumns > 0 ? Math.max(gridColumns, columns) : columns
+  readonly property int fitRows: gridRows > 0 ? Math.max(gridRows, lines.length) : lines.length
 
   TextMetrics {
     id: probe
@@ -31,24 +38,32 @@ Item {
   }
   readonly property int pixelSize: {
     if (root.columns === 0 || root.lines.length === 0 || root.width === 0 || root.height === 0) return 24
-    var byWidth = (root.width * root.fitWidth) / (root.columns * Math.max(1, probe.advanceWidth) / 100)
-    var byHeight = (root.height * root.fitHeight) / (root.lines.length * Math.max(1, probe.height) / 100)
+    var byWidth = (root.width * root.fitWidth) / (root.fitColumns * Math.max(1, probe.advanceWidth) / 100)
+    var byHeight = (root.height * root.fitHeight) / (root.fitRows * Math.max(1, probe.height) / 100)
     return Math.max(4, Math.floor(Math.min(byWidth, byHeight)))
   }
 
-  Text {
-    id: label
+  // The grid's box, centred; the text sits at its top left.
+  Item {
+    id: box
+    width: root.gridColumns > 0 ? Math.round(root.fitColumns * root.pixelSize * Math.max(1, probe.advanceWidth) / 100) : label.implicitWidth
+    height: root.gridRows > 0 ? Math.round(root.fitRows * root.pixelSize * Math.max(1, probe.height) / 100) : label.implicitHeight
     anchors.centerIn: parent
     anchors.horizontalCenterOffset: root.driftX
     anchors.verticalCenterOffset: root.driftY
-    scale: implicitWidth > 0 && implicitHeight > 0 ? Math.min(1, (root.width * root.fitWidth) / implicitWidth, (root.height * root.fitHeight) / implicitHeight) : 1
+    scale: width > 0 && height > 0 ? Math.min(1, (root.width * root.fitWidth) / width, (root.height * root.fitHeight) / height) : 1
     transformOrigin: Item.Center
-    textFormat: Text.PlainText
-    renderType: Text.NativeRendering
-    text: root.art
-    color: root.fg
-    font.family: root.fontFamily
-    font.pixelSize: root.pixelSize
-    lineHeight: 1
+    Text {
+      id: label
+      anchors.left: parent.left
+      anchors.top: parent.top
+      textFormat: Text.PlainText
+      renderType: Text.NativeRendering
+      text: root.art
+      color: root.fg
+      font.family: root.fontFamily
+      font.pixelSize: root.pixelSize
+      lineHeight: 1
+    }
   }
 }

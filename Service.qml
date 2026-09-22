@@ -4,6 +4,7 @@ import Quickshell.Hyprland
 import Quickshell.Io
 import Quickshell.Services.UPower
 import Quickshell.Wayland
+import qs.Commons
 import "IdleModel.js" as IdleModel
 import "StellineModel.js" as M
 
@@ -78,6 +79,13 @@ Item {
     onExited: { userDirWatcher.reload(); root.rescan() }
   }
 
+  // A braille dot is two across and four down inside a monospace cell, and
+  // a cell is much taller than it is wide, so a dot is not square. The
+  // conversion has to know by how much, and only the shell knows the font
+  // the theme actually uses.
+  TextMetrics { id: cellProbe; font.family: Style.font.family; font.pixelSize: 100; text: "█" }
+  readonly property real cellAspect: cellProbe.height > 0 ? cellProbe.advanceWidth / cellProbe.height : 0
+
   // ---- import ----
   // Imports run one at a time in the background as generated bash; the tile
   // shows up at once (saver.json is written first) and fills in when done.
@@ -95,13 +103,23 @@ Item {
     if (name === "") name = next.source === "clock" ? "Clock" : (next.source === "empty" ? "Empty"
       : M.suggestName(next.paths, next.source === "text" ? String(next.text || "").trim() : (next.source === "prompt" ? "Described" : "New saver")))
     next.name = name
+    // A spec from the IPC may name only what it cares about.
+    next.style = next.style === "image" ? "image" : "ascii"
+    if (!(Number(next.cellAspect) > 0)) next.cellAspect = root.cellAspect
+    // A described saver is drawn with what the settings say, unless the
+    // spec brought its own.
+    if (next.source === "prompt") { var how = M.describeSettings(root.cfg); if (!next.model) next.model = how.model; if (!next.effort) next.effort = how.effort }
     // A shipped tile's id is taken too, hidden or not.
     var taken = M.SAVERS.map(function(b) { return b.id }).concat(root.userSaverIds).concat(root.importQueue.map(function(q) { return q.id })).concat(root.importingIds)
-    next.id = M.uniqueId(M.slugify(name), taken)
+    // A retry keeps its id: the failed tile is the one that gets rewritten.
+    next.id = next.retryOf && root.userSaverIds.indexOf(next.retryOf) !== -1 ? next.retryOf : M.uniqueId(M.slugify(name), taken)
     // An empty's defaults are its settings, written up front: a clock is an
     // empty screen with the clock in the middle, the same as the shipped one.
     if (next.source === "clock") writeSaverSetting(next.id, { background: "theme", widgets: { clock: { on: true, place: "centre" } } })
     else if (next.source === "empty") writeSaverSetting(next.id, { background: "theme" })
+    // A dot matrix asked to sit still shows every dot at once and breathes
+    // its colour; anything else cycles through the effects as usual.
+    else if (next.source === "images" && next.style !== "image" && (next.paths || []).length === 1 && next.animated === false) writeSaverSetting(next.id, { effects: ["pulse"] })
     root.importQueue = root.importQueue.concat([next])
     root.importDraft = null
     runNextImport()
@@ -112,10 +130,11 @@ Item {
     if (importer.running || root.importQueue.length === 0) return
     var spec = root.importQueue[0]
     root.importQueue = root.importQueue.slice(1)
-    var script = M.importScript(spec, root.userSaversDir)
+    var script = M.importScript(spec, root.userSaversDir, root.pasteStageDir)
     var path = root.runtimeDir + "/stelline-import-" + spec.id + ".sh"
     root.importingIds = root.importingIds.concat([spec.id])
     importer.currentId = spec.id
+    importer.currentSpec = spec
     importer.command = ["bash", "-lc",
       "mkdir -p " + M.shellQuote(root.userSaversDir) + " && printf %s " + M.shellQuote(script) + " > " + M.shellQuote(path)
       + " && chmod 700 " + M.shellQuote(path) + " && bash " + M.shellQuote(path) + "; rc=$?; rm -f " + M.shellQuote(path) + "; exit $rc"]
@@ -126,6 +145,7 @@ Item {
   Process {
     id: importer
     property string currentId: ""
+    property var currentSpec: null
     stderr: SplitParser { onRead: function(line) { root.logEvent("import", importer.currentId + ": " + String(line).trim()) } }
     onExited: function(exitCode) {
       root.logEvent("import-exit", importer.currentId + " exitCode=" + exitCode)
@@ -136,12 +156,59 @@ Item {
     }
   }
 
+  // An import stopped: queued, it just goes; running, the whole tree of
+  // processes under the script is ended and the tile says so, keeping
+  // what it was asked for so it can be asked again. Deleting the tile
+  // instead removes it outright.
+  function stopImport(id) {
+    var queued = root.importQueue.filter(function(q) { return q.id === id })
+    if (queued.length) { root.importQueue = root.importQueue.filter(function(q) { return q.id !== id }); return "ok" }
+    if (!importer.running || importer.currentId !== id) return "not-importing"
+    var spec = importer.currentSpec
+    var stamp = spec ? "printf %s " + M.shellQuote(M.metaJson(spec, { error: "stopped" })) + " > " + M.shellQuote(root.userSaversDir + "/" + id + "/saver.json") + " 2>/dev/null; touch " + M.shellQuote(root.userSaversDir + "/.stamp") : ":"
+    stopper.command = ["bash", "-c", "killtree() { local c; for c in $(pgrep -P \"$1\"); do killtree \"$c\"; done; kill -TERM \"$1\" 2>/dev/null; }; killtree \"$1\"; sleep 0.3; " + stamp, "_", String(importer.processId)]
+    stopper.running = true
+    logEvent("import-stop", id)
+    return "ok"
+  }
+  Process { id: stopper; onExited: root.rescan() }
+
   // Remove a saver: a shipped tile is hidden (nothing on disk, and Add can
   // make another); one of your own loses its folder. Either way every
   // setting that named it goes.
+  // A failed import, asked for again from what its saver.json remembers.
+  function retryImport(id) {
+    var s = M.saverById(id, root.userSavers)
+    var spec = s ? M.retrySpec(s) : null
+    if (!spec) return "nothing-to-retry"
+    return importSaver(spec) ? "ok" : "failed"
+  }
+  // A described saver, drawn again from new words under the same tile.
+  function redescribe(id, words, animated, fromPrevious) {
+    var s = M.saverById(id, root.userSavers)
+    var spec = s ? M.redescribeSpec(s, words, animated, fromPrevious === true) : null
+    if (!spec) return "not-described"
+    if (s.series && s.series.importing) stopImport(id)
+    return importSaver(spec) ? "ok" : "failed"
+  }
+  // One of your own, renamed in its saver.json; the tile follows on rescan.
+  function renameSaver(id, name) {
+    var s = M.saverById(id, root.userSavers)
+    var text = String(name || "").trim()
+    if (!s || s.kind !== "series" || !s.series || !s.series.dir) return "unknown-saver"
+    if (text === "" || text === s.name) return "ok"
+    var file = M.shellQuote(s.series.dir + "/saver.json")
+    renamer.command = ["bash", "-c", "jq --arg n \"$1\" '.name=$n' " + file + " > " + file + ".new && mv " + file + ".new " + file + " && touch " + M.shellQuote(root.userSaversDir + "/.stamp"), "_", text]
+    renamer.running = true
+    logEvent("rename", id)
+    return "ok"
+  }
+  Process { id: renamer; onExited: root.rescan() }
+
   function deleteSaver(id) {
     var s = M.saverById(id, root.userSavers)
     if (!s || s.kind === "external") return "unknown-saver"
+    if (s.series && s.series.importing) stopImport(id)
     if (root.overlayVisible && root.overlaySaver === id) hideScreensaver("deleted")
     if (root.miniVisible && root.miniSaver === id) root.miniVisible = false
     if (s.kind !== "series") return writeSettings(M.hideSaver(root.cfg, id)) ? "ok" : "failed"
@@ -166,7 +233,11 @@ Item {
 
   // Per-saver rules: the tile's "plays when" conditions.
   function setRuleCondition(saverId, key, on) {
-    return writeSettings({ situations: M.setRuleCondition(root.cfg.situations, saverId, key, !!on, root.situationContext) })
+    // A theme rule needs a theme. Until the current one is known the first
+    // on the list stands in, so no rule is ever born unable to match.
+    var ctx = M.cloneJson(root.situationContext)
+    if (!ctx.themeName && root.themeNames.length) ctx.themeName = String(root.themeNames[0])
+    return writeSettings({ situations: M.setRuleCondition(root.cfg.situations, saverId, key, !!on, ctx) })
   }
   function patchRuleCondition(saverId, key, patch) {
     return writeSettings({ situations: M.patchRuleCondition(root.cfg.situations, saverId, key, patch) })
@@ -184,7 +255,8 @@ Item {
     var argv = ["omarchy-file-select", "--title"]
     if (kind === "folder") argv = argv.concat(["Pick a folder of pictures", "--directory"])
     else if (kind === "video") argv = argv.concat(["Pick a video or GIF", "--extensions", M.VIDEO_EXTENSIONS.join(" ")])
-    else argv = argv.concat(["Pick pictures", "--multiple", "--extensions", M.IMAGE_EXTENSIONS.join(" ")])
+    else if (kind === "images") argv = argv.concat(["Pick pictures", "--multiple", "--extensions", M.IMAGE_EXTENSIONS.join(" ")])
+    else argv = argv.concat(["Pick pictures or a clip", "--multiple", "--extensions", M.IMAGE_EXTENSIONS.concat(M.VIDEO_EXTENSIONS.filter(function(e) { return e !== "gif" })).join(" ")])
     root.pickKind = kind
     root.pickedPaths = []
     picker.command = argv
@@ -200,17 +272,10 @@ Item {
       // Only while the Add card is still waiting on this chooser: a cancelled
       // Add ignores a late answer.
       if (M.isPlainObject(root.importDraft) && root.importDraft.step === "picking") {
-        var draft = M.cloneJson(root.importDraft)
-        if (exitCode === 0 && root.pickedPaths.length > 0) {
-          draft.source = root.pickKind === "folder" ? "folder" : (root.pickKind === "video" ? "video" : "images")
-          draft.paths = root.pickedPaths.slice()
-          if (!draft.name || draft.nameAuto !== false) { draft.name = M.suggestName(draft.paths, "New saver"); draft.nameAuto = true }
-          draft.step = "confirm"
-        } else {
-          // Chooser closed with nothing. Back to the start: a card that only
-          // offers Cancel is a dead end you cannot get out of forwards.
-          draft.step = "start"
-        }
+        // What was picked joins the card; a chooser closed with nothing
+        // changes nothing. Either way the card is back where it was.
+        var draft = exitCode === 0 ? M.attach(root.importDraft, M.parsePicked(root.pickKind, root.pickedPaths)) : M.cloneJson(root.importDraft)
+        draft.step = "start"
         root.importDraft = draft
         root.summonPanel()
       }
@@ -301,10 +366,24 @@ Item {
     clipProbe.command = ["bash", "-c", M.clipboardProbeScript()]
     clipProbe.running = true
   }
+  // Copy something after the card is up and Paste appears on its own.
+  Timer { interval: 1500; repeat: true; running: M.isPlainObject(root.importDraft) && !paster.running; onTriggered: root.refreshClipboard() }
   Process {
     id: clipProbe
     stdout: SplitParser { onRead: function(line) { var t = String(line).trim(); root.clipboardHas = (t === "image" || t === "paths") ? t : "" } }
     onExited: function(exitCode) { if (exitCode !== 0) root.clipboardHas = "" }
+  }
+
+  // A fresh card: the last card's pasted files go, and the clipboard is
+  // looked at so Paste is there from the first moment if it can be.
+  function beginAdd() {
+    var d = M.importDefaults()
+    d.step = "start"
+    root.importDraft = d
+    root.draftPreview = { path: "", image: "", art: "" }
+    Quickshell.execDetached(["rm", "-rf", "--", root.pasteStageDir])
+    refreshClipboard()
+    return "ok"
   }
 
   property var pastedRows: []
@@ -324,19 +403,47 @@ Item {
       var found = exitCode === 0 ? M.parseClipboard(root.pastedRows.join("\n")) : null
       root.logEvent("paste-exit", "exitCode=" + exitCode + " rows=" + root.pastedRows.length)
       if (!found || !M.isPlainObject(root.importDraft)) { root.clipboardHas = ""; return }
-      var draft = M.cloneJson(root.importDraft)
-      draft.source = found.source
-      draft.paths = found.paths
-      if (!draft.name || draft.nameAuto !== false) {
-        // Pasted bytes land on a file called pasted.png; that is no name.
-        draft.name = found.paths[0].indexOf(root.pasteStageDir) === 0 ? "Pasted picture" : M.suggestName(draft.paths, "New saver")
-        draft.nameAuto = true
-      }
-      draft.step = "confirm"
+      var draft = M.attach(root.importDraft, found)
+      draft.step = "start"
       root.importDraft = draft
     }
   }
 
+
+  // What the attachment would look like converted, made the moment it is
+  // attached: the first picture (a folder's first, a clip's first second)
+  // through the same transcoder the import uses, and the picture itself.
+  // `draftPreview.path` names what it was made from, so a stale one is
+  // never shown for a newer attachment.
+  readonly property string previewStageDir: runtimeDir + "/stelline-preview"
+  property var draftPreview: ({ path: "", image: "", art: "" })
+  property string previewPending: ""
+  readonly property string draftFirstPath: M.isPlainObject(importDraft) && Array.isArray(importDraft.paths) && importDraft.paths.length ? String(importDraft.paths[0]) : ""
+  onDraftFirstPathChanged: refreshDraftPreview()
+  function refreshDraftPreview() {
+    var path = root.draftFirstPath
+    if (path === "" || path === root.draftPreview.path) return
+    if (previewer.running) { root.previewPending = path; return }
+    previewer.forPath = path
+    previewer.command = ["bash", "-c", M.previewScript(root.previewStageDir, root.cellAspect), "_", path]
+    previewer.running = true
+  }
+  Process {
+    id: previewer
+    property string forPath: ""
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var lines = String(text || "").split("\n")
+        var image = lines.length && lines[0].indexOf("image\t") === 0 ? lines[0].substring(6) : ""
+        var art = lines.slice(1).join("\n").replace(/\s+$/, "")
+        if (art !== "") root.draftPreview = { path: previewer.forPath, image: image, art: art }
+      }
+    }
+    onExited: function(exitCode) {
+      if (exitCode !== 0) root.logEvent("preview-exit", "exitCode=" + exitCode)
+      if (root.previewPending !== "") { root.previewPending = ""; root.refreshDraftPreview() }
+    }
+  }
 
   // The screensaver artwork (~/.config/omarchy/branding/screensaver.txt) — the
   // same file Style › Screensaver edits, shown by Wordmark and the Original.
@@ -615,6 +722,16 @@ Item {
     stdout: SplitParser { onRead: function(line) { root.staleIdleOwner = String(line).trim() !== "stelline" } }
   }
 
+  // Whether the Super+Ctrl+S line is in the key bindings, so the panel can
+  // say so rather than offer the same line again.
+  property bool hotkeyBound: false
+  function probeHotkey() { if (!hotkeyProbe.running) hotkeyProbe.running = true }
+  Process {
+    id: hotkeyProbe
+    command: ["bash", "-c", "grep -qsF 'omarchy-shell stelline preview' \"$HOME/.config/hypr/bindings.lua\" && echo yes || echo no"]
+    stdout: SplitParser { onRead: function(line) { root.hotkeyBound = String(line).trim() === "yes" } }
+  }
+
   // Menu override: System > Screensaver (Super+Esc) opens Stelline. Edits the
   // user's extensions file textually, never through a JSON round-trip, and
   // refuses to touch a file that does not parse.
@@ -784,6 +901,13 @@ Item {
     id: terminalIdProbe
     command: ["xdg-terminal-exec", "--print-id"]
     stdout: SplitParser { onRead: function(line) { root.terminalId = String(line).trim() } }
+  }
+
+  // What Preview shows is what idle would start: the rule's saver, one from
+  // the shuffle, or the chosen one — never a saver the shuffle would skip.
+  function previewSaver(id, reason) {
+    var want = id && id !== "" ? id : M.pickSaver(root.cfg, root.situation, root.lastSaver, undefined, root.userSavers)
+    return showOverlay(want, reason || "preview")
   }
 
   function showOverlay(id, reason) {
@@ -1260,11 +1384,11 @@ Item {
     }
 
     function preview(saverId: string): string {
-      return root.showOverlay(saverId && saverId !== "" ? saverId : root.cfg.saver, "preview")
+      return root.previewSaver(saverId, "preview")
     }
 
     function show(): string {
-      return root.showOverlay(root.cfg.saver, "menu")
+      return root.previewSaver("", "menu")
     }
 
     function hide(): string {
@@ -1379,7 +1503,20 @@ Item {
       return root.importSaver(spec)
     }
     function deleteSaver(saverId: string): string { return root.deleteSaver(saverId) }
+    function retry(saverId: string): string { return root.retryImport(saverId) }
+    function stop(saverId: string): string { return root.stopImport(saverId) }
+    function rename64(saverId: string, base64Name: string): string {
+      var t
+      try { t = Qt.atob(base64Name) } catch (e) { return "bad-base64" }
+      return root.renameSaver(saverId, t)
+    }
+    function describe64(saverId: string, base64Json: string): string {
+      var j
+      try { j = JSON.parse(Qt.atob(base64Json)) } catch (e) { return "bad-json" }
+      return root.redescribe(saverId, j && j.words, !j || j.animated !== false, !!(j && j.previous))
+    }
     function cancelAdd(): string { root.importDraft = null; return "ok" }
+    function beginAdd(): string { return root.beginAdd() }
     function branding(action: string): string {
       if (action === "image") return root.brandingImage()
       if (action === "text") return root.brandingText()

@@ -48,10 +48,25 @@ Item {
     var next = E.pick(root.effectList)
     if (next === root.cycled && root.effectList.length > 1) next = E.pick(root.effectList)
     root.cycled = next
+    // Something quiet has to keep going while the art rests, or a saver is
+    // a still picture for as long as the rest lasts. Only the ambients that
+    // light the art rather than replace it: dots have no spare glyphs.
+    root.ambient = E.pick(E.STEADY_AMBIENTS)
   }
+  property string ambient: ""
   readonly property int frameCount: frames.length
   readonly property string frame: frameCount > 0 ? frames[Math.min(index, frameCount - 1)] : ""
   readonly property bool animating: play === "animation" && frameCount > 1
+  // A still is painted by AsciiArt, which draws a block on the dot grid
+  // itself. An animation is swapped frame by frame as text — a canvas
+  // repaint per frame costs three times as much — and text draws whatever
+  // glyph it is handed, so the blocks are swapped for the braille cells
+  // holding the same dots. Done once on load, never per frame. Anything
+  // that is not a block, braille included, passes through untouched.
+  readonly property var dotFrames: animating ? frames.map(function(f) { return M.blocksToBraille(f) }) : []
+  readonly property string dotFrame: dotFrames.length > 0 ? dotFrames[Math.min(index, dotFrames.length - 1)] : ""
+  // Every frame on the grid of the largest, so the picture holds still.
+  readonly property var grid: animating ? M.frameGrid(frames) : ({ columns: 0, rows: 0 })
 
   function nextIndex(count) {
     if (count <= 1) return 0
@@ -95,14 +110,26 @@ Item {
   onSeriesChanged: if (active) { loadFrames(); if (kind === "image") showPicture(0, false) }
   Component.onCompleted: { nextEffect(); if (active) { loadFrames(); if (kind === "image") showPicture(0, false) } }
 
-  // Slideshow: every piece for dwellSec, a different effect each time.
+  // Slideshow: every piece for dwellSec, a different effect each time. One
+  // piece cycles back to itself — the dots go off and come back on another
+  // way, which is the whole point of a saver made of dots. The token is what
+  // replays it when the effect that comes round is the one already showing.
+  //
+  // Unlike the Wordmark, pinning a single effect here does not stop the
+  // cycle: pinning chooses which effect plays, not whether it repeats.
+  property int token: 0
+  readonly property var playable: effectSetting === "cycle" ? effectList : [effectSetting]
+  // Nothing to arrive from: `pulse` shows the piece whole and breathes its
+  // colour, so a saver with only that to play never departs.
+  readonly property bool cycling: running && !thumbnail && !E.onlyPulse(playable)
   Timer {
     interval: root.dwellSec * 1000
     repeat: true
-    running: root.running && root.kind === "ascii" && !root.animating && root.frameCount > 1
+    running: root.cycling && root.kind === "ascii" && !root.animating && root.frameCount > 0
     onTriggered: {
       root.index = root.nextIndex(root.frameCount)
       root.nextEffect()
+      root.token++
     }
   }
 
@@ -126,11 +153,18 @@ Item {
     }
   }
 
-  // A slideshow piece: effects, painted a few times per piece.
+  // A slideshow piece: effects, painted a few times per piece. A piece of
+  // its own gets most of the screen — the art is the saver, not a caption
+  // in the middle of one — with just enough margin for what an arrival
+  // throws in from outside the grid.
   AsciiShow {
     anchors.fill: parent
     visible: root.kind === "ascii" && !root.animating
     art: visible ? root.frame : ""
+    cycleToken: root.token
+    fitWidth: root.thumbnail ? 0.8 : 0.8
+    fitHeight: root.thumbnail ? 0.6 : 0.75
+    ambientStyle: root.thumbnail ? "" : root.ambient
     effect: root.thumbnail ? "none" : root.effect
     active: root.running && visible
     fg: root.fg
@@ -145,7 +179,9 @@ Item {
   AsciiText {
     anchors.fill: parent
     visible: root.kind === "ascii" && root.animating
-    art: visible ? root.frame : ""
+    art: visible ? root.dotFrame : ""
+    gridColumns: root.grid.columns
+    gridRows: root.grid.rows
     fg: root.fg
     driftX: root.driftX
     driftY: root.driftY

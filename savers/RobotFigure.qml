@@ -1,6 +1,7 @@
 import QtQuick
 import qs.Commons
 import "Robot.js" as R
+import "RobotArt.js" as A
 
 // The agent's figure, in whatever shape the tile asked for, acting out one
 // state. Two layers over one grid: the body painted as whole-pixel cells —
@@ -20,12 +21,18 @@ Item {
   property string fontFamily: Style.font.family
   property bool running: true
   property int pixelSize: 0
+  // The figure is made of the same dots as everything else, unless it is
+  // drawn too small for a dot to survive.
+  property bool dotted: true
 
   property int tick: 0
-  readonly property var pose: R.frame(root.figure, root.agentState, root.tick)
+  // the baked drawings go in with every call: a script here cannot load
+  // another script itself
+  readonly property var pose: R.frame(root.figure, root.agentState, root.tick, A)
+  readonly property var grid: R.size(root.figure)
 
-  implicitWidth: pixelSize > 0 ? Math.round(R.COLS * pixelSize * body.advanceAt100 / 100) : 0
-  implicitHeight: pixelSize > 0 ? Math.round(R.ROWS * pixelSize * body.lineHeightAt100 / 100) : 0
+  implicitWidth: pixelSize > 0 ? Math.round(grid.cols * pixelSize * body.advanceAt100 / 100) : 0
+  implicitHeight: pixelSize > 0 ? Math.round(grid.rows * pixelSize * body.lineHeightAt100 / 100) : 0
 
   // It steps through its frames at the pace of what it is doing.
   Timer {
@@ -41,6 +48,9 @@ Item {
     id: body
     anchors.fill: parent
     art: root.pose.body
+    gridColumns: root.grid.cols
+    gridRows: root.grid.rows
+    dotted: root.dotted
     fg: root.tone
     accent: root.light
     fontFamily: root.fontFamily

@@ -1,14 +1,17 @@
 import QtQuick
 import qs.Commons
 import qs.Ui
+import "../savers"
 import "../StellineModel.js" as M
 
-// Adding a saver, one decision at a time. Pick where it comes from; pictures
-// and clips go through the desktop file chooser (the panel closes for it and
-// comes back), then the one choice that matters — ASCII art in the theme's
-// colours, or the pictures as they are — and Create. Text and descriptions
-// are typed right here. The draft lives in the service so it survives the
-// panel closing.
+// Adding a saver is one card. Say what it should show, or attach a picture,
+// or both; what gets made follows from what is there, and the card asks
+// only the one question that is left open. Words alone are drawn by your
+// agent, or set in big letters. A picture is the subject: it becomes a dot
+// matrix of whatever it is a picture of, and you see both ways of showing it
+// before choosing. Words alongside a picture name it. The draft lives in the
+// service so it survives the panel closing for the file chooser; the words
+// live in the field until the card needs them.
 BorderSurface {
   id: root
 
@@ -19,26 +22,70 @@ BorderSurface {
   readonly property color dim: Qt.darker(foreground, 1.4)
   readonly property var draft: svc && svc.importDraft ? svc.importDraft : null
   readonly property string step: draft && draft.step ? String(draft.step) : "start"
-  readonly property string source: draft && draft.source ? String(draft.source) : "images"
-  readonly property var paths: draft && Array.isArray(draft.paths) ? draft.paths : []
+  readonly property bool picking: step === "picking"
   readonly property string ai: svc ? String(svc.aiProvider || "") : ""
+  readonly property string pasteable: svc ? String(svc.clipboardHas || "") : ""
+  readonly property bool open: !!draft
+
+  readonly property string words: wordsField.text.trim()
+  readonly property string source: draft && draft.source ? String(draft.source) : ""
+  readonly property bool attached: !!(draft && draft.source && Array.isArray(draft.paths) && draft.paths.length)
+  readonly property string attachment: draft ? M.attachmentLabel(draft, svc ? String(svc.pasteStageDir || "") : "") : ""
   property string style: "ascii"
   property bool animated: true
-
-  readonly property bool editing: nameField.activeFocus || textField.activeFocus || promptField.activeFocus
-  readonly property string pasteable: svc ? String(svc.clipboardHas || "") : ""
-
-  // Asked each time the card comes up: what is on the clipboard now is what
-  // the button should offer. The card itself is always instantiated, so the
-  // draft appearing — not Component.onCompleted — is when it opens.
-  readonly property bool open: !!draft
-  onOpenChanged: if (open && svc) svc.refreshClipboard()
-
-  onStepChanged: {
-    style = "ascii"; animated = true
-    if (step === "confirm") nameField.text = draft && draft.name ? draft.name : ""
+  property bool letters: false
+  // The draft as it stands with what the card holds right now.
+  readonly property var live: {
+    var d = draft ? M.cloneJson(draft) : M.importDefaults()
+    d.words = root.words; d.style = root.style; d.animated = root.animated; d.letters = root.letters
+    return d
   }
-  Component.onCompleted: if (step === "confirm") nameField.text = draft && draft.name ? draft.name : ""
+  readonly property string mode: M.composeMode(live, ai)
+  readonly property bool describing: mode === "describe" || mode === "describe-pictures"
+  // One picture as ASCII is the only conversion that can be still or moving.
+  // One picture is the only thing that can be asked to move or sit still.
+  readonly property bool movable: M.canMove(live, mode)
+  readonly property bool converting: mode === "pictures" || mode === "folder" || mode === "clip"
+  // The conversion of what is attached, once it is of the current attachment.
+  readonly property var preview: svc && svc.draftPreview && attached && String(svc.draftPreview.path) === String(draft.paths[0]) ? svc.draftPreview : null
+
+  readonly property bool editing: wordsField.activeFocus
+  readonly property bool canCreate: mode !== "" && !picking
+  readonly property string agentName: ai.indexOf("agent:") === 0 ? M.agentName(ai.substring(6)) : (ai === "api" ? "the Claude API" : "")
+
+  readonly property string placeholder: {
+    if (!attached) return ai !== "" ? "Describe it, or paste a picture" : "Words to show in big letters, or paste a picture"
+    if (source === "images" && M.seesPictures(ai)) return "What to draw from it, or leave this empty"
+    return "A name for it, or leave this empty"
+  }
+  readonly property string caption: {
+    if (mode === "describe") return "Asks " + agentName + ". Usually under a minute; the tile fills in when it is ready."
+    // A likeness asked of an agent is the one thing it cannot give: it
+    // redraws rather than copies. The conversion does copy, exactly.
+
+    if (mode === "letters") return "Big letters in your theme's colours."
+    if (movable) {
+      var who = root.ai !== "" ? agentName + " is asked what the picture is of, so the dots are of that rather than of the whole frame. " : ""
+      return who + (animated
+        ? "The dots light up across it, rest, go out, and light up another way."
+        : "Every dot at once, the colour breathing.")
+    }
+    if (mode === "clip") return style === "ascii" ? "The first 20 seconds; takes a minute or so." : "The first 20 seconds."
+    if (converting && words !== "") return "Named “" + M.shortName(words) + "”."
+    return ""
+  }
+
+  // What the card holds is restored whenever it comes back: opened afresh,
+  // or re-made with the panel while a chooser was up.
+  function restore() {
+    wordsField.text = draft && draft.words ? String(draft.words) : ""
+    style = draft && draft.style === "image" ? "image" : "ascii"
+    animated = !draft || draft.animated !== false
+    letters = !!(draft && draft.letters)
+  }
+  onOpenChanged: if (open) { restore(); if (svc) svc.refreshClipboard(); wordsField.forceActiveFocus() }
+  onStepChanged: if (step === "start" && wordsField.text === "" && draft && draft.words) wordsField.text = String(draft.words)
+  Component.onCompleted: if (open) restore()
 
   function update(patch) {
     if (!svc) return
@@ -46,35 +93,39 @@ BorderSurface {
     for (var k in patch) d[k] = patch[k]
     svc.importDraft = d
   }
+  // The field's words go to the draft before anything closes the panel.
+  function sync(extra) {
+    var patch = { words: wordsField.text, style: root.style, animated: root.animated, letters: root.letters }
+    for (var k in (extra || {})) patch[k] = extra[k]
+    update(patch)
+  }
   function cancel() { if (svc) svc.importDraft = null }
   function pick(kind) {
-    update({ step: "picking", source: kind === "folder" ? "folder" : (kind === "video" ? "video" : "images") })
+    sync({ step: "picking" })
     if (svc) svc.pickFiles(kind)
   }
-  // A clock, or an empty screen for widgets: nothing to pick, nothing to
-  // convert, so no confirm step.
+  function paste() {
+    if (!svc || pasteable === "") return
+    sync({})
+    svc.pasteClipboard()
+  }
+  function detach() { if (svc) { var d = M.detach(live); d.step = "start"; svc.importDraft = d } }
+  // A clock, or an empty screen for widgets: nothing to convert, made at once.
   function createNow(source) {
     if (!svc) return
     var spec = M.importDefaults()
     spec.source = source
-    svc.importSaver(spec)
+    var id = svc.importSaver(spec)
+    if (body && typeof id === "string" && id !== "" && id.indexOf("bad") !== 0) body.openSettings = id
   }
   function create() {
-    if (!svc) return
-    var spec = draft ? M.cloneJson(draft) : M.importDefaults()
-    delete spec.step
-    spec.style = root.style
-    if (step === "confirm") spec.name = nameField.text
-    if (step === "text") { spec.source = "text"; spec.text = textField.text; spec.name = textField.text; spec.style = "ascii" }
-    if (step === "prompt") { spec.source = "prompt"; spec.prompt = promptField.text; spec.animated = root.animated; spec.style = "ascii"; spec.name = promptField.text.split(/[,.;]/)[0] }
-    if ((step === "text" && spec.text.trim() === "") || (step === "prompt" && spec.prompt.trim() === "")) return
-    svc.importSaver(spec)
-  }
-
-  readonly property string summary: {
-    if (source === "folder") return "The pictures in " + M.baseName(paths[0] || "")
-    if (source === "video") return M.baseName(paths[0] || "")
-    return paths.length === 1 ? M.baseName(paths[0]) : paths.length + " pictures"
+    if (!svc || !canCreate) return
+    var spec = M.composeSpec(live, ai, svc.pasteStageDir)
+    if (!spec) return
+    var id = svc.importSaver(spec)
+    // The tile opens below the grid as it lands: Preview is one click away,
+    // and a description can be changed from there.
+    if (body && typeof id === "string" && id !== "" && id.indexOf("bad") !== 0) body.openSettings = id
   }
 
   implicitHeight: column.implicitHeight + padding * 2
@@ -82,6 +133,51 @@ BorderSurface {
   radius: Style.cornerRadius
   color: Style.controlFill(false, false, foreground, Color.accent)
   borderSpec: Border.controlSpec("selected", foreground, Color.accent)
+
+  // One of the two ways a picture can be shown, as a picture of it.
+  component Thumb: BorderSurface {
+    id: thumb
+    property string label: ""
+    property bool chosen: false
+    readonly property bool hot: thumbMouse.containsMouse
+    default property alias content: slot.data
+    signal picked()
+    width: Style.space(196)
+    height: Style.space(128)
+    radius: Style.cornerRadius
+    color: chosen ? Style.selectedFillFor(root.foreground, Color.accent) : (hot ? Style.hoverFillFor(root.foreground, Color.accent) : "transparent")
+    borderSpec: Border.controlSpec(chosen ? "selected" : (hot ? "hover-cursor" : "normal"), root.foreground, Color.accent)
+    Item {
+      id: slot
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.top: parent.top
+      anchors.margins: Style.space(6)
+      height: parent.height - Style.space(6) * 2 - thumbLabel.height - Style.space(4)
+      clip: true
+      opacity: thumb.chosen ? 1 : (thumb.hot ? 0.9 : 0.6)
+    }
+    Text {
+      id: thumbLabel
+      anchors.left: parent.left
+      anchors.right: parent.right
+      anchors.bottom: parent.bottom
+      anchors.margins: Style.space(6)
+      textFormat: Text.PlainText
+      text: thumb.label
+      color: thumb.chosen ? Color.accent : root.dim
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+      elide: Text.ElideRight
+    }
+    MouseArea {
+      id: thumbMouse
+      anchors.fill: parent
+      hoverEnabled: true
+      cursorShape: Qt.PointingHandCursor
+      onClicked: thumb.picked()
+    }
+  }
 
   Column {
     id: column
@@ -98,27 +194,38 @@ BorderSurface {
       Text {
         anchors.baseline: parent.children[0].baseline
         textFormat: Text.PlainText
-        text: root.step === "start" ? "" : (root.step === "picking" ? "choose in the file dialog" : root.summary)
+        text: root.picking ? "choose in the file dialog" : ""
         color: root.dim
         font.family: root.fontFamily
         font.pixelSize: Style.font.caption
       }
     }
 
-    // ---- start: where it comes from, two equal columns like the power
-    // panel's profile row, so the choices read as one set ----
-    Grid {
-      id: sources
-      visible: root.step === "start"
+    // ---- the words ----
+    TextField {
+      id: wordsField
       width: parent.width
-      columns: 2
-      columnSpacing: Style.space(6)
-      rowSpacing: Style.space(6)
-      readonly property real cell: (width - columnSpacing) / 2
+      foreground: root.foreground
+      font.family: root.fontFamily
+      placeholderText: root.placeholder
+      onAccepted: root.create()
+      onEditingFinished: if (root.open && !root.picking) root.sync({})
+      // Ctrl+V with a picture or a file on the clipboard attaches it; plain
+      // text still pastes into the field.
+      Keys.priority: Keys.BeforeItem
+      Keys.onPressed: function(event) {
+        if (event.matches(StandardKey.Paste) && root.pasteable !== "") { root.paste(); event.accepted = true }
+      }
+      Keys.onEscapePressed: wordsField.focus = false
+    }
+
+    // ---- what is attached, and how to attach ----
+    Flow {
+      width: parent.width
+      spacing: Style.space(6)
       // Only when there is something to paste, so it never disappoints.
       Button {
-        visible: root.pasteable !== ""
-        width: sources.cell
+        visible: root.pasteable !== "" && !root.picking
         leftAlign: true
         text: root.pasteable === "image" ? "Paste the picture" : "Paste what you copied"
         iconText: "󰆒"
@@ -126,143 +233,150 @@ BorderSurface {
         foreground: root.foreground
         fontFamily: root.fontFamily
         fontSize: Style.font.caption
-        tooltipText: "What's on your clipboard — a picture, a file, or a folder"
-        onClicked: if (root.svc) root.svc.pasteClipboard()
+        tooltipText: "What's on your clipboard — a picture, a file, or a folder. Ctrl+V does the same."
+        onClicked: root.paste()
       }
-      Button { width: sources.cell; leftAlign: true; text: "Pictures…"; iconText: "󰋩"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: root.pick("images") }
-      Button { width: sources.cell; leftAlign: true; text: "A folder of pictures…"; iconText: "󰉋"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: root.pick("folder") }
-      Button { width: sources.cell; leftAlign: true; text: "A video or GIF…"; iconText: "󰕧"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: root.pick("video") }
-      Button { width: sources.cell; leftAlign: true; text: "Some text"; iconText: "󰊄"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: root.update({ step: "text" }) }
-      Button { visible: root.ai !== ""; width: sources.cell; leftAlign: true; text: "A description"; iconText: "󰚩"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; tooltipText: "Asks your default coding agent for the art"; onClicked: root.update({ step: "prompt" }) }
-      Button { width: sources.cell; leftAlign: true; text: "A clock"; iconText: "󰥔"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; tooltipText: "An empty screen with the clock in the middle"; onClicked: root.createNow("clock") }
-      Button { width: sources.cell; leftAlign: true; text: "An empty screen"; iconText: "󰹏"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; tooltipText: "Nothing of its own — for what you put on top"; onClicked: root.createNow("empty") }
+      Button { visible: !root.picking; leftAlign: true; text: "Pictures or a clip…"; iconText: "󰋩"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: root.pick("media") }
+      Button { visible: !root.picking; leftAlign: true; text: "A folder…"; iconText: "󰉋"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; tooltipText: "Every picture in it"; onClicked: root.pick("folder") }
+      // The attachment, as a chip that can be taken off again.
+      BorderSurface {
+        visible: root.attached
+        width: chipRow.implicitWidth + Style.space(16)
+        height: chipRow.implicitHeight + Style.space(8)
+        radius: Style.cornerRadius
+        color: Style.selectedFillFor(root.foreground, Color.accent)
+        borderSpec: Border.controlSpec("selected", root.foreground, Color.accent)
+        Row {
+          id: chipRow
+          anchors.centerIn: parent
+          spacing: Style.space(6)
+          Text { textFormat: Text.PlainText; text: root.source === "folder" ? "󰉋" : (root.source === "video" ? "󰕧" : "󰋩"); color: Color.accent; font.family: root.fontFamily; font.pixelSize: Style.font.icon; anchors.verticalCenter: parent.verticalCenter }
+          Text { textFormat: Text.PlainText; text: root.attachment; color: root.foreground; font.family: root.fontFamily; font.pixelSize: Style.font.caption; anchors.verticalCenter: parent.verticalCenter }
+          Text {
+            textFormat: Text.PlainText
+            text: "󰅖"
+            color: offMouse.containsMouse ? root.foreground : root.dim
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+            anchors.verticalCenter: parent.verticalCenter
+            MouseArea { id: offMouse; anchors.fill: parent; anchors.margins: -Style.space(4); hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.detach() }
+            PanelToolTip { visible: offMouse.containsMouse; text: "Take it off" }
+          }
+        }
+      }
     }
 
-    // ---- confirm (after the chooser) ----
-    Column {
-      visible: root.step === "confirm"
-      width: parent.width
+    // ---- the one question left: what to make of words ----
+    Row {
+      visible: root.describing || root.movable || (root.mode === "letters" && root.ai !== "")
       spacing: Style.space(8)
-      Column {
-        spacing: Style.space(3)
-        Text { textFormat: Text.PlainText; text: "Name"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
-        TextField {
-          id: nameField
-          width: Style.space(260)
-          foreground: root.foreground
-          font.family: root.fontFamily
-          placeholderText: "Acme Co."
-        }
-      }
-      Column {
-        spacing: Style.space(3)
-        Text { textFormat: Text.PlainText; text: "Show it as"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
-        ButtonGroup {
-          options: root.source === "video"
-            ? [{ value: "ascii", label: "an ASCII animation" }, { value: "image", label: "the clip as it is" }]
-            : [{ value: "ascii", label: "ASCII art" }, { value: "image", label: root.paths.length === 1 && root.source !== "folder" ? "the picture as it is" : "the pictures as they are" }]
-          value: root.style
-          foreground: root.foreground
-          fontFamily: root.fontFamily
-          focusable: false
-          onChanged: function(v) { root.style = v }
-        }
-      }
-      Text {
-        visible: root.source === "video"
-        width: parent.width
-        textFormat: Text.PlainText
-        wrapMode: Text.WordWrap
-        text: root.style === "ascii" ? "The first 20 seconds; takes a minute or so." : "The first 20 seconds."
-        color: root.dim
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.caption
-      }
-    }
-
-    // ---- text ----
-    Column {
-      visible: root.step === "text"
-      spacing: Style.space(3)
-      Text { textFormat: Text.PlainText; text: "Text — big letters in your theme's colours"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
-      TextField {
-        id: textField
-        width: Style.space(320)
-        foreground: root.foreground
-        font.family: root.fontFamily
-        placeholderText: "Hello"
-        onAccepted: root.create()
-      }
-    }
-
-    // ---- description ----
-    Column {
-      visible: root.step === "prompt"
-      width: parent.width
-      spacing: Style.space(6)
-      Column {
-        spacing: Style.space(3)
-        Text { textFormat: Text.PlainText; text: "Describe it"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
-        TextField {
-          id: promptField
-          width: Style.space(360)
-          foreground: root.foreground
-          font.family: root.fontFamily
-          placeholderText: "a robot waving hello, pixel-art style"
-          onAccepted: root.create()
-        }
-      }
+      Text { anchors.verticalCenter: parent.verticalCenter; textFormat: Text.PlainText; text: "Make it"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
       ButtonGroup {
-        options: [{ value: "animated", label: "animated" }, { value: "still", label: "a still" }]
-        value: root.animated ? "animated" : "still"
+        options: root.movable
+          ? [{ value: "animation", label: "moving" }, { value: "still", label: "a still" }]
+          : [{ value: "animation", label: "an animation" }, { value: "still", label: "a still" }, { value: "letters", label: "big letters" }]
+        value: root.letters && !root.movable ? "letters" : (root.animated ? "animation" : "still")
         foreground: root.foreground
         fontFamily: root.fontFamily
         focusable: false
-        onChanged: function(v) { root.animated = v === "animated" }
-      }
-      Text {
-        width: parent.width
-        textFormat: Text.PlainText
-        wrapMode: Text.WordWrap
-        text: (root.ai.indexOf("agent:") === 0
-            ? "Asks " + M.agentName(root.ai.substring(6)) + ", your default agent."
-            : "Uses your Anthropic key.") + " A minute or two; you get a notification when it is ready."
-        color: root.dim
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.caption
+        onChanged: function(v) {
+          root.letters = v === "letters"
+          if (v === "animation" || v === "still") root.animated = v === "animation"
+        }
       }
     }
 
-    // ---- actions ----
-    Row {
-      spacing: Style.space(6)
-      Button {
-        visible: root.step === "confirm" || root.step === "text" || root.step === "prompt"
-        text: "Create"
-        iconText: "󰐕"
-        bordered: true
-        selected: true
-        foreground: root.foreground
-        fontFamily: root.fontFamily
-        fontSize: Style.font.caption
-        onClicked: root.create()
+    // ---- ...or of a picture: both ways, as pictures ----
+    Column {
+      visible: root.converting
+      width: parent.width
+      spacing: Style.space(4)
+      Text { textFormat: Text.PlainText; text: "Show it as"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
+      Row {
+        spacing: Style.space(8)
+        Thumb {
+          label: root.mode === "clip" ? "an ASCII animation" : (root.movable && root.animated ? "a dot matrix, moving" : "a dot matrix")
+          chosen: root.style === "ascii"
+          onPicked: root.style = "ascii"
+          AsciiArt {
+            anchors.fill: parent
+            visible: !!root.preview
+            art: root.preview ? String(root.preview.art) : ""
+            fg: root.foreground
+            fontFamily: root.fontFamily
+            fitWidth: 0.98
+            fitHeight: 0.98
+          }
+          Text { anchors.centerIn: parent; visible: !root.preview; textFormat: Text.PlainText; text: "converting…"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
+        }
+        Thumb {
+          label: root.mode === "clip" ? "the clip as it is" : (root.mode === "pictures" && root.draft && root.draft.paths.length === 1 ? "the picture as it is" : "the pictures as they are")
+          chosen: root.style === "image"
+          onPicked: root.style = "image"
+          Image {
+            anchors.fill: parent
+            visible: !!root.preview && String(root.preview.image) !== ""
+            source: visible ? "file://" + String(root.preview.image) : ""
+            fillMode: Image.PreserveAspectFit
+            asynchronous: true
+            cache: false
+            sourceSize.width: 480
+            smooth: true
+          }
+          Text { anchors.centerIn: parent; visible: !root.preview; textFormat: Text.PlainText; text: "…"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
+        }
       }
-      Button {
-        visible: root.step === "confirm"
-        text: "Change…"
-        bordered: true
-        foreground: root.foreground
-        fontFamily: root.fontFamily
-        fontSize: Style.font.caption
-        onClicked: root.pick(root.source)
+    }
+
+    Text {
+      visible: root.caption !== ""
+      width: parent.width
+      textFormat: Text.PlainText
+      wrapMode: Text.WordWrap
+      text: root.caption
+      color: root.dim
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+    }
+
+    // ---- actions; the two blanks sit quietly at the right until there is
+    // something on the card ----
+    Item {
+      width: parent.width
+      height: actions.implicitHeight
+      Row {
+        id: actions
+        spacing: Style.space(6)
+        Button {
+          visible: root.mode !== ""
+          enabled: root.canCreate
+          opacity: root.canCreate ? 1 : 0.45
+          text: "Create"
+          iconText: "󰐕"
+          bordered: true
+          selected: root.canCreate
+          foreground: root.foreground
+          fontFamily: root.fontFamily
+          fontSize: Style.font.caption
+          onClicked: root.create()
+        }
+        Button {
+          text: "Never mind"
+          bordered: true
+          foreground: root.foreground
+          fontFamily: root.fontFamily
+          fontSize: Style.font.caption
+          onClicked: root.cancel()
+        }
       }
-      Button {
-        text: root.step === "start" ? "Never mind" : "Cancel"
-        bordered: true
-        foreground: root.foreground
-        fontFamily: root.fontFamily
-        fontSize: Style.font.caption
-        onClicked: root.cancel()
+      Row {
+        visible: root.mode === "" && !root.picking
+        anchors.right: parent.right
+        anchors.verticalCenter: parent.verticalCenter
+        spacing: Style.space(4)
+        Button { text: "a clock"; foreground: root.dim; fontFamily: root.fontFamily; fontSize: Style.font.caption; tooltipText: "An empty screen with the clock in the middle"; onClicked: root.createNow("clock") }
+        Text { anchors.verticalCenter: parent.verticalCenter; textFormat: Text.PlainText; text: "·"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
+        Button { text: "an empty screen"; foreground: root.dim; fontFamily: root.fontFamily; fontSize: Style.font.caption; tooltipText: "Nothing of its own — for what you put on top"; onClicked: root.createNow("empty") }
       }
     }
   }

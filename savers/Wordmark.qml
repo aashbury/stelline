@@ -33,9 +33,12 @@ Item {
   property string branding: ""
   property string textArt: ""
   property string ownArt: ""
-  // The word, once it has been drawn; Stelline's own art until then, so a
-  // fresh install shows its name without waiting on anything.
-  readonly property string art: usesText ? (textArt.trim() !== "" ? textArt : ownArt) : branding
+  // Stelline's own name is hand-drawn (art/wordmark.js), so it always shows
+  // that rather than the typed-word treatment. Any other word shows once it
+  // has been drawn, and Stelline's own art until then, so a fresh install
+  // shows its name without waiting on anything.
+  readonly property bool isOwnName: word.trim().toLowerCase() === "stelline"
+  readonly property string art: usesText ? ((isOwnName || textArt.trim() === "") ? ownArt : textArt) : branding
 
   // `cycle` (the default) draws a different effect at random from `effects`
   // (all of them unless pinned) the way the stock saver draws from ttfx. It

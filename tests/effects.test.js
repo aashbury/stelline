@@ -211,3 +211,34 @@ test("every frame carries offsets, and a padded frame's glyphs land on their own
   const ex = E.planExit("dissolve", wide, 2)
   const f0 = E.frame(ex, 0); f0.padR = ex.padR; check(f0, "dissolve@0")
 })
+
+test("a piece with nothing but pulse to play has nowhere to arrive from", () => {
+  assert.equal(E.onlyPulse(["pulse"]), true)
+  assert.equal(E.onlyPulse(["pulse", "rain"]), false)
+  assert.equal(E.onlyPulse(E.EFFECTS), false)
+  assert.equal(E.onlyPulse([]), false)
+  assert.equal(E.onlyPulse(null), false)
+})
+
+test("shimmer lights the dots it is given and never replaces them", () => {
+  const art = []
+  for (let r = 0; r < 14; r++) art.push("⣿".repeat(40))
+  const p = E.planAmbient("shimmer", art, 11)
+  const at = t => E.ambientFrame(p, t)
+  const lit = f => ((f.dim || "") + (f.overlay || "") + (f.hot || "")).replace(/[\s\n]/g, "")
+  // it burns at all three brightnesses
+  const f = at(600)
+  for (const layer of [f.dim, f.overlay, f.hot]) assert.ok(layer.replace(/[\s\n]/g, "").length > 0)
+  // every character it draws came out of the art, never a substitute
+  assert.ok([...lit(f)].every(c => c === "⣿"), "shimmer must only redraw the art's own dots")
+  // and the light travels
+  assert.notEqual(f.overlay, at(1800).overlay)
+})
+
+test("a dot matrix rests with the ambients that light it rather than scramble it", () => {
+  assert.deepEqual(E.STEADY_AMBIENTS, ["scan", "shimmer"])
+  for (const a of E.STEADY_AMBIENTS) assert.ok(E.AMBIENTS.indexOf(a) !== -1, a)
+  // flicker swaps in cipher glyphs and interference ghosts a shifted copy;
+  // both are wrong over braille, so neither is offered for one
+  for (const a of ["flicker", "interference"]) assert.equal(E.STEADY_AMBIENTS.indexOf(a), -1)
+})

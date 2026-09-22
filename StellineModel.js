@@ -99,6 +99,8 @@ function rotation(cfg, userSavers) {
 
 function nextSaver(cfg, current, userSavers) {
   var ids = rotation(cfg, userSavers)
+  // Every native saver deleted: there is nothing to step to, so stay put.
+  if (ids.length === 0) return current
   var at = ids.indexOf(current)
   return ids[(at + 1) % ids.length]
 }
@@ -122,6 +124,9 @@ function defaults() {
     hidden: [],
     situations: [],
     card: { enabled: true, corner: "bottom-right", detail: "counts", showAgent: true, maxApps: 4 },
+    // A described saver: the agent's own model unless one is named here, at
+    // this effort. Low answers in half a minute; high may take minutes.
+    describe: { model: "", effort: "medium" },
     integration: { menuEntry: false },
     setup: { done: false, version: 0, indicatorsItemsBefore: null }
   }
@@ -371,7 +376,7 @@ function conditionLabel(key, c) {
     return b !== undefined && b !== null && Number(b) < 100 ? "Battery below " + Number(b) + "%" : "On battery"
   }
   if (key === "night") return "Night " + ((c && c.from) || "?") + "–" + ((c && c.to) || "?")
-  if (key === "theme") return "Theme " + ((c && c.name) || "?")
+  if (key === "theme") return c && c.name ? "Theme " + c.name : "Theme not chosen"
   if (key === "docked") return "Docked"
   return key
 }
@@ -592,11 +597,45 @@ function terminalArgv(terminalId, omarchyPath, loopPath) {
   return null
 }
 
-// A word into block art, the same way the Add card's typed text has always
-// been made — one picture of the text, transcoded. Used whenever a wordmark's
-// text changes, built-in or your own, so both stay one pipeline.
+// A word into a wordmark, drawn the way Stelline's own name is
+// (art/wordmark.js) but from whatever font is there: the letters slanted
+// forward, their tops lit and their fronts in the dense tone, an extrusion
+// falling down and to the right in the sparse tone, an ink line round every
+// letter, scanlines across the faces. The picture is brought down to the dot
+// grid, each dot made one of the four tones, then dithered through the same
+// matrix the figures use and packed into braille — by awk, one byte at a
+// time, so it needs nothing the Add card does not already. Used whenever a
+// wordmark's text changes; Stelline's own name is drawn by hand instead.
+var WORDMARK_DEPTH = 9, WORDMARK_INK = 9
 function wordmarkScript(text, outPath) {
   var q = shellQuote
+  var awkPack = [
+    "function byte(n) { printf \"%c\", n }",
+    "{ for (i = 1; i <= NF; i++) v[n++] = $i }",
+    "END {",
+    "  W = v[1]; H = v[2]; M = v[3]",
+    "  split(\"0 8 2 10 12 4 14 6 3 11 1 9 15 7 13 5\", B, \" \")",
+    "  split(\"1 2 4 64 8 16 32 128\", BIT, \" \")",
+    "  for (r = 0; r < H; r += 4) {",
+    "    for (c = 0; c < W; c += 2) {",
+    "      code = 0",
+    "      for (dx = 0; dx < 2; dx++) for (dy = 0; dy < 4; dy++) {",
+    "        x = c + dx; y = r + dy",
+    "        if (x >= W || y >= H) continue",
+    "        g = v[4 + y * W + x] / M",
+    "        if (g > 0 && B[(y % 4) * 4 + (x % 4) + 1] / 16 < g) code += BIT[dx * 4 + dy + 1]",
+    "      }",
+    "      cells[c / 2] = code",
+    "    }",
+    "    last = -1; for (k = 0; k < W / 2; k++) if (cells[k]) last = k",
+    "    for (k = 0; k <= last; k++) {",
+    "      if (!cells[k]) { printf \" \"; continue }",
+    "      byte(226); byte(160 + int(cells[k] / 64)); byte(128 + cells[k] % 64)",
+    "    }",
+    "    printf \"\\n\"",
+    "  }",
+    "}"
+  ].join("\n")
   return [
     "set -u",
     "text=" + q(String(text || "").trim()),
@@ -604,10 +643,29 @@ function wordmarkScript(text, outPath) {
     "out=" + q(String(outPath)),
     "dir=$(dirname \"$out\"); mkdir -p \"$dir\" || exit 1",
     "tmp=$(mktemp -d); trap 'rm -rf \"$tmp\"' EXIT",
-    // Black on white: the transcoder treats dark pixels as the subject.
-    "font=$(magick -list font 2>/dev/null | awk '/^ *Font: /{print $2}' | grep -m1 -iE 'ExtraBold|Black|Heavy|Bold' || true)",
-    "magick -background white -fill black ${font:+-font \"$font\"} -pointsize 220 label:\"$text\" \"$tmp/text.png\" 2>/dev/null || exit 1",
-    "omarchy-transcode-ascii \"$tmp/text.png\" \"$tmp/art.txt\" --width " + ASCII_COLUMNS + " --height 40 --mode block >/dev/null 2>&1 || exit 1",
+    // the heaviest upright sans there is: black before bold, never mono
+    "fonts=$(magick -list font 2>/dev/null | awk '/^ *Font: /{print $2}' | grep -viE 'mono|italic|oblique|serif|cjk' || true); font=''",
+    "for weight in Black ExtraBold Heavy Bold; do font=$(grep -m1 -iE -- \"-$weight\\$\" <<<\"$fonts\" || true); [[ -n $font ]] && break; done",
+    // the letters, white on black, slanted forward, with room for the depth
+    "magick -background black -fill white ${font:+-font \"$font\"} -pointsize 240 label:\"$text\" -trim +repage " +
+      "-bordercolor black -border 60 -shear 12x0 -trim +repage -bordercolor black -border 90 \"$tmp/m.png\" || exit 1",
+    "read -r w h < <(magick identify -format '%w %h\\n' \"$tmp/m.png\"); [[ -n ${h:-} ]] || exit 1",
+    // the extrusion: the letters stepped down and to the right
+    "cp \"$tmp/m.png\" \"$tmp/x.png\"",
+    "for (( i = 1; i <= " + WORDMARK_DEPTH + "; i++ )); do magick \"$tmp/x.png\" \\( \"$tmp/m.png\" -geometry +$((i * 3))+$((i * 4)) \\) -compose Lighten -composite \"$tmp/x.png\" || exit 1; done",
+    // the ink line round the faces, cut out of the extrusion
+    "magick \"$tmp/m.png\" -morphology Dilate Disk:" + WORDMARK_INK + " \"$tmp/o.png\" || exit 1",
+    "magick \"$tmp/x.png\" \\( \"$tmp/o.png\" -negate \\) -compose Multiply -composite -evaluate Multiply 0.25 \"$tmp/xs.png\" || exit 1",
+    // the faces: lit above the split, dense below, scanlines across
+    "split=$(( 90 + (h - 180) * 46 / 100 )); lines=''",
+    "for (( y = 20; y < h; y += 42 )); do lines+=\"rectangle 0,$y $w,$((y + 6)) \"; done",
+    "magick -size ${w}x${h} 'xc:gray(56%)' -fill white -draw \"rectangle 0,0 $w,$split\" -fill black -draw \"$lines\" \"$tmp/t.png\" || exit 1",
+    "magick \"$tmp/m.png\" \"$tmp/t.png\" -compose Multiply -composite \"$tmp/f.png\" || exit 1",
+    "magick \"$tmp/xs.png\" \"$tmp/f.png\" -compose Lighten -composite -trim +repage \"$tmp/all.png\" || exit 1",
+    // down to the dot grid, four tones, dithered and packed into braille
+    "magick \"$tmp/all.png\" -filter Box -resize " + (ASCII_COLUMNS * 2) + "x" + (40 * 4) + " " +
+      "-fx 'u < 0.125 ? 0 : (u < 0.4 ? 0.25 : (u < 0.78 ? 0.56 : 1))' -depth 8 -compress none pgm:- | " +
+      "LC_ALL=C awk " + q(awkPack) + " > \"$tmp/art.txt\" || exit 1",
     "[[ -s $tmp/art.txt ]] || exit 1",
     "mv \"$tmp/art.txt\" \"$out\""
   ].join("\n")
@@ -786,6 +844,7 @@ function pickSaver(cfg, situation, last, random, userSavers) {
   if (isPlainObject(situation) && situation.saver && ready(situation.saver)) return situation.saver
   if (!c.shuffle) return ready(c.saver) ? c.saver : DEFAULT_SAVER
   var ids = rotation(c, userSavers)
+  if (ids.length === 0) return DEFAULT_SAVER
   var pool = ids.filter(function(id) { return id !== last })
   if (pool.length === 0) pool = ids
   var r = typeof random === "number" ? random : Math.random()
@@ -1068,6 +1127,70 @@ function suggestName(paths, fallback) {
   return words.split(" ").map(function(w) { return w.charAt(0).toUpperCase() + w.slice(1) }).join(" ")
 }
 
+// Block characters as the braille cell that holds the same dots. Two dots
+// span a cell's width and four its height, which is exactly what a block
+// glyph divides into, so the swap is lossless and the art keeps its size.
+//
+// This is how an animation ends up made of dots like everything else. A
+// still is painted by AsciiArt, which draws blocks on the dot grid itself;
+// an animation is swapped frame by frame as text, because repainting a
+// canvas every frame costs three times as much, and text draws whatever
+// glyph it is given. So the glyph is changed instead.
+var DOT_BITS = [[1, 2, 4, 64], [8, 16, 32, 128]]
+var SHADE_ORDER = [[0, 0], [1, 2], [1, 0], [0, 2], [0, 1], [1, 3], [1, 1], [0, 3]]
+
+function brailleOf(pairs) {
+  var code = 0
+  for (var i = 0; i < pairs.length; i++) code |= DOT_BITS[pairs[i][0]][pairs[i][1]]
+  return code === 0 ? " " : String.fromCharCode(0x2800 + code)
+}
+
+function boxDots(c0, c1, r0, r1) {
+  var out = []
+  for (var c = c0; c < c1; c++) for (var r = r0; r < r1; r++) out.push([c, r])
+  return out
+}
+
+var BLOCK_DOTS = (function () {
+  var m = {}
+  m["\u2588"] = boxDots(0, 2, 0, 4)
+  m["\u2580"] = boxDots(0, 2, 0, 2)
+  m["\u2584"] = boxDots(0, 2, 2, 4)
+  m["\u258c"] = boxDots(0, 1, 0, 4)
+  m["\u2590"] = boxDots(1, 2, 0, 4)
+  m["\u2598"] = boxDots(0, 1, 0, 2)
+  m["\u259d"] = boxDots(1, 2, 0, 2)
+  m["\u2596"] = boxDots(0, 1, 2, 4)
+  m["\u2597"] = boxDots(1, 2, 2, 4)
+  m["\u259a"] = boxDots(0, 1, 0, 2).concat(boxDots(1, 2, 2, 4))
+  m["\u259e"] = boxDots(1, 2, 0, 2).concat(boxDots(0, 1, 2, 4))
+  m["\u2599"] = boxDots(0, 1, 0, 2).concat(boxDots(0, 2, 2, 4))
+  m["\u259b"] = boxDots(0, 2, 0, 2).concat(boxDots(0, 1, 2, 4))
+  m["\u259c"] = boxDots(0, 2, 0, 2).concat(boxDots(1, 2, 2, 4))
+  m["\u259f"] = boxDots(1, 2, 0, 2).concat(boxDots(0, 2, 2, 4))
+  // the eighths, to the nearest dot
+  for (var i = 1; i <= 7; i++) {
+    m[String.fromCharCode(0x2580 + i)] = boxDots(0, 2, 4 - Math.max(1, Math.round(i / 2)), 4)
+    m[String.fromCharCode(0x2590 - i)] = boxDots(0, Math.max(1, Math.round(i / 4)), 0, 4)
+  }
+  // the three shades, as how many of the eight are lit
+  var shades = { "\u2591": 2, "\u2592": 4, "\u2593": 6 }
+  for (var sh in shades) m[sh] = SHADE_ORDER.slice(0, shades[sh])
+  var out = {}
+  for (var k in m) out[k] = brailleOf(m[k])
+  return out
+})()
+
+function blocksToBraille(text) {
+  var t = String(text || "")
+  var out = ""
+  for (var i = 0; i < t.length; i++) {
+    var ch = t.charAt(i)
+    out += BLOCK_DOTS[ch] !== undefined ? BLOCK_DOTS[ch] : ch
+  }
+  return out
+}
+
 // Frames inside one piece file are separated by form feeds.
 function splitFrames(text) {
   var parts = String(text || "").split("\f")
@@ -1121,8 +1244,10 @@ function userSaverFromScan(row) {
   var importing = j.importing === true
   var error = typeof j.error === "string" ? j.error : ""
   var play = j.play === "animation" ? "animation" : "slideshow"
+  var described = isPlainObject(j.source) && j.source.type === "prompt"
   var meta
-  if (importing) meta = "importing…"
+  if (importing) meta = described ? "drawing…" : "converting…"
+  else if (error === "stopped") meta = "stopped"
   else if (error !== "") meta = "import failed"
   else if (kind === "image") meta = pieces.length === 1 ? (extensionOf(pieces[0]) === "gif" ? "animated picture" : "one picture") : pieces.length + " pictures"
   else if (play === "animation") meta = "ASCII animation"
@@ -1198,7 +1323,131 @@ function scanScript(rootDir) {
 // text | prompt | clock | empty (the last two have nothing to convert).
 // `style`: ascii (theme-coloured text art) | image (the pictures as they are).
 function importDefaults() {
-  return { id: "", name: "", source: "images", paths: [], text: "", prompt: "", style: "ascii", fps: 10, seconds: 20, animated: true, frames: 12 }
+  return { id: "", name: "", source: "", paths: [], words: "", text: "", prompt: "", style: "ascii", fps: 10, seconds: 20, animated: true, letters: false, frames: 12 }
+}
+
+// ---- the composer ----------------------------------------------------------
+//
+// One card, one field, whatever is attached: what gets made follows from
+// what is there. Words alone are drawn by the agent (or set in big letters);
+// pictures alone are converted; words with a picture, where the agent can
+// look at one, are drawn from it. The card only asks the one question that
+// is left open.
+
+// Where "Describe it" goes, as the service probes it: "agent:<id>" or "api".
+// Which of those can be handed a picture along with the words.
+var SEES_PICTURES = ["agent:claude", "agent:codex", "agent:gemini", "api"]
+function seesPictures(ai) { return SEES_PICTURES.indexOf(String(ai || "")) !== -1 }
+
+// A list of picked or pasted paths, sorted into what the card holds: a
+// folder, one clip, or pictures. A lone GIF is a clip (it may move); among
+// pictures it is a picture (its first frame).
+function classifyPaths(paths) {
+  var list = Array.isArray(paths) ? paths.filter(function(p) { return typeof p === "string" && p !== "" }) : []
+  var dirs = list.filter(function(p) { return p.charAt(p.length - 1) === "/" && p.length > 1 })
+  var files = list.filter(function(p) { return dirs.indexOf(p) === -1 })
+  if (dirs.length > 0) return { source: "folder", paths: [dirs[0].replace(/\/+$/, "")] }
+  if (files.length === 0) return null
+  if (files.length === 1 && (isVideoPath(files[0]) || extensionOf(files[0]) === "gif")) return { source: "video", paths: files }
+  var pictures = files.filter(isImagePath)
+  if (pictures.length === 0) {
+    var clips = files.filter(isVideoPath)
+    return clips.length ? { source: "video", paths: [clips[0]] } : null
+  }
+  return { source: "images", paths: pictures }
+}
+
+// Something new attached to the draft. A folder or a clip stands alone;
+// pictures join pictures already there.
+function attach(draft, found) {
+  var d = isPlainObject(draft) ? cloneJson(draft) : importDefaults()
+  if (!found || !found.source) return d
+  if (found.source === "images" && d.source === "images") {
+    var have = Array.isArray(d.paths) ? d.paths.slice() : []
+    for (var i = 0; i < found.paths.length; i++) if (have.indexOf(found.paths[i]) === -1) have.push(found.paths[i])
+    d.paths = have
+  } else {
+    d.source = found.source
+    d.paths = found.paths.slice()
+  }
+  return d
+}
+
+// The attachment taken off again: the draft goes back to words alone.
+function detach(draft) {
+  var d = isPlainObject(draft) ? cloneJson(draft) : importDefaults()
+  d.source = ""
+  d.paths = []
+  return d
+}
+
+function attachmentLabel(draft, stageDir) {
+  if (!isPlainObject(draft) || !draft.source || !Array.isArray(draft.paths) || draft.paths.length === 0) return ""
+  if (draft.source === "folder") return baseName(draft.paths[0])
+  if (draft.source === "video") return baseName(draft.paths[0])
+  if (draft.paths.length !== 1) return draft.paths.length + " pictures"
+  return stageDir && draft.paths[0].indexOf(stageDir) === 0 ? "pasted picture" : baseName(draft.paths[0])
+}
+
+// One picture, converted as a dot matrix: the only conversion that can be
+// still or moving, so the only one the card asks about.
+function canMove(draft, mode) {
+  return mode === "pictures" && Array.isArray(draft.paths) && draft.paths.length === 1 && draft.style !== "image"
+}
+
+// What the card would make of what it holds: "" when nothing yet.
+function composeMode(draft, ai) {
+  if (!isPlainObject(draft)) return ""
+  var words = String(draft.words || "").trim()
+  var has = !!draft.source && Array.isArray(draft.paths) && draft.paths.length > 0
+  if (!words && !has) return ""
+  if (!has) return ai && !draft.letters ? "describe" : "letters"
+  // A picture is the subject. Words alongside it name the saver; a picture
+  // is never handed to the agent to redraw.
+  return draft.source === "folder" ? "folder" : (draft.source === "video" ? "clip" : "pictures")
+}
+
+// A tile's name from a description: the first clause, cut at a word before
+// it runs long.
+function shortName(text) {
+  var first = String(text || "").split(/[,.;:\n]/)[0].trim()
+  if (first.length <= 40) return first
+  var cut = first.lastIndexOf(" ", 40)
+  return (cut > 12 ? first.substring(0, cut) : first.substring(0, 40)).trim()
+}
+
+// The import spec the card hands the service. `stageDir` is where pasted
+// bytes land, so a pasted picture is not named after its temporary file.
+function composeSpec(draft, ai, stageDir) {
+  var mode = composeMode(draft, ai)
+  if (mode === "") return null
+  var spec = importDefaults()
+  var words = String(draft.words || "").trim()
+  var paths = Array.isArray(draft.paths) ? draft.paths.slice() : []
+  if (mode === "describe" || mode === "describe-pictures") {
+    spec.source = "prompt"
+    spec.prompt = words
+    spec.animated = draft.animated !== false
+    spec.name = shortName(words)
+    if (mode === "describe-pictures") spec.paths = paths.slice(0, 4)
+    return spec
+  }
+  if (mode === "letters") {
+    spec.source = "text"
+    spec.text = words
+    spec.name = words
+    return spec
+  }
+  spec.source = draft.source
+  spec.paths = paths
+  spec.style = draft.style === "image" ? "image" : "ascii"
+  // One picture as ASCII can be still or gently moving.
+  // One picture as a dot matrix can move or sit still; the service turns
+  // that into the saver's own effect setting.
+  if (mode === "pictures" && spec.style === "ascii" && paths.length === 1) spec.animated = draft.animated !== false
+  var pasted = stageDir && paths.length === 1 && paths[0].indexOf(stageDir) === 0
+  spec.name = words ? shortName(words) : (pasted ? "Pasted picture" : suggestName(paths, "New saver"))
+  return spec
 }
 
 // Transcoder geometry: braille cells are 2×4 pixels, so 160×64 cells is a
@@ -1213,7 +1462,7 @@ function metaJson(spec, extra) {
   if (spec.source === "images" || spec.source === "video") j.source.paths = spec.paths
   if (spec.source === "folder") j.source.paths = spec.paths
   if (spec.source === "text") j.source.text = spec.text
-  if (spec.source === "prompt") j.source.prompt = spec.prompt
+  if (spec.source === "prompt") { j.source.prompt = spec.prompt; j.source.animated = spec.animated !== false; if (Array.isArray(spec.paths) && spec.paths.length) j.source.paths = spec.paths }
   for (var k in (extra || {})) j[k] = extra[k]
   return JSON.stringify(j)
 }
@@ -1224,19 +1473,195 @@ var FRAME_MARKER = "---FRAME---"
 var ART_BEGIN = "===ART==="
 var ART_END = "===END==="
 
-function aiPrompt(description, frames) {
-  var n = Math.max(1, Math.min(60, Math.round(Number(frames) || 1)))
+// The standing rules, the same for every request: what the art is for and
+// how it has to be built. Claude Code and the API take it as the system
+// prompt; the other agents get it at the top of the message. A file of the
+// owner's own — the house style — is added under it when it exists.
+var STYLE_FILE_SUBPATH = ".config/omarchy/stelline/style.md"
+var DESCRIBE_EFFORTS = ["low", "medium", "high"]
+
+function aiSystem() {
+  return [
+    "You draw ASCII art for a screensaver. What you draw fills a screen: one colour on a plain background, scaled up several times, seen from across a room. No captions, titles or lettering unless the subject asks for words.",
+    "Grid: you are given the exact width and height. Use all of it — the subject spanning most of the grid, centred, a column or two of margin. Pad every line with spaces to the full width.",
+    "Tone: ░▒▓█ is a ramp from faint to solid. Model form with all four, not outlines alone: light where it catches the light, solid in the mass, the mid tones for everything turning between. ▀▄▌▐ place half cells for an edge that falls between rows or columns. Braille (⠁…⣿) packs eight dots into a cell and is the finest tool you have: reach for it when the subject needs fine structure. Keep to one family within a piece so the texture stays even.",
+    "How much detail: when nothing is asked for, draw bold shapes that read from across a room. When the subject asks for detail, realism, proportion or a likeness, spend the whole grid on it — model the form with the tone ramp, hold the proportions true, and put the detail where it carries the likeness.",
+    "Every character must be one column wide: no fullwidth or wide characters, no emoji, no tabs, no colour or escape codes.",
+    "Animation: every frame the same width and height, every line padded to the full width. Small changes from frame to frame; what does not move stays identical, character for character; the last frame leads back into the first, so the loop is seamless.",
+    "Answer with the art alone, between the marker lines asked for: no title, no explanation, no code fences."
+  ].join("\n")
+}
+
+// A likeness or fine work asked for in the subject's own words. The rules
+// tell the model to spend the grid on it; the plan gives it the room.
+var DETAIL_WORDS = /\b(detail(ed|s)?|realistic|photo ?realistic|lifelike|true to|exactly|likeness|accurate|proportion(s|al)?|intricate|fine|precise|faithful|real)\b/i
+function wantsDetail(text) { return DETAIL_WORDS.test(String(text || "")) }
+
+// How big, and how many. Resolution and frame count trade against each
+// other: the whole answer has to arrive in one reply, so a still can be
+// four times the size of a frame of a long loop. Detail buys room by
+// spending frames — six good frames beat twelve coarse ones.
+function artPlan(spec) {
+  var detailed = wantsDetail(spec && spec.prompt)
+  var animated = !spec || spec.animated !== false
+  if (!animated) return { columns: detailed ? 160 : 120, rows: detailed ? 46 : 36, frames: 1, detailed: detailed }
+  return detailed
+    ? { columns: 120, rows: 38, frames: 6, detailed: true }
+    : { columns: 80, rows: 28, frames: 10, detailed: false }
+}
+
+// The one request. `previous` is the earlier description when this is a
+// change to a drawing already made: the drawing itself is appended by the
+// script, between markers of its own.
+var PREVIOUS_BEGIN = "===PREVIOUS==="
+var PREVIOUS_END = "===END PREVIOUS==="
+
+function aiPrompt(description, plan, pictures, previous) {
+  var p = plan && plan.columns ? plan : artPlan({ prompt: description, animated: false })
+  var n = Math.max(1, Math.min(60, Math.round(Number(p.frames) || 1)))
+  var pics = Array.isArray(pictures) ? pictures.filter(function(q) { return typeof q === "string" && q !== "" }) : []
   var lines = [
-    "Make ASCII art for a screensaver. Subject: " + String(description || "").trim(),
-    "",
+    "Subject: " + String(description || "").trim(),
+    "Grid: exactly " + p.columns + " columns by " + p.rows + " lines.",
+    pics.length
+      ? "The " + (pics.length === 1 ? "picture is" : "pictures are") + " at " + pics.join(", ") + ": look first, then draw what " + (pics.length === 1 ? "it shows" : "they show") + ", the way the subject asks."
+      : "",
+    previous !== undefined && previous !== null
+      ? "You drew this subject before, described then as: " + String(previous).trim() + ". That drawing follows, between " + PREVIOUS_BEGIN + " and " + PREVIOUS_END + ". Keep what is right about it and change it to match the subject as described now."
+      : "",
     n > 1
-      ? "Produce " + n + " frames of a looping animation. Every frame must be the same size: the same number of lines, every line padded with spaces to the same width, so the frames line up when swapped in place."
+      ? "Produce " + n + " frames of a looping animation, separated by a line containing only " + FRAME_MARKER + "."
       : "Produce one piece.",
-    "Use a monospace grid about 60 columns wide and 20 to 28 lines tall. Plain ASCII characters, and Unicode block (█▀▄▌▐░▒▓) and braille (⠁…⣿) characters are all fine; use what draws the subject best.",
-    n > 1 ? "Separate frames with a line containing only " + FRAME_MARKER + "." : "",
-    "Put a line containing only " + ART_BEGIN + " before the art and a line containing only " + ART_END + " after it. Nothing else: no title, no explanation, no code fences, no tool use — just draw it."
+    "Put a line containing only " + ART_BEGIN + " before the art and a line containing only " + ART_END + " after it."
   ]
-  return lines.filter(function(l) { return l !== undefined }).join("\n")
+  return lines.filter(function(l) { return l !== "" }).join("\n")
+}
+
+// The picture, converted to the grid the model will work on. Two passes:
+// the first finds where the subject actually sits, in cells; the picture is
+// cropped to that; the second fills the grid with it. Without the crop a
+// subject off to one side arrives as a narrow strip in the corner of a wide
+// grid. Blocks, not braille: the model has to be able to edit this.
+// Prints the art; the caller measures it, since fitting keeps the aspect.
+var BOX_OF = [
+  "box_of() {",
+  "  awk '{ n=length($0); if (n>w) w=n; for (i=1;i<=n;i++) if (substr($0,i,1)!=\" \") { if (lo==0||i<lo) lo=i; if (i>hi) hi=i; if (top==0) top=NR; bot=NR } }",
+  "       END { if (top==0) exit 1; print lo, hi, top, bot, w, NR }' \"$1\"",
+  "}"
+].join("\n")
+
+// Where the subject sits in a picture, as a pixel box with a little air
+// around it. Both the conversion and the sway crop to this first, so a
+// figure off to one side fills the frame instead of sitting in a corner.
+var CROP_TO_SUBJECT = [
+  "crop_to_subject() {",
+  "  local src=$1 out=$2 cols=$3 rows=$4 mode=$5 flags=$6 lo hi top bot w1 h1 iw ih x0 x1 y0 y1 pad",
+  "  omarchy-transcode-ascii \"$src\" \"$tmp/probe.txt\" --width \"$cols\" --height \"$rows\" --mode \"$mode\" --no-trim $flags >/dev/null 2>&1 || return 1",
+  "  read -r lo hi top bot w1 h1 <<<\"$(box_of \"$tmp/probe.txt\")\" || return 1",
+  "  read -r iw ih <<<\"$(magick \"$src\" -format '%w %h' info: 2>/dev/null)\"",
+  "  [[ ${lo:-0} -gt 0 && ${w1:-0} -gt 0 && ${h1:-0} -gt 0 && ${iw:-0} -gt 0 && ${ih:-0} -gt 0 ]] || return 1",
+  "  x0=$(( (lo - 1) * iw / w1 )); x1=$(( hi * iw / w1 ))",
+  "  y0=$(( (top - 1) * ih / h1 )); y1=$(( bot * ih / h1 ))",
+  "  pad=$(( (x1 - x0) / 12 ))",
+  "  (( x0 -= pad )); (( x0 < 0 )) && x0=0",
+  "  (( y0 -= pad )); (( y0 < 0 )) && y0=0",
+  "  (( x1 += pad )); (( x1 > iw )) && x1=$iw",
+  "  (( y1 += pad )); (( y1 > ih )) && y1=$ih",
+  "  (( x1 - x0 > 32 && y1 - y0 > 32 )) || return 1",
+  "  magick \"$src\" -crop \"$((x1-x0))x$((y1-y0))+$x0+$y0\" +repage \"$out\" 2>/dev/null",
+  "}"
+].join("\n")
+
+// Which agent answers, the same way the described savers pick one.
+var AGENT_PICK = [
+  "agent=$(omarchy-default-agent 2>/dev/null || true)",
+  "[[ -n $agent ]] && command -v \"$agent\" >/dev/null 2>&1 || agent=''",
+  "[[ -z $agent ]] && command -v claude >/dev/null 2>&1 && agent=claude"
+].join("\n")
+
+// ---- the subject -----------------------------------------------------------
+//
+// A picture should become a likeness of the thing it is a picture of, not of
+// the whole frame. This is the one question an agent is genuinely good at
+// here: not drawing, looking. It answers with a box and which way round the
+// tones run, and everything after that is arithmetic.
+
+function subjectPrompt(name) {
+  return [
+    "Look at " + name + " and find the one thing the picture is of: the person, the animal, the object someone would say it is a picture of.",
+    "Answer with one line of JSON and nothing else:",
+    '{"subject":"a short name for it","box":[x0,y0,x1,y1],"tone":"light-on-dark"}',
+    "The box is where that thing sits: x from 0 at the left edge to 1 at the right, y from 0 at the top to 1 at the bottom. Tight around it, but do not cut any of it off.",
+    "tone is \"light-on-dark\" when the thing is brighter than what is behind it, \"dark-on-light\" when it is darker.",
+    "Answer {} on its own if there is no one clear subject."
+  ].join("\n")
+}
+
+// The answer, or null when there is nothing usable in it. A box has to be
+// four fractions in order and big enough to be worth cropping to.
+function parseSubject(text) {
+  var m = String(text || "").replace(/\s+/g, " ").match(/\{[^{}]*\}/)
+  if (!m) return null
+  var j
+  try { j = JSON.parse(m[0]) } catch (e) { return null }
+  if (!isPlainObject(j)) return null
+  var raw = Array.isArray(j.box) ? j.box.map(Number) : null
+  var box = raw && raw.length === 4 && raw.every(function(v) { return isFinite(v) && v >= 0 && v <= 1 })
+    && raw[2] - raw[0] > 0.05 && raw[3] - raw[1] > 0.05 ? raw : null
+  var tone = j.tone === "dark-on-light" || j.tone === "light-on-dark" ? j.tone : ""
+  var name = typeof j.subject === "string" ? j.subject.trim() : ""
+  if (!box && !tone && name === "") return null
+  return { subject: name, box: box, tone: tone }
+}
+
+// Only the agents that can open a picture are asked; anything else answers
+// nothing and the lit area is used instead.
+var ASK_SUBJECT = [
+  "ask_subject() {",
+  "  local out=''",
+  "  case \"$agent\" in",
+  "    claude) out=$(timeout 180 env -u CLAUDECODE claude -p \"$subjectprompt\" --output-format text --tools Read --no-session-persistence --effort low </dev/null 2>\"$tmp/subject.err\") ;;",
+  "    codex) timeout 180 env -u CLAUDECODE codex exec --skip-git-repo-check --ephemeral -s read-only -c model_reasoning_effort=low -i \"$1\" -o \"$tmp/subject.out\" \"$subjectprompt\" >/dev/null 2>&1 && out=$(cat \"$tmp/subject.out\" 2>/dev/null) ;;",
+  "    gemini) out=$(timeout 180 gemini -p \"$subjectprompt\" -o text --approval-mode plan --include-directories \"$PWD\" </dev/null 2>\"$tmp/subject.err\") ;;",
+  "  esac",
+  "  printf '%s' \"$out\" | tr -d '\\n' | grep -o '{[^{}]*}' | tail -n1",
+  "}"
+].join("\n")
+
+// The subject, as dots: cropped to the agent's box when there is one and to
+// the lit area otherwise, then one pass of the transcoder and nothing after
+// it. Quantised once, so there is nothing left to drift.
+var SUBJECT_ART = [
+  BOX_OF,
+  CROP_TO_SUBJECT,
+  "subject_art() {",
+  "  local src=$1 out=$2 cols=$3 rows=$4 flags=$5 box=$6 iw ih crop cropped=0",
+  "  if [[ -n $box ]]; then",
+  "    read -r iw ih <<<\"$(magick \"$src\" -format '%w %h' info: 2>/dev/null)\"",
+  "    crop=$(awk -v b=\"$box\" -v w=\"${iw:-0}\" -v h=\"${ih:-0}\" 'BEGIN {",
+  "      n = split(b, a, \" \"); if (n != 4 || w < 16 || h < 16) exit 1",
+  "      x0 = a[1] * w; y0 = a[2] * h; x1 = a[3] * w; y1 = a[4] * h",
+  "      pad = (x1 - x0) / 14",
+  "      x0 -= pad; x1 += pad; y0 -= pad; y1 += pad",
+  "      if (x0 < 0) x0 = 0; if (y0 < 0) y0 = 0; if (x1 > w) x1 = w; if (y1 > h) y1 = h",
+  "      if (x1 - x0 < 32 || y1 - y0 < 32) exit 1",
+  "      printf \"%dx%d+%d+%d\", x1 - x0, y1 - y0, x0, y0 }')",
+  "    if [[ -n $crop ]] && magick \"$src\" -crop \"$crop\" +repage \"$tmp/subject.png\" 2>/dev/null; then src=$tmp/subject.png; cropped=1; fi",
+  "  fi",
+  "  if (( ! cropped )); then",
+  "    crop_to_subject \"$src\" \"$tmp/subject.png\" \"$cols\" \"$rows\" braille \"$flags\" && src=$tmp/subject.png",
+  "  fi",
+  "  omarchy-transcode-ascii \"$src\" \"$out\" --width \"$cols\" --height \"$rows\" --mode braille --no-trim $flags >/dev/null 2>&1 || return 1",
+  "  [[ -s $out ]]",
+  "}"
+].join("\n")
+
+// What a described saver is drawn with, from the settings: the agent's own
+// model unless one is named, at a known effort.
+function describeSettings(cfg) {
+  var d = cfg && isPlainObject(cfg.describe) ? cfg.describe : {}
+  var effort = String(d.effort || "").toLowerCase()
+  return { model: String(d.model || "").trim(), effort: DESCRIBE_EFFORTS.indexOf(effort) === -1 ? "medium" : effort }
 }
 
 // Omarchy's default coding agent (`omarchy default agent <name>`), each in
@@ -1244,10 +1669,15 @@ function aiPrompt(description, frames) {
 // for it. Low effort where it can be asked for: at the default the model
 // deliberates over the grid spec for minutes. The answer goes to stdout —
 // or to a file for codex, which is quieter that way.
+// With pictures attached: Claude Code may Read (only that), Codex takes
+// them as -i, Gemini's plan mode may read inside the picture's folder.
+// `$model` and `$effort` come from the settings; Claude Code alone takes the
+// standing rules as its system prompt (in place of its own, which is about
+// code), the others get them at the top of the message.
 var AGENTS = {
-  claude:   { name: "Claude Code",    argv: "claude -p \"$prompt\" --output-format text --tools '' --no-session-persistence --effort low" },
-  codex:    { name: "Codex",          argv: "codex exec --skip-git-repo-check --ephemeral -s read-only -c model_reasoning_effort=low -o \"$tmp/last.txt\" \"$prompt\" >/dev/null && cat \"$tmp/last.txt\"" },
-  gemini:   { name: "Gemini",         argv: "gemini -p \"$prompt\" -o text --approval-mode plan" },
+  claude:   { name: "Claude Code",    argv: "claude -p \"$prompt\" --output-format text --tools \"$tools\" --no-session-persistence --effort \"$effort\" ${model:+--model \"$model\"} --system-prompt \"$system\"" },
+  codex:    { name: "Codex",          argv: "codex exec --skip-git-repo-check --ephemeral -s read-only -c model_reasoning_effort=\"$effort\" ${model:+-m \"$model\"} \"${imgargs[@]}\" -o \"$tmp/last.txt\" \"$prompt\" >/dev/null && cat \"$tmp/last.txt\"" },
+  gemini:   { name: "Gemini",         argv: "gemini -p \"$prompt\" -o text --approval-mode plan ${model:+-m \"$model\"} ${imgdir:+--include-directories \"$imgdir\"}" },
   opencode: { name: "OpenCode",       argv: "opencode run --pure \"$prompt\"" },
   copilot:  { name: "GitHub Copilot", argv: "copilot -p \"$prompt\" --output-format text" },
   crush:    { name: "Crush",          argv: "crush run -q \"$prompt\"" },
@@ -1311,14 +1741,14 @@ function clipboardProbeScript() {
 }
 
 // Pasted bytes need a file of their own; they go in a staging folder under the
-// runtime directory, wiped on each paste so they never pile up.
+// runtime directory, one file per paste, cleared when a new Add starts.
 function clipboardPasteScript(stageDir) {
   return ["set -u", "shopt -s extglob nocasematch",
     "stage=" + shellQuote(stageDir),
-    "rm -rf -- \"$stage\"; mkdir -p \"$stage\" || exit 1"].concat(CLIPBOARD_BASH, [
+    "mkdir -p \"$stage\" || exit 1"].concat(CLIPBOARD_BASH, [
     "if [[ -n $pick ]]; then",
     "  ext=${pick#image/}; [[ $ext == jpeg ]] && ext=jpg",
-    "  out=$stage/pasted.$ext",
+    "  out=$stage/pasted-$(date +%s%N).$ext",
     "  wl-paste --no-newline --type \"$pick\" > \"$out\" 2>/dev/null || exit 1",
     "  [[ -s $out ]] || exit 1",
     "  printf 'file\\t%s\\n' \"$out\"",
@@ -1330,33 +1760,104 @@ function clipboardPasteScript(stageDir) {
   ]).join("\n")
 }
 
+// The first picture of what is attached, converted the way the import would
+// convert it, for the card to show before Create. A folder gives its first
+// picture, a clip its first second. Prints `image<TAB>path` (the picture as
+// it is, or the clip's frame) and then the art. Frames get a name of their
+// own each time: an image cache keyed on the path would show the last clip.
+// The transcoder is made for logos: a picture with transparency is read by
+// its alpha (every opaque pixel is subject — a screenshot with rounded
+// corners comes out solid), and otherwise dark pixels are the subject (a
+// dark wallpaper comes out solid). So a picture is prepared first: one that
+// is nearly all opaque is flattened, and, flattened, a dark one is inverted
+// by its mean. A true logo on transparency goes through as it is. Sets
+// `prep_path` and `prep_flags` for the transcoder call.
+// Everything is judged and converted on a copy no wider than 800 pixels:
+// the transcoder wants 320 across, and a wallpaper is several thousand.
+// An SVG is left to the transcoder, which rasterises it itself.
+// A braille dot is not square. Two dots span a cell's width and four its
+// height, and a monospace cell is far taller than it is wide, so a dot is
+// about a tenth taller than it is wide. Convert a picture straight onto that
+// grid and it comes out stretched upward by the same tenth. The fix is to
+// widen the picture by that much before the transcoder samples it, so the
+// dots it chooses map back to the right shape on screen. Block art needs
+// exactly the same correction, since its cells halve the same way.
+var DOT_STRETCH = 1.0977
+
+function dotStretch(cellAspect) {
+  var a = Number(cellAspect)
+  if (!isFinite(a) || a <= 0.1 || a >= 1) return DOT_STRETCH
+  return 1 / (2 * a)
+}
+
+function prepBash(stretch) {
+  var k = (Math.round(dotStretch(stretch) * 10000) / 100).toFixed(2)
+  return [
+  "prep() {",
+  "  prep_path=$1; prep_flags=''; local a m",
+  "  case ${1,,} in *.svg) return 0 ;; esac",
+  "  magick \"$1[0]\" -auto-orient -resize '800x800>' -resize '" + k + "%x100%' \"$2\" 2>/dev/null || return 0",
+  "  prep_path=$2",
+  "  a=$(magick \"$2\" -alpha extract -format '%[fx:mean]' info: 2>/dev/null || echo 1)",
+  "  if awk -v a=\"$a\" 'BEGIN { exit !(a > 0.9) }'; then",
+  "    magick \"$2\" -background black -alpha remove -alpha off \"$2\" 2>/dev/null",
+  "    m=$(magick \"$2\" -colorspace Gray -format '%[fx:mean]' info: 2>/dev/null || echo 1)",
+  "    prep_flags=$(awk -v m=\"$m\" 'BEGIN { print (m < 0.45) ? \"--invert\" : \"\" }')",
+  "  fi",
+  "}"
+  ].join("\n")
+}
+
+function previewScript(stageDir, cellAspect) {
+  return ["set -u", "shopt -s nocasematch", prepBash(cellAspect),
+    "stage=" + shellQuote(stageDir),
+    "mkdir -p \"$stage\" || exit 1",
+    "rm -f \"$stage\"/frame-*.png",
+    "src=$1",
+    "if [[ -d $src ]]; then src=$(find \"$src\" -maxdepth 1 -type f \\( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' -o -iname '*.gif' -o -iname '*.svg' -o -iname '*.bmp' -o -iname '*.avif' \\) 2>/dev/null | sort | head -n1); [[ -n $src ]] || exit 1; fi",
+    "[[ -f $src ]] || exit 1",
+    "img=$src; frame=$stage/frame-$(date +%s%N).png",
+    "case $src in",
+    "  *.mp4|*.mov|*.mkv|*.webm|*.avi|*.m4v) ffmpeg -v error -y -ss 1 -i \"$src\" -frames:v 1 \"$frame\" 2>/dev/null || ffmpeg -v error -y -i \"$src\" -frames:v 1 \"$frame\" 2>/dev/null || exit 1; img=$frame ;;",
+    "  *.gif) magick \"$src[0]\" \"$frame\" 2>/dev/null && img=$frame ;;",
+    "esac",
+    "prep \"$img\" \"$stage/prep.png\"",
+    "omarchy-transcode-ascii \"$prep_path\" \"$stage/preview.txt\" --width " + ASCII_COLUMNS + " --height " + ASCII_ROWS + " --mode braille $prep_flags >/dev/null 2>&1 || exit 1",
+    "printf 'image\\t%s\\n' \"$img\"",
+    "cat \"$stage/preview.txt\""
+  ].join("\n")
+}
+
 // `kind<TAB>path` lines back into { source, paths } for the Add card: a folder
 // is a folder, a lone clip is a clip, anything else is pictures.
 function parseClipboard(text) {
   var rows = String(text || "").split("\n")
-  var dirs = [], files = []
+  var list = []
   for (var i = 0; i < rows.length; i++) {
     var at = rows[i].indexOf("\t")
     if (at === -1) continue
     var kind = rows[i].substring(0, at)
     var path = rows[i].substring(at + 1).replace(/\s+$/, "")
     if (path === "") continue
-    if (kind === "dir") dirs.push(path)
-    else if (kind === "file") files.push(path)
+    if (kind === "dir") list.push(path.replace(/\/+$/, "") + "/")
+    else if (kind === "file") list.push(path)
   }
-  if (dirs.length > 0) return { source: "folder", paths: [dirs[0]] }
-  if (files.length === 0) return null
-  var pictures = files.filter(isImagePath)
-  if (pictures.length === 0) return { source: "video", paths: [files[0]] }
-  if (pictures.length === 1 && isVideoPath(pictures[0])) return { source: "video", paths: pictures }
-  return { source: "images", paths: pictures }
+  return classifyPaths(list)
+}
+
+// What the chooser answered, as a draft attachment: a folder chooser's
+// one line is a folder, anything else is sorted by what the files are.
+function parsePicked(kind, paths) {
+  var list = Array.isArray(paths) ? paths.slice() : []
+  if (kind === "folder") return list.length ? { source: "folder", paths: [list[0].replace(/\/+$/, "")] } : null
+  return classifyPaths(list)
 }
 
 // The bash that builds one saver, written by the service to a file and run
 // in the background. Everything lands under `dir`; saver.json is written
 // first with importing:true (the tile appears at once) and rewritten at the
 // end with the pieces, or with an error the panel shows.
-function importScript(spec, rootDir) {
+function importScript(spec, rootDir, stageDir) {
   var id = String(spec.id)
   var dir = rootDir + "/" + id
   var q = shellQuote
@@ -1369,8 +1870,10 @@ function importScript(spec, rootDir) {
     "dir=" + q(dir),
     "mkdir -p \"$dir\" || exit 1",
     "tmp=$(mktemp -d)",
-    "fail() { printf %s " + q(metaJson(spec, { error: "__MSG__" })).replace("__MSG__", "'\"$1\"'") + " > \"$dir/saver.json\"; touch \"$root/.stamp\"; " + notify("󰀦", "__MSG__").replace("__MSG__", "'\"$1\"'") + "; rm -rf \"$tmp\"; exit 1; }",
+    // A tile deleted while this ran has nowhere to write and nothing to say.
+    "fail() { [[ -d $dir ]] || { rm -rf \"$tmp\"; exit 1; }; printf %s " + q(metaJson(spec, { error: "__MSG__" })).replace("__MSG__", "'\"$1\"'") + " > \"$dir/saver.json\"; touch \"$root/.stamp\"; " + notify("󰀦", "__MSG__").replace("__MSG__", "'\"$1\"'") + "; rm -rf \"$tmp\"; exit 1; }",
     "trap 'rm -rf \"$tmp\"' EXIT",
+    prepBash(spec.cellAspect),
     "printf %s " + q(metaJson(spec, { importing: true })) + " > \"$dir/saver.json\"",
     "touch \"$root/.stamp\"",
     "cols=" + ASCII_COLUMNS + "; rows=" + ASCII_ROWS
@@ -1381,6 +1884,15 @@ function importScript(spec, rootDir) {
   var listTxt = "pieces=$(ls -1 \"$dir\"/*.txt 2>/dev/null | xargs -rn1 basename | jq -R . | jq -sc .); [[ $pieces != '[]' ]] || fail 'nothing could be converted'"
   var paths = (spec.paths || []).map(q).join(" ")
   var style = spec.style === "image" ? "image" : "ascii"
+  // One picture on its own is a likeness of its subject: the agent is asked
+  // where that subject is, and the conversion happens once.
+  var one = spec.source === "images" && style === "ascii" && (spec.paths || []).length === 1
+  // A pasted picture lives in the runtime directory, gone at logout: it is
+  // copied into the saver, and saver.json names the copy.
+  var keep = function(arr) {
+    return stageDir ? "for i in \"${!" + arr + "[@]}\"; do f=${" + arr + "[$i]}; if [[ $f == " + q(stageDir) + "/* ]]; then cp -f \"$f\" \"$dir/\" && " + arr + "[$i]=\"$dir/$(basename \"$f\")\"; fi; done" : ":"
+  }
+  var srcJson = function(arr) { return "srcjson=$(printf '%s\\n' \"${" + arr + "[@]}\" | jq -R . | jq -sc .)" }
 
   if (spec.source === "images" || spec.source === "folder") {
     lines.push("srcs=()")
@@ -1390,19 +1902,46 @@ function importScript(spec, rootDir) {
       lines.push("for f in " + paths + "; do [[ -f $f ]] && srcs+=(\"$f\"); done")
     }
     lines.push("(( ${#srcs[@]} > 0 )) || fail 'no pictures found'")
-    if (style === "image") {
+    if (spec.source === "images") lines.push(keep("srcs"), srcJson("srcs"))
+    else lines.push("srcjson=" + q(JSON.stringify(spec.paths || [])))
+    if (one) {
+      lines.push(
+        SUBJECT_ART,
+        ASK_SUBJECT,
+        AGENT_PICK,
+        "prep \"${srcs[0]}\" \"$tmp/one.png\"",
+        "src=$prep_path; flags=$prep_flags; box=''",
+        // The agent is asked where the subject is, from a copy it is allowed
+        // to open. Its answer also settles which way round the tones run,
+        // which a mean brightness gets wrong on a dark subject in a bright scene.
+        "if [[ -n $agent ]]; then",
+        "  mkdir -p \"$tmp/pics\" && cp -f \"$src\" \"$tmp/pics/picture.png\" 2>/dev/null",
+        "  subjectprompt=" + q(subjectPrompt("picture.png")),
+        "  found=$( cd \"$tmp/pics\" 2>/dev/null && ask_subject \"$tmp/pics/picture.png\" )",
+        // A silent agent is a mystery at the wrong moment; say why in the log.
+        "  [[ -n $found ]] || echo \"subject: $agent said nothing — $(tail -c 200 \"$tmp/subject.err\" 2>/dev/null | tr -s '\\n ' ' ')\" >&2",
+        "  if [[ -n $found ]]; then",
+        "    box=$(jq -r 'if (.box | type) == \"array\" and (.box | length) == 4 then (.box | map(tostring) | join(\" \")) else empty end' <<<\"$found\" 2>/dev/null)",
+        "    case $(jq -r '.tone // empty' <<<\"$found\" 2>/dev/null) in light-on-dark) flags=--invert ;; dark-on-light) flags='' ;; esac",
+        "  fi",
+        "fi",
+        "subject_art \"$src\" \"$dir/001.txt\" " + ASCII_COLUMNS + " " + ASCII_ROWS + " \"$flags\" \"$box\" || fail 'that picture could not be converted'",
+        finish("--argjson srcs \"$srcjson\" '.pieces=[\"001.txt\"] | .play=\"slideshow\" | .source.paths=$srcs'")
+      )
+    } else if (style === "image") {
       if (spec.source === "folder") lines.push(finish("--arg folder " + paths + " '.folder=$folder'"))
-      else lines.push("pieces=$(printf '%s\\n' \"${srcs[@]}\" | jq -R . | jq -sc .)", finish("--argjson pieces \"$pieces\" '.pieces=$pieces'"))
+      else lines.push(finish("--argjson srcs \"$srcjson\" '.pieces=$srcs | .source.paths=$srcs'"))
     } else {
       lines.push(
         "i=0",
         "for f in \"${srcs[@]}\"; do",
         "  i=$((i+1)); n=$(printf %03d \"$i\")",
         "  if [[ ${f,,} == *.gif ]]; then magick \"$f[0]\" \"$tmp/$n.png\" 2>/dev/null && f=\"$tmp/$n.png\"; fi",
-        "  omarchy-transcode-ascii \"$f\" \"$dir/$n.txt\" --width \"$cols\" --height \"$rows\" --mode braille >/dev/null 2>&1 || echo \"skipped $f\" >&2",
+        "  prep \"$f\" \"$tmp/prep.png\"",
+        "  omarchy-transcode-ascii \"$prep_path\" \"$dir/$n.txt\" --width \"$cols\" --height \"$rows\" --mode braille $prep_flags >/dev/null 2>&1 || echo \"skipped $f\" >&2",
         "done",
         listTxt,
-        finish("--argjson pieces \"$pieces\" '.pieces=$pieces | .play=\"slideshow\"'")
+        finish("--argjson pieces \"$pieces\" --argjson srcs \"$srcjson\" '.pieces=$pieces | .play=\"slideshow\" | .source.paths=$srcs'")
       )
     }
   } else if (spec.source === "video") {
@@ -1418,9 +1957,10 @@ function importScript(spec, rootDir) {
       lines.push(
         "ffmpeg -v error -y -i \"$src\" -t " + secs + " -vf \"fps=" + fps + ",scale=$((cols*2)):-2:flags=area\" \"$tmp/f%05d.png\" || fail 'ffmpeg could not read the clip'",
         "shopt -s nullglob; frames=(\"$tmp\"/f*.png); (( ${#frames[@]} > 0 )) || fail 'no frames in that clip'",
+        "prep \"${frames[0]}\" \"$tmp/prep.png\"; inv=$prep_flags",
         ": > \"$dir/frames.txt\"",
         "for f in \"${frames[@]}\"; do",
-        "  omarchy-transcode-ascii \"$f\" \"$tmp/frame.txt\" --width \"$cols\" --height \"$rows\" --mode braille --no-trim >/dev/null 2>&1 || continue",
+        "  omarchy-transcode-ascii \"$f\" \"$tmp/frame.txt\" --width \"$cols\" --height \"$rows\" --mode braille --no-trim $inv >/dev/null 2>&1 || continue",
         "  cat \"$tmp/frame.txt\" >> \"$dir/frames.txt\"; printf '\\f' >> \"$dir/frames.txt\"",
         "done",
         "[[ -s \"$dir/frames.txt\" ]] || fail 'the frames could not be converted'",
@@ -1438,23 +1978,52 @@ function importScript(spec, rootDir) {
       finish("'.pieces=[\"001.txt\"] | .play=\"slideshow\"'")
     )
   } else if (spec.source === "prompt") {
-    var frames = spec.animated ? Math.max(2, Math.min(60, Math.round(Number(spec.frames) || 12))) : 1
+    var plan = artPlan(spec)
+    var frames = plan.frames
+    var pics = (spec.paths || []).filter(function(p) { return typeof p === "string" && p !== "" }).slice(0, 4)
+    var chosen = describeSettings({ describe: { model: spec.model, effort: spec.effort } })
+    var change = spec.previous === true
+    // A picture is converted to the grid first and handed over as the
+    // starting point: the likeness comes from the transcoder, which is
+    // exact, and the model only has to take it where the words ask. Blocks
+    // rather than braille, because a model can actually work in ▀▄█.
+    var picNames = pics.map(function(p, i) { return (i + 1) + "-" + baseName(p) })
     lines.push(
-      "prompt=" + q(aiPrompt(spec.prompt, frames)),
+      "prompt=" + q(aiPrompt(spec.prompt, plan, picNames, change ? String(spec.previousPrompt || spec.prompt) : undefined)),
+      "system=" + q(aiSystem()),
+      "style=\"$HOME/" + STYLE_FILE_SUBPATH + "\"",
+      "[[ -f $style ]] && system=\"$system\"$'\\n\\nHouse style, from the owner of this screen:\\n'\"$(cat \"$style\")\"",
+      "model=" + q(chosen.model) + "; effort=" + q(chosen.effort),
+      // A change starts from the drawing there is: it goes with the words,
+      // frames marked the way the answer's will be.
+      change ? "prev=''; [[ -f \"$dir/frames.txt\" ]] && prev=$(awk 'BEGIN { RS=\"\\f\" } NR > 1 { printf \"" + FRAME_MARKER + "\\n\" } { printf \"%s\", $0 }' \"$dir/frames.txt\")" : "prev=''",
+      "[[ -n $prev ]] && prompt=\"$prompt\"$'\\n" + PREVIOUS_BEGIN + "\\n'\"$prev\"$'\\n" + PREVIOUS_END + "'",
+      // The pictures the words start from, in the shape each agent takes.
+      "imgs=()",
+      pics.length ? "for f in " + pics.map(q).join(" ") + "; do [[ -f $f ]] && imgs+=(\"$f\"); done" : ":",
+      keep("imgs"),
+      "tools=''; imgargs=(); imgdir=''",
+      pics.length ? "mkdir -p \"$tmp/pics\"" : ":",
+      pics.length ? "apics=(); for i in \"${!imgs[@]}\"; do n=\"$((i+1))-$(basename \"${imgs[$i]}\")\"; cp -f \"${imgs[$i]}\" \"$tmp/pics/$n\" 2>/dev/null && apics+=(\"$tmp/pics/$n\"); done" : "apics=()",
+      "if (( ${#apics[@]} )); then tools=Read; for f in \"${apics[@]}\"; do imgargs+=(-i \"$f\"); done; imgdir=$tmp/pics; cd \"$tmp/pics\" || true; fi",
       // The first line that explains itself (sign-in, limits, errors), else the tail.
       "reason() { local r; r=$(grep -m1 -iE 'unauthori|not logged|log ?in|sign ?in|limit|quota|denied|error' \"$1\" 2>/dev/null | sed -E 's/^(ERROR|error)[: ]*//' | cut -c1-160); [[ -n $r ]] || r=$(tail -c 160 \"$1\" 2>/dev/null | tr -s '\\n ' ' '); printf %s \"$r\"; }",
       "out=''; why=''",
       // The system's default agent first; Claude Code if none is set; the
       // API with a key as the last resort.
-      "agent=$(omarchy-default-agent 2>/dev/null || true)",
-      "[[ -n $agent ]] && command -v \"$agent\" >/dev/null 2>&1 || agent=''",
-      "[[ -z $agent ]] && command -v claude >/dev/null 2>&1 && agent=claude"
+      AGENT_PICK,
+      // An agent with no system prompt of its own reads the rules first.
+      "[[ -n $agent && $agent != claude ]] && prompt=\"$system\"$'\\n\\n'\"$prompt\""
     )
     lines = lines.concat(agentCase())
     lines.push(
+      // The API gets the pictures as image blocks: PNG, bounded, base64 from
+      // files, since a picture is far bigger than an argument may be.
       "if [[ -z $out && -n ${ANTHROPIC_API_KEY:-} ]]; then",
-      "  body=$(jq -n --arg p \"$prompt\" '{model:\"claude-opus-5\", max_tokens:16000, output_config:{effort:\"low\"}, fallbacks:\"default\", messages:[{role:\"user\", content:$p}]}')",
-      "  resp=$(curl -s --max-time 600 https://api.anthropic.com/v1/messages -H 'content-type: application/json' -H \"x-api-key: $ANTHROPIC_API_KEY\" -H 'anthropic-version: 2023-06-01' -H 'anthropic-beta: server-side-fallback-2026-07-01' -d \"$body\") || resp=''",
+      "  jq -n --arg p \"$prompt\" '[{type:\"text\", text:$p}]' > \"$tmp/parts.json\"",
+      "  i=0; for f in \"${imgs[@]}\"; do i=$((i+1)); magick \"$f[0]\" -resize '1568x1568>' \"$tmp/img$i.png\" 2>/dev/null || continue; base64 -w0 \"$tmp/img$i.png\" > \"$tmp/img$i.b64\"; jq --rawfile d \"$tmp/img$i.b64\" '[{type:\"image\", source:{type:\"base64\", media_type:\"image/png\", data:$d}}] + .' \"$tmp/parts.json\" > \"$tmp/parts2.json\" && mv \"$tmp/parts2.json\" \"$tmp/parts.json\"; done",
+      "  jq -n --slurpfile c \"$tmp/parts.json\" --arg m \"${model:-claude-opus-5}\" --arg e \"$effort\" --arg s \"$system\" '{model:$m, max_tokens:64000, output_config:{effort:$e}, fallbacks:\"default\", system:$s, messages:[{role:\"user\", content:$c[0]}]}' > \"$tmp/body.json\"",
+      "  resp=$(curl -s --max-time 600 https://api.anthropic.com/v1/messages -H 'content-type: application/json' -H \"x-api-key: $ANTHROPIC_API_KEY\" -H 'anthropic-version: 2023-06-01' -H 'anthropic-beta: server-side-fallback-2026-07-01' -d @\"$tmp/body.json\") || resp=''",
       "  [[ $(jq -r '.stop_reason // empty' <<<\"$resp\" 2>/dev/null) == refusal ]] && fail 'the model declined that description'",
       "  out=$(jq -r '[.content[]? | select(.type==\"text\") | .text] | join(\"\\n\")' <<<\"$resp\" 2>/dev/null) || out=''",
       "fi",
@@ -1464,7 +2033,8 @@ function importScript(spec, rootDir) {
       "art=$(printf '%s\\n' \"$out\" | awk -v b=" + ART_BEGIN + " -v e=" + ART_END + " '$0==b{on=1; found=1; next} $0==e{on=0} on{print}'); [[ -n $art ]] || art=$out",
       "printf '%s\\n' \"$art\" | sed -e '/^```/d' -e 's/^" + FRAME_MARKER + "$/\\f/' > \"$dir/frames.txt\"",
       "[[ $(tr -d '\\f[:space:]' < \"$dir/frames.txt\" | wc -c) -gt 20 ]] || fail \"the answer had no art in it${agent:+ ($agent)}\"",
-      finish("'.pieces=[\"frames.txt\"] | .play=" + (frames > 1 ? "\"animation\" | .fps=6" : "\"slideshow\"") + "'")
+      (pics.length ? srcJson("imgs") : ":"),
+      finish((pics.length ? "--argjson srcs \"$srcjson\" " : "") + "'.pieces=[\"frames.txt\"] | .play=" + (frames > 1 ? "\"animation\" | .fps=6" : "\"slideshow\"") + (pics.length ? " | .source.paths=$srcs" : "") + "'")
     )
   } else if (isEmptySource(spec.source)) {
     // Nothing to convert: the folder holds only its saver.json, and what
@@ -1558,11 +2128,83 @@ function playsLabel(cfg, saverId, userSavers) {
   var rule = ruleFor(c.situations, saverId)
   var ruleText = rule && rule.enabled === true ? situationLabel(rule).toLowerCase() : ""
   if (c.shuffle) {
-    var inSet = Array.isArray(c.shuffleFrom) && c.shuffleFrom.indexOf(saverId) !== -1
+    // What plays is the rotation, not the ticks: with nothing ticked the
+    // shuffle is every saver, and every tile says so.
+    var inSet = rotation(c, userSavers).indexOf(saverId) !== -1
     return ruleText !== "" ? ruleText : (inSet ? "in the shuffle" : "")
   }
   if (c.saver === saverId) return ruleText !== "" ? "usually · " + ruleText : "usually plays"
   return ruleText
+}
+
+// What is going to play, as the panel should name it: the rule's saver when
+// one is in force, "shuffle" when the shuffle is on (which saver is not
+// knowable), and otherwise the chosen one. The preview and the hero both
+// read this, so they cannot disagree with the screensaver.
+function playingName(cfg, situation, userSavers) {
+  var c = cfg || defaults()
+  if (isPlainObject(situation) && situation.saver) {
+    var ruled = saverById(situation.saver, userSavers)
+    if (ruled) return ruled.name
+  }
+  if (c.shuffle) return "shuffle"
+  var chosen = saverById(c.saver, userSavers) || SAVERS[0]
+  return chosen.name
+}
+
+// A failed import keeps what it was asked for in its saver.json, so it can
+// be asked for again under the same id — the tile stays where it is and
+// the retry writes over it.
+function retrySpec(saver) {
+  var src = saver && saver.series && isPlainObject(saver.series.source) ? saver.series.source : null
+  if (!src || !saver.series.error || typeof src.type !== "string" || src.type === "") return null
+  var spec = importDefaults()
+  spec.source = src.type
+  spec.name = saver.name
+  spec.retryOf = saver.id
+  spec.style = saver.series.kind === "image" ? "image" : "ascii"
+  if (Array.isArray(src.paths)) spec.paths = src.paths.slice()
+  if (typeof src.text === "string") spec.text = src.text
+  if (typeof src.prompt === "string") { spec.prompt = src.prompt; spec.animated = src.animated !== false }
+  if ((src.type === "images" || src.type === "folder" || src.type === "video") && spec.paths.length === 0) return null
+  if (src.type === "text" && !spec.text) return null
+  if (src.type === "prompt" && !spec.prompt) return null
+  return spec
+}
+
+// A described saver drawn again from new words, under the same tile, from
+// the same pictures if it had any. Failed or not.
+function redescribeSpec(saver, words, animated, fromPrevious) {
+  var src = saver && saver.series && isPlainObject(saver.series.source) ? saver.series.source : null
+  var text = String(words || "").trim()
+  if (!src || src.type !== "prompt" || text === "") return null
+  var spec = importDefaults()
+  spec.source = "prompt"
+  spec.prompt = text
+  spec.animated = animated !== false
+  // A change needs a drawing to change: one that is there, and finished.
+  if (fromPrevious && !saver.series.error && !saver.series.importing && Array.isArray(saver.series.pieces) && saver.series.pieces.length > 0) {
+    spec.previous = true
+    spec.previousPrompt = String(src.prompt || "")
+  }
+  spec.name = saver.name && String(saver.name).trim() !== "" && shortName(String(src.prompt || "")) !== saver.name ? saver.name : shortName(text)
+  spec.retryOf = saver.id
+  if (Array.isArray(src.paths)) spec.paths = src.paths.slice()
+  return spec
+}
+
+// The one grid every frame of an animation is laid on: as wide as the
+// widest frame, as tall as the tallest, so a frame a line shorter than the
+// next does not make the whole picture breathe.
+function frameGrid(frames) {
+  var columns = 0, rows = 0
+  var list = Array.isArray(frames) ? frames : []
+  for (var i = 0; i < list.length; i++) {
+    var lines = String(list[i] || "").replace(/\s+$/, "").split("\n")
+    rows = Math.max(rows, lines.length)
+    for (var k = 0; k < lines.length; k++) columns = Math.max(columns, lines[k].length)
+  }
+  return { columns: columns, rows: rows }
 }
 
 // A shipped tile is deleted by hiding it: nothing on disk to remove, and
@@ -1687,6 +2329,7 @@ if (typeof module !== "undefined") {
     uniqueId: uniqueId,
     suggestName: suggestName,
     splitFrames: splitFrames,
+    blocksToBraille: blocksToBraille,
     userSaverFromScan: userSaverFromScan,
     parseScan: parseScan,
     scanScript: scanScript,
@@ -1699,9 +2342,32 @@ if (typeof module !== "undefined") {
     AGENTS: AGENTS,
     agentName: agentName,
     aiPrompt: aiPrompt,
+    aiSystem: aiSystem,
+    subjectPrompt: subjectPrompt,
+    parseSubject: parseSubject,
+    artPlan: artPlan,
+    wantsDetail: wantsDetail,
+    describeSettings: describeSettings,
+    DESCRIBE_EFFORTS: DESCRIBE_EFFORTS,
+    STYLE_FILE_SUBPATH: STYLE_FILE_SUBPATH,
     clipboardProbeScript: clipboardProbeScript,
     clipboardPasteScript: clipboardPasteScript,
     parseClipboard: parseClipboard,
+    parsePicked: parsePicked,
+    previewScript: previewScript,
+    dotStretch: dotStretch,
+    DOT_STRETCH: DOT_STRETCH,
+    classifyPaths: classifyPaths,
+    attach: attach,
+    detach: detach,
+    attachmentLabel: attachmentLabel,
+    seesPictures: seesPictures,
+    composeMode: composeMode,
+    canMove: canMove,
+    composeSpec: composeSpec,
+    shortName: shortName,
+    redescribeSpec: redescribeSpec,
+    frameGrid: frameGrid,
     importScript: importScript,
     deleteScript: deleteScript,
     RULE_KEYS: RULE_KEYS,
@@ -1716,6 +2382,8 @@ if (typeof module !== "undefined") {
     setRuleCondition: setRuleCondition,
     patchRuleCondition: patchRuleCondition,
     playsLabel: playsLabel,
+    playingName: playingName,
+    retrySpec: retrySpec,
     forgetSaver: forgetSaver
   }
 }

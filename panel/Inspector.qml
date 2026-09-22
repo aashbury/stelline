@@ -21,6 +21,17 @@ BorderSurface {
   readonly property string saverId: saver && saver.id ? String(saver.id) : ""
   readonly property bool external: !!(saver && saver.kind === "external")
   readonly property bool failed: !!(saver && saver.series && saver.series.error)
+  readonly property bool stopped: failed && String(saver.series.error) === "stopped"
+  readonly property bool importing: !!(saver && saver.series && saver.series.importing)
+  readonly property var sourceInfo: saver && saver.series && M.isPlainObject(saver.series.source) ? saver.series.source : ({})
+  // A described saver keeps its words, and can be drawn again from new ones.
+  readonly property bool described: sourceInfo.type === "prompt"
+  readonly property int describedPictures: described && Array.isArray(sourceInfo.paths) ? sourceInfo.paths.length : 0
+  // A finished drawing can be changed rather than started over.
+  readonly property bool hasDrawing: described && !failed && !importing && !!(saver.series.pieces && saver.series.pieces.length)
+  // One of your own can be renamed; the shipped tiles keep their names.
+  readonly property bool renamable: !external && !!(saver && saver.kind === "series" && saver.series && saver.series.dir)
+  property bool renaming: false
   readonly property var rule: M.ruleFor(cfg.situations, saverId)
   readonly property var when: rule && rule.when ? rule.when : ({})
   readonly property var settings: cfg.savers && cfg.savers[saverId] ? cfg.savers[saverId] : ({})
@@ -29,11 +40,25 @@ BorderSurface {
   readonly property bool showsBranding: saverId === "terminal"
   property bool deleteArmed: false
 
-  readonly property bool editing: fromField.activeFocus || toField.activeFocus || belowField.field.activeFocus || look.editing
+  readonly property bool editing: fromField.activeFocus || toField.activeFocus || belowField.field.activeFocus || look.editing || nameField.activeFocus || describeField.activeFocus
 
+  // Armed for long enough to read the line that appears under the name.
   function armDelete() { deleteArmed = true; disarm.restart() }
-  Timer { id: disarm; interval: 4000; onTriggered: root.deleteArmed = false }
-  onSaverIdChanged: deleteArmed = false
+  Timer { id: disarm; interval: 8000; onTriggered: root.deleteArmed = false }
+  onSaverIdChanged: { deleteArmed = false; renaming = false; describeField.text = described ? String(sourceInfo.prompt || "") : ""; describeAnimated = sourceInfo.animated !== false }
+  Component.onCompleted: { describeField.text = described ? String(sourceInfo.prompt || "") : ""; describeAnimated = sourceInfo.animated !== false }
+  property bool describeAnimated: true
+
+  function startRename() { if (!renamable) return; nameField.text = saver.name; renaming = true; nameField.forceActiveFocus(); nameField.selectAll() }
+  function finishRename() {
+    if (!renaming) return
+    renaming = false
+    if (svc && nameField.text.trim() !== "" && nameField.text.trim() !== saver.name) svc.renameSaver(saverId, nameField.text.trim())
+  }
+  function drawAgain(fromPrevious) {
+    if (!svc || !described || describeField.text.trim() === "") return
+    svc.redescribe(saverId, describeField.text.trim(), describeAnimated, fromPrevious === true && hasDrawing)
+  }
 
   function condition(key, on) { if (svc) svc.setRuleCondition(saverId, key, on) }
   function patchCondition(key, patch) { if (svc) svc.patchRuleCondition(saverId, key, patch) }
@@ -59,21 +84,51 @@ BorderSurface {
       Column {
         width: parent.width - (actions.visible ? actions.width + Style.space(8) : 0)
         spacing: Style.space(1)
-        Text {
+        Item {
           width: parent.width
-          textFormat: Text.PlainText
-          text: root.saver && root.saver.name ? root.saver.name : ""
-          color: root.foreground
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.subtitle
-          font.bold: true
-          elide: Text.ElideRight
+          height: root.renaming ? nameField.height : titleText.height
+          Text {
+            id: titleText
+            visible: !root.renaming
+            width: parent.width
+            textFormat: Text.PlainText
+            text: root.saver && root.saver.name ? root.saver.name : ""
+            color: root.foreground
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.subtitle
+            font.bold: true
+            elide: Text.ElideRight
+            MouseArea {
+              id: titleMouse
+              anchors.fill: parent
+              enabled: root.renamable
+              hoverEnabled: root.renamable
+              cursorShape: root.renamable ? Qt.IBeamCursor : Qt.ArrowCursor
+              onClicked: root.startRename()
+            }
+            PanelToolTip { visible: titleMouse.containsMouse; text: "Click to rename" }
+          }
+          TextField {
+            id: nameField
+            visible: root.renaming
+            width: parent.width
+            foreground: root.foreground
+            font.family: root.fontFamily
+            font.bold: true
+            onAccepted: root.finishRename()
+            onActiveFocusChanged: if (!activeFocus) root.finishRename()
+            Keys.onEscapePressed: { root.renaming = false; focus = false }
+          }
         }
         Text {
           width: parent.width
           textFormat: Text.PlainText
-          text: root.failed ? "Import failed: " + root.saver.series.error : (root.saver && root.saver.about ? root.saver.about : (root.saver && root.saver.meta ? root.saver.meta : ""))
-          color: root.failed ? Color.urgent : root.dim
+          text: root.deleteArmed ? "Click again to delete it, and every rule that points at it"
+            : (root.importing ? (root.described ? "Drawing it now — Stop leaves the tile, to ask again" : "Converting…")
+            : (root.stopped ? "Stopped before it was done"
+            : (root.failed ? "Import failed: " + root.saver.series.error
+            : (root.saver && root.saver.about ? root.saver.about : (root.saver && root.saver.meta ? root.saver.meta : "")))))
+          color: root.deleteArmed || (root.failed && !root.stopped) ? Color.urgent : root.dim
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption
           wrapMode: Text.WordWrap
@@ -83,6 +138,42 @@ BorderSurface {
         id: actions
         visible: !root.external
         spacing: Style.space(4)
+        Button {
+          visible: !root.importing && !root.failed
+          text: "Preview"
+          iconText: "󰐊"
+          bordered: true
+          foreground: root.foreground
+          fontFamily: root.fontFamily
+          fontSize: Style.font.caption
+          tooltipText: "Show it now"
+          onClicked: if (root.body) root.body.preview(root.saverId)
+        }
+        Button {
+          visible: root.importing
+          text: "Stop"
+          iconText: "󰓛"
+          bordered: true
+          foreground: root.foreground
+          fontFamily: root.fontFamily
+          fontSize: Style.font.caption
+          tooltipText: "Stops the work; the tile stays, to be asked again or deleted"
+          onClicked: if (root.svc) root.svc.stopImport(root.saverId)
+        }
+        // A failed import is asked for again from what it remembers — the
+        // same files, the same words — under the same tile. A described one
+        // has its words below instead, where they can change first.
+        Button {
+          visible: root.failed && !root.described
+          text: "Try again"
+          iconText: "󰑐"
+          bordered: true
+          selected: true
+          foreground: root.foreground
+          fontFamily: root.fontFamily
+          fontSize: Style.font.caption
+          onClicked: if (root.svc) root.svc.retryImport(root.saverId)
+        }
         Button {
           text: root.deleteArmed ? "Really delete" : "Delete"
           iconText: "󰆴"
@@ -94,6 +185,76 @@ BorderSurface {
           tooltipText: root.deleteArmed ? "Removes it and every rule pointing at it" : "Delete this saver; Add can make another"
           onClicked: { if (root.deleteArmed) { if (root.body) root.body.deleteSaver(root.saverId) } else root.armDelete() }
         }
+      }
+    }
+
+    // ---- the description: its words, changed and drawn again ----
+    Column {
+      visible: root.described
+      width: parent.width
+      spacing: Style.space(6)
+      PanelSectionHeader { text: "DESCRIPTION"; foreground: root.foreground; fontFamily: root.fontFamily }
+      TextField {
+        id: describeField
+        width: parent.width
+        foreground: root.foreground
+        font.family: root.fontFamily
+        placeholderText: "a robot waving hello, pixel-art style"
+        onAccepted: root.drawAgain(true)
+        Keys.onEscapePressed: focus = false
+      }
+      Row {
+        spacing: Style.space(8)
+        ButtonGroup {
+          anchors.verticalCenter: parent.verticalCenter
+          options: [{ value: "animation", label: "an animation" }, { value: "still", label: "a still" }]
+          value: root.describeAnimated ? "animation" : "still"
+          foreground: root.foreground
+          fontFamily: root.fontFamily
+          focusable: false
+          onChanged: function(v) { root.describeAnimated = v === "animation" }
+        }
+        // Change it keeps the drawing there is as the starting point; Draw
+        // it again starts over from the words alone.
+        Button {
+          anchors.verticalCenter: parent.verticalCenter
+          visible: root.hasDrawing
+          enabled: describeField.text.trim() !== ""
+          opacity: enabled ? 1 : 0.45
+          text: "Change it"
+          iconText: "󰏫"
+          bordered: true
+          selected: enabled
+          foreground: root.foreground
+          fontFamily: root.fontFamily
+          fontSize: Style.font.caption
+          tooltipText: "Starts from the drawing you have and changes it to match the words"
+          onClicked: root.drawAgain(true)
+        }
+        Button {
+          anchors.verticalCenter: parent.verticalCenter
+          enabled: !root.importing && describeField.text.trim() !== ""
+          opacity: enabled ? 1 : 0.45
+          text: root.hasDrawing ? "Draw it again" : "Draw it"
+          iconText: root.hasDrawing ? "󰑐" : "󰏫"
+          bordered: true
+          selected: enabled && !root.hasDrawing
+          foreground: root.foreground
+          fontFamily: root.fontFamily
+          fontSize: Style.font.caption
+          tooltipText: root.hasDrawing ? "Starts over from the words alone" : (root.describedPictures > 0 ? "From the same " + (root.describedPictures === 1 ? "picture" : "pictures") + ", under this tile" : "Under this tile")
+          onClicked: root.drawAgain(false)
+        }
+      }
+      Text {
+        visible: root.describedPictures > 0
+        width: parent.width
+        textFormat: Text.PlainText
+        wrapMode: Text.WordWrap
+        text: "Drawn from " + (root.describedPictures === 1 ? "a picture" : root.describedPictures + " pictures") + " you attached."
+        color: root.dim
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.caption
       }
     }
 

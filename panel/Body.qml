@@ -1,4 +1,5 @@
 import QtQuick
+import Quickshell
 import qs.Commons
 import qs.Ui
 import "../StellineModel.js" as M
@@ -54,6 +55,14 @@ Column {
   readonly property int screensaverNow: svc ? svc.screensaverTimeoutSeconds : screensaverSeconds
   readonly property int lockNow: svc ? svc.lockTimeoutSeconds : lockSeconds
   readonly property bool adding: !!(svc && svc.importDraft)
+  // What the hero names and Preview shows: the rule's saver, the shuffle,
+  // or the chosen one — the same answer the screensaver itself gives.
+  readonly property var situationNow: svc ? svc.situation : null
+  readonly property string playingName: M.playingName(cfg, situationNow, userSavers)
+  readonly property bool shuffling: cfg.shuffle && !(situationNow && situationNow.saver)
+  // Shuffle on with nothing ticked plays everything; the row says so.
+  readonly property bool shuffleUnticked: cfg.shuffle && M.rotation(cfg, userSavers).length === savers.filter(function(s) { return s.kind !== "external" }).length && (cfg.shuffleFrom || []).filter(function(id) { return savers.some(function(s) { return s.id === id && s.kind !== "external" }) }).length === 0
+  readonly property real inertOpacity: serviceOk ? 1 : 0.45
   readonly property var openSaver: openSettings !== "" ? M.saverById(openSettings, userSavers) : null
   readonly property int columns: 3
   readonly property int tileGap: Style.space(6)
@@ -75,7 +84,9 @@ Column {
   // a "+N / Show all" tile; the panel opens collapsed again each time.
   property bool gridExpanded: false
   readonly property int gridCap: columns * 4 - 1
-  readonly property bool gridCapped: !gridExpanded && savers.length > gridCap
+  // Past the cap the grid ends in one tile that folds it either way.
+  readonly property bool gridToggle: savers.length > gridCap
+  readonly property bool gridCapped: !gridExpanded && gridToggle
   readonly property var shownSavers: gridCapped ? savers.slice(0, gridCap - 1) : savers
   readonly property int hiddenCount: savers.length - shownSavers.length
 
@@ -93,8 +104,8 @@ Column {
   readonly property int rowDockedLock: hasLaptopRows ? (batteryRowsOpen ? 7 : 5) : -1
   readonly property int rowPreview: rowLock + 1 + (hasLaptopRows ? 2 : 0) + (batteryRowsOpen ? 2 : 0)
   readonly property int rowTileFirst: rowPreview + 1
-  readonly property int tileCount: shownSavers.length + (gridCapped ? 1 : 0) + 1
-  readonly property int rowMore: gridCapped ? rowTileFirst + shownSavers.length : -1
+  readonly property int tileCount: shownSavers.length + (gridToggle ? 1 : 0) + 1
+  readonly property int rowMore: gridToggle ? rowTileFirst + shownSavers.length : -1
   readonly property int rowShuffle: rowTileFirst + tileCount
   readonly property int rowShortcuts: rowShuffle + 1
   readonly property int rowCount: rowShortcuts + 1
@@ -164,6 +175,7 @@ Column {
     if (adding) revealEditor.restart()
     if (svc && typeof svc.refreshThemes === "function") svc.refreshThemes()
     if (svc && typeof svc.probeIpcOwner === "function") svc.probeIpcOwner()
+    if (svc && typeof svc.probeHotkey === "function") svc.probeHotkey()
     if (svc && typeof svc.rescan === "function") svc.rescan()
     if (svc && typeof svc.refreshAi === "function") svc.refreshAi()
   }
@@ -179,6 +191,12 @@ Column {
     if (!isHovered) return
     cursorActive = true
     cursorIndex = index
+  }
+
+  function foldGrid() {
+    gridExpanded = !gridExpanded
+    // The tail tile moves when the grid folds; the cursor stays on it.
+    cursorIndex = rowMore
   }
 
   function inTiles(index) { return index >= rowTileFirst && index < rowShuffle }
@@ -218,7 +236,7 @@ Column {
     if (cursorIndex === rowHero) setScreensaver(!screensaverOn)
     else if (cursorIndex === rowStayAwake) toggleStayAwake()
     else if (cursorIndex === rowPreview) preview("")
-    else if (cursorIndex === rowMore) gridExpanded = true
+    else if (cursorIndex === rowMore) foldGrid()
     else if (inTiles(cursorIndex)) { var id = cursorSaverId(); if (id === "") startAdd(); else chooseSaver(id) }
     else if (cursorIndex === rowShuffle) toggleShuffle()
     else if (cursorIndex === rowLock) setStage("lockEnabled", !cfg.lockEnabled)
@@ -248,7 +266,7 @@ Column {
 
   // ---- actions (all through the service) ----
   function preview(id) {
-    if (svc && typeof svc.showOverlay === "function") svc.showOverlay(id && id !== "" ? id : cfg.saver, "preview")
+    if (svc && typeof svc.previewSaver === "function") svc.previewSaver(id && id !== "" ? id : "", "preview")
   }
   function chooseSaver(id) {
     if (!svc) return
@@ -259,6 +277,7 @@ Column {
     // you stopped looking at.
     if (openSettings !== "") openSettings = id
     if (cfg.shuffle) {
+      if (s && s.kind === "external") return
       var set = (cfg.shuffleFrom || []).slice()
       var at = set.indexOf(id)
       if (at === -1) set.push(id); else set.splice(at, 1)
@@ -274,9 +293,7 @@ Column {
   function startAdd() {
     if (!svc) return
     openSettings = ""
-    var d = M.importDefaults()
-    d.step = "start"
-    svc.importDraft = d
+    svc.beginAdd()
   }
   function deleteSaver(id) {
     if (!svc) return
@@ -341,8 +358,8 @@ Column {
     title: "Stelline"
     meta: root.serviceOk
       ? (root.stayAwake ? "staying awake"
-        : (!root.screensaverOn ? "screensaver off" + (root.svc.lockStageEnabled ? ", lock at " + root.minutes(root.lockNow) : ", no lock")
-        : root.saver.name.toLowerCase() + " after " + root.minutes(root.screensaverNow)
+        : (!root.screensaverOn ? "screensaver off" + (root.svc.lockStageEnabled ? ", still locks at " + root.minutes(root.lockNow) : ", no lock")
+        : root.playingName.toLowerCase() + " after " + root.minutes(root.screensaverNow)
           + (root.svc.lockStageEnabled ? ", lock at " + root.minutes(root.lockNow) : ", no lock")
           + (root.svc.situation ? " · " + M.situationLabel(root.svc.situation).toLowerCase() : "")))
       : "not running yet — restart the shell"
@@ -357,15 +374,31 @@ Column {
         font.pixelSize: Style.font.display
       }
     }
-    trailingControl: Component {
-      ToggleSwitch {
-        checked: root.screensaverOn
-        interactive: root.serviceOk
-        hasCursor: root.cursorActive && root.cursorIndex === root.rowHero
-        foreground: root.foreground
-        onToggled: root.setScreensaver(!root.screensaverOn)
-        onHovered: function(h) { root.hoverRow(root.rowHero, h) }
-      }
+    // Without the service there is nothing to switch; what there is to do is
+    // restart the shell, so that is the control.
+    trailingControl: root.serviceOk ? masterSwitch : restartShell
+  }
+  Component {
+    id: masterSwitch
+    ToggleSwitch {
+      checked: root.screensaverOn
+      interactive: root.serviceOk
+      hasCursor: root.cursorActive && root.cursorIndex === root.rowHero
+      foreground: root.foreground
+      onToggled: root.setScreensaver(!root.screensaverOn)
+      onHovered: function(h) { root.hoverRow(root.rowHero, h) }
+    }
+  }
+  Component {
+    id: restartShell
+    Button {
+      text: "Restart shell"
+      iconText: "󰜉"
+      bordered: true
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      fontSize: Style.font.caption
+      onClicked: Quickshell.execDetached(["omarchy-restart-shell"])
     }
   }
 
@@ -380,9 +413,11 @@ Column {
   SwitchRow {
     id: stayAwakeToggle
     width: parent.width
+    enabled: root.serviceOk
+    opacity: root.inertOpacity
     glyph: "󰅶"
     label: "Stay awake"
-    description: root.stayAwake ? "No screensaver, no lock, until you turn this off" : "Also Super+Ctrl+I"
+    description: "No screensaver and no lock until you switch it back · Super+Ctrl+I"
     checked: root.stayAwake
     foreground: root.foreground
     fontFamily: root.fontFamily
@@ -399,6 +434,8 @@ Column {
   SliderRow {
     id: screensaverRow
     width: parent.width
+    enabled: root.serviceOk
+    opacity: root.inertOpacity
     bar: root.bar
     label: "Screensaver"
     value: root.screensaverSeconds
@@ -419,6 +456,8 @@ Column {
   SliderRow {
     id: lockRow
     width: parent.width
+    enabled: root.serviceOk
+    opacity: root.inertOpacity
     bar: root.bar
     label: "Lock"
     value: root.lockSeconds
@@ -444,6 +483,8 @@ Column {
   SwitchRow {
     id: batteryRow
     visible: root.hasLaptopRows
+    enabled: root.serviceOk
+    opacity: root.inertOpacity
     width: parent.width
     glyph: "󰁹"
     label: "Different timings on battery"
@@ -457,6 +498,8 @@ Column {
   }
   Column {
     visible: root.batteryRowsOpen
+    enabled: root.serviceOk
+    opacity: root.inertOpacity
     width: parent.width
     leftPadding: Style.space(24)
     spacing: Style.space(8)
@@ -506,6 +549,8 @@ Column {
   SwitchRow {
     id: dockedLockRow
     visible: root.hasLaptopRows
+    enabled: root.serviceOk
+    opacity: root.inertOpacity
     width: parent.width
     glyph: "󰍹"
     label: "Never lock while docked"
@@ -525,6 +570,8 @@ Column {
   // this is where you look for it.
   Item {
     width: parent.width
+    enabled: root.serviceOk
+    opacity: root.inertOpacity
     implicitHeight: Math.max(saversHeading.implicitHeight, previewButton.implicitHeight)
 
     PanelSectionHeader {
@@ -547,7 +594,7 @@ Column {
       fontFamily: root.fontFamily
       fontSize: Style.font.caption
       hasCursor: root.cursorActive && root.cursorIndex === root.rowPreview
-      tooltipText: "Show " + (root.saver ? root.saver.name : "it") + " now"
+      tooltipText: root.shuffling ? "Show one from the shuffle now" : "Show " + root.playingName + " now"
       onClicked: root.preview("")
       onHovered: function(h) { root.hoverRow(root.rowPreview, h) }
     }
@@ -556,6 +603,8 @@ Column {
   Grid {
     id: grid
     width: parent.width
+    enabled: root.serviceOk
+    opacity: root.inertOpacity
     columns: root.columns
     columnSpacing: root.tileGap
     rowSpacing: root.tileGap
@@ -566,7 +615,7 @@ Column {
 
       SaverTile {
         required property int index
-        readonly property bool isMore: root.gridCapped && index === root.shownSavers.length
+        readonly property bool isMore: root.gridToggle && index === root.shownSavers.length
         readonly property bool isAdd: !isMore && index >= root.shownSavers.length
         readonly property bool isTile: !isMore && !isAdd
         readonly property var entry: isTile ? root.shownSavers[index] : ({})
@@ -575,7 +624,9 @@ Column {
         svc: root.svc
         live: root.live
         addTile: isAdd
-        moreCount: isMore ? root.hiddenCount : 0
+        addHint: root.svc && String(root.svc.aiProvider || "") !== "" ? "describe, paste, pick" : "paste, pick, type"
+        moreCount: isMore && root.gridCapped ? root.hiddenCount : 0
+        fewerTile: isMore && !root.gridCapped
         selected: isTile && root.cfg.saver === entry.id
         shuffleMode: root.cfg.shuffle
         inRotation: isTile && (root.cfg.shuffleFrom || []).indexOf(entry.id) !== -1
@@ -584,7 +635,7 @@ Column {
         foreground: root.foreground
         fontFamily: root.fontFamily
         hasCursor: root.cursorActive && root.cursorIndex === root.rowTileFirst + index
-        onClicked: if (isMore) root.gridExpanded = true; else if (isAdd) root.startAdd(); else root.chooseSaver(entry.id)
+        onClicked: if (isMore) root.foldGrid(); else if (isAdd) root.startAdd(); else root.chooseSaver(entry.id)
         onPreviewRequested: root.preview(entry.id)
         onSettingsRequested: root.toggleSettings(entry.id)
         onHovered: function(h) { root.hoverRow(root.rowTileFirst + index, h) }
@@ -619,8 +670,11 @@ Column {
   SwitchRow {
     id: shuffleToggle
     width: parent.width
+    enabled: root.serviceOk
+    opacity: root.inertOpacity
     glyph: "󰒟"
     label: "Shuffle"
+    description: root.shuffleUnticked ? "Every saver — tick the ones you want" : ""
     checked: root.cfg.shuffle
     foreground: root.foreground
     fontFamily: root.fontFamily
@@ -635,6 +689,8 @@ Column {
   ShortcutsSection {
     id: shortcuts
     width: parent.width
+    enabled: root.serviceOk
+    opacity: root.inertOpacity
     body: root
     svc: root.svc
     foreground: root.foreground

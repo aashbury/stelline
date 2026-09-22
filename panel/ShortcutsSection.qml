@@ -11,6 +11,10 @@ Section {
   property var svc: null
   property var body: null
   property string menuNote: ""
+  // The copy button says it copied, for a moment.
+  property bool copied: false
+  Timer { id: copiedTimer; interval: 2500; onTriggered: root.copied = false }
+  readonly property bool hotkeyBound: svc ? svc.hotkeyBound === true : false
   readonly property string bindLine: 'o.bind("SUPER + CTRL + S", "Screensaver", "omarchy-shell stelline preview")'
 
   title: "Shortcuts"
@@ -35,13 +39,13 @@ Section {
     width: parent.width - parent.leftPadding - parent.rightPadding
     glyph: "󰌌"
     label: "Super+Ctrl+S starts it"
-    description: "A line for your key bindings file"
-    buttonText: "Copy the line"
-    buttonIcon: "󰆏"
+    description: root.hotkeyBound ? "Already in your key bindings" : "A line for your key bindings file"
+    buttonText: root.copied ? "Copied" : (root.hotkeyBound ? "Copy it again" : "Copy the line")
+    buttonIcon: root.copied ? "󰄬" : "󰆏"
     tooltipText: "~/.config/hypr/bindings.lua:  " + root.bindLine
     foreground: root.foreground
     fontFamily: root.fontFamily
-    onActivated: Quickshell.execDetached(["bash", "-c", 'printf %s "$1" | wl-copy', "_", root.bindLine])
+    onActivated: { Quickshell.execDetached(["bash", "-c", 'printf %s "$1" | wl-copy', "_", root.bindLine]); root.copied = true; copiedTimer.restart() }
   }
 
   ActionRow {

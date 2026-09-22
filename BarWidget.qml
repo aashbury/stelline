@@ -89,6 +89,20 @@ Panel {
       onDeleteRequested: body.remove()
       onTextKey: function(text) { body.hotkey(text) }
 
+      // A field that closes (Escape, Enter, a click elsewhere) hands the keys
+      // straight back to the panel.
+      Connections {
+        target: body
+        function onEditingChanged() { if (!body.editing) Qt.callLater(function() { keyCatcher.forceActiveFocus() }) }
+      }
+      // Ctrl+V with the Add card up pastes what was copied onto it: a
+      // picture or a file, straight to the card, from anywhere in the panel.
+      Shortcut {
+        sequences: [StandardKey.Paste]
+        enabled: root.opened && body.adding && !body.editing
+        onActivated: if (body.svc && String(body.svc.clipboardHas || "") !== "") body.svc.pasteClipboard()
+      }
+
       // An open field stays open until something else takes the focus, and
       // nothing else in the panel asks for it. So while one is open, a click
       // anywhere hands the focus back to the panel: the field closes, keeping

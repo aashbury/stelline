@@ -23,8 +23,12 @@ CursorSurface {
   // box the Add tile uses, so the row of tiles keeps its rhythm.
   property int moreCount: 0
   readonly property bool moreTile: moreCount > 0
-  readonly property bool plainTile: addTile || moreTile
+  // The same tail tile once the grid is open: it folds it back.
+  property bool fewerTile: false
+  readonly property bool plainTile: addTile || moreTile || fewerTile
   property string caption: ""
+  // What the Add tile invites, in the order that is quickest.
+  property string addHint: "describe, paste, pick"
   property string fontFamily: Style.font.family
   readonly property color dim: Qt.darker(foreground, 1.4)
   readonly property bool importing: !!(saver && saver.series && saver.series.importing)
@@ -97,7 +101,7 @@ CursorSurface {
         anchors.centerIn: parent
         visible: root.plainTile || !(root.saver && (root.saver.file || root.saver.thumb)) || root.importing || root.failed
         textFormat: Text.PlainText
-        text: root.moreTile ? "+" + root.moreCount : (root.addTile ? "+" : (root.importing ? "󰔟" : (root.failed ? "󰀦" : (root.saver && root.saver.glyph ? root.saver.glyph : ""))))
+        text: root.moreTile ? "+" + root.moreCount : (root.fewerTile ? "–" : (root.addTile ? "+" : (root.importing ? "󰔟" : (root.failed ? "󰀦" : (root.saver && root.saver.glyph ? root.saver.glyph : "")))))
         color: root.failed ? Color.urgent : (root.plainTile ? root.dim : root.foreground)
         font.family: root.fontFamily
         font.pixelSize: Style.font.display
@@ -120,12 +124,13 @@ CursorSurface {
       }
 
       // The shuffle checkbox. The usual saver needs no mark of its own: its
-      // surface is highlighted and its caption says so.
+      // surface is highlighted and its caption says so. The Original runs
+      // in its own window and cannot be in the rotation, so it has no box.
       Text {
         anchors.left: parent.left
         anchors.top: parent.top
         anchors.margins: Style.space(4)
-        visible: !root.plainTile && root.shuffleMode
+        visible: !root.plainTile && root.shuffleMode && !root.external
         textFormat: Text.PlainText
         text: (root.inRotation ? "󰄲" : "󰄱")
         color: Color.accent
@@ -166,7 +171,7 @@ CursorSurface {
     Text {
       width: parent.width
       textFormat: Text.PlainText
-      text: root.moreTile ? "Show all" : (root.addTile ? "Add" : (root.saver && root.saver.name ? root.saver.name : ""))
+      text: root.moreTile ? "Show all" : (root.fewerTile ? "Show fewer" : (root.addTile ? "Add" : (root.saver && root.saver.name ? root.saver.name : "")))
       color: root.foreground
       font.family: root.fontFamily
       font.pixelSize: Style.font.subtitle
@@ -175,8 +180,8 @@ CursorSurface {
     Text {
       width: parent.width
       textFormat: Text.PlainText
-      text: root.moreTile ? root.moreCount + " more" : (root.addTile ? "picture, clip, text" : (root.importing ? "importing…" : (root.failed ? "import failed" : (root.caption !== "" ? root.caption : root.metaLine))))
-      color: root.failed ? Color.urgent : (root.caption !== "" && !root.importing ? Color.accent : root.dim)
+      text: root.moreTile ? root.moreCount + " more" : (root.fewerTile ? "" : (root.addTile ? root.addHint : (root.importing || root.failed ? (root.saver && root.saver.meta ? root.saver.meta : "importing…") : (root.caption !== "" ? root.caption : root.metaLine))))
+      color: root.failed && !(root.saver && root.saver.meta === "stopped") ? Color.urgent : (root.caption !== "" && !root.importing ? Color.accent : root.dim)
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
       elide: Text.ElideRight
