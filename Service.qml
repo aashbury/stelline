@@ -117,9 +117,18 @@ Item {
     // empty screen with the clock in the middle, the same as the shipped one.
     if (next.source === "clock") writeSaverSetting(next.id, { background: "theme", widgets: { clock: { on: true, place: "centre" } } })
     else if (next.source === "empty") writeSaverSetting(next.id, { background: "theme" })
-    // A dot matrix asked to sit still shows every dot at once and breathes
-    // its colour; anything else cycles through the effects as usual.
-    else if (next.source === "images" && next.style !== "image" && (next.paths || []).length === 1 && next.animated === false) writeSaverSetting(next.id, { effects: ["pulse"] })
+    // Pictures carry the card's two choices into the saver's own settings.
+    // Still, a dot matrix shows every dot at once and breathes its colour;
+    // moving, it cycles through the effects as usual. A picture as it is
+    // pushes in slowly when moving and holds when still. Several come round
+    // shuffled unless asked to go in turn.
+    else if (next.source === "images" || next.source === "folder") {
+      var how = {}
+      if (next.style === "image") { if (next.animated !== false) how.motion = "zoom" }
+      else if (next.animated === false) how.effects = ["pulse"]
+      if (next.order === "shuffle" || next.order === "sequence") how.order = next.order
+      if (Object.keys(how).length) writeSaverSetting(next.id, how)
+    }
     root.importQueue = root.importQueue.concat([next])
     root.importDraft = null
     runNextImport()

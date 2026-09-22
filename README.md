@@ -177,11 +177,11 @@ question that is left open:
 | On the card | Becomes |
 |---|---|
 | **Words** | ASCII art drawn by your **default coding agent** (`omarchy default agent` — Claude Code, Codex, Gemini, OpenCode, Copilot, Crush, Pi, Oh My Pi or Grok), each in its one-shot mode with tools off or read-only where it has such a switch; Claude Code if no default is set; the Claude API with `ANTHROPIC_API_KEY` as a last resort. *Make it* an animation loop, a still, or **big letters** — block art of the words themselves, a wordmark of your own. With no agent about, words are big letters. |
-| **One picture** — pasted (a screenshot, a file, a folder copied in the file manager; Ctrl+V or the Paste button, which appears the moment the clipboard holds one), or picked with *Pictures or a clip…* | a dot matrix of whatever the picture is **of**. Your agent is asked one question — what is this a picture of, and where is it? — and the answer crops the conversion to the subject and settles which way round the tones run. *Make it* **moving** or **a still**; both are the same art, and see below. Or the picture as it is. Both ways are shown on the card before you choose. |
-| **Several pictures** | one piece each, held in turn |
+| **One picture** — pasted (a screenshot, a file, a folder copied in the file manager; Ctrl+V or the Paste button, which appears the moment the clipboard holds one), or picked with *Pictures or a clip…* | a dot matrix of the whole picture, exactly as the card's preview shows it — nothing is cropped and no agent is asked — or the picture as it is. Both ways are shown on the card before you choose. **Motion**: *animated* or *still* (a dot matrix lights up or breathes; a picture pushes in slowly or holds). |
+| **Several pictures** — paste or pick more onto the card; each shows as a thumbnail you can take off | one piece each, the same two ways and the same **Motion**, plus **Order**: *shuffled* (the default) or *in order*, a new one every 12 seconds |
 | **A folder** (*A folder…*) | the same, and a folder shown as-is is read live: drop a picture in, it joins |
 | **A clip** — a video or a GIF on its own | an ASCII animation, frame by frame (the first 20 s at 10 fps) — or the clip as it is, as an animated picture |
-| **Words and a picture** | the picture is the subject; the words name the saver. A picture is never handed to an agent to redraw — an agent invents, and the transcoder copies, so the likeness comes from the transcoder. |
+| **Words and a picture** | a prompt: your agent draws from the picture — up to four of them — the way the words ask, as *an animation* or *a still*. Needs an agent that can be handed a picture (Claude Code, Codex, Gemini, or the Claude API); with any other, the words name the saver and the picture is converted as it is. An agent redraws rather than copies, so for a true likeness leave the words empty. |
 | *a clock* · *an empty screen* (the quiet line at the right) | an empty screen with the clock widget in the middle, the same as the shipped Clock; or an empty screen in the theme's background, for whatever you put on top |
 
 ### Moving, or a still
@@ -263,9 +263,7 @@ by spending frames:
 
 With a picture attached, the picture is converted to that grid first and
 handed over as the starting point, so the proportions come from the
-transcoder rather than the model's memory. It is cropped to its subject
-first, so a figure off to one side fills the grid instead of sitting in a
-corner. That also means **any** agent can work from a picture, including
+transcoder rather than the model's memory. That also means **any** agent can work from a picture, including
 the ones that cannot open a file.
 
 One honest limit: an agent redraws, it does not copy. For a true likeness

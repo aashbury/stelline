@@ -1323,7 +1323,7 @@ function scanScript(rootDir) {
 // text | prompt | clock | empty (the last two have nothing to convert).
 // `style`: ascii (theme-coloured text art) | image (the pictures as they are).
 function importDefaults() {
-  return { id: "", name: "", source: "", paths: [], words: "", text: "", prompt: "", style: "ascii", fps: 10, seconds: 20, animated: true, letters: false, frames: 12 }
+  return { id: "", name: "", source: "", paths: [], words: "", text: "", prompt: "", style: "ascii", fps: 10, seconds: 20, animated: true, letters: false, frames: 12, order: "shuffle" }
 }
 
 // ---- the composer ----------------------------------------------------------
@@ -1389,10 +1389,23 @@ function attachmentLabel(draft, stageDir) {
   return stageDir && draft.paths[0].indexOf(stageDir) === 0 ? "pasted picture" : baseName(draft.paths[0])
 }
 
-// One picture, converted as a dot matrix: the only conversion that can be
-// still or moving, so the only one the card asks about.
+// Pictures, one or many, from a pick or a folder, can move or sit still in
+// either style: a dot matrix lights up or breathes, a picture pushes in
+// slowly or holds. A clip already moves, so it is not asked.
 function canMove(draft, mode) {
-  return mode === "pictures" && Array.isArray(draft.paths) && draft.paths.length === 1 && draft.style !== "image"
+  return mode === "pictures" || mode === "folder"
+}
+// More than one picture can come round in turn or shuffled.
+function canOrder(draft, mode) {
+  return mode === "folder" || (mode === "pictures" && Array.isArray(draft.paths) && draft.paths.length > 1)
+}
+
+// One picture taken off the card; the last one gone leaves words alone.
+function removePicture(draft, path) {
+  var d = isPlainObject(draft) ? cloneJson(draft) : importDefaults()
+  d.paths = (Array.isArray(d.paths) ? d.paths : []).filter(function(p) { return p !== path })
+  if (d.paths.length === 0) d.source = ""
+  return d
 }
 
 // What the card would make of what it holds: "" when nothing yet.
@@ -1402,8 +1415,10 @@ function composeMode(draft, ai) {
   var has = !!draft.source && Array.isArray(draft.paths) && draft.paths.length > 0
   if (!words && !has) return ""
   if (!has) return ai && !draft.letters ? "describe" : "letters"
-  // A picture is the subject. Words alongside it name the saver; a picture
-  // is never handed to the agent to redraw.
+  // Words with pictures are a prompt: the agent draws from the pictures the
+  // way the words ask, where it can be handed a picture at all. Otherwise
+  // the words name the saver and the pictures are converted as they are.
+  if (words && draft.source === "images" && seesPictures(ai)) return "describe-pictures"
   return draft.source === "folder" ? "folder" : (draft.source === "video" ? "clip" : "pictures")
 }
 
@@ -1441,10 +1456,11 @@ function composeSpec(draft, ai, stageDir) {
   spec.source = draft.source
   spec.paths = paths
   spec.style = draft.style === "image" ? "image" : "ascii"
-  // One picture as ASCII can be still or gently moving.
-  // One picture as a dot matrix can move or sit still; the service turns
-  // that into the saver's own effect setting.
-  if (mode === "pictures" && spec.style === "ascii" && paths.length === 1) spec.animated = draft.animated !== false
+  // Pictures move or sit still, and several come round shuffled or in turn;
+  // the service turns both into the saver's own settings.
+  if (canMove(draft, mode)) spec.animated = draft.animated !== false
+  if (canOrder(draft, mode)) spec.order = draft.order === "sequence" ? "sequence" : "shuffle"
+  else delete spec.order
   var pasted = stageDir && paths.length === 1 && paths[0].indexOf(stageDir) === 0
   spec.name = words ? shortName(words) : (pasted ? "Pasted picture" : suggestName(paths, "New saver"))
   return spec
@@ -1537,123 +1553,11 @@ function aiPrompt(description, plan, pictures, previous) {
   return lines.filter(function(l) { return l !== "" }).join("\n")
 }
 
-// The picture, converted to the grid the model will work on. Two passes:
-// the first finds where the subject actually sits, in cells; the picture is
-// cropped to that; the second fills the grid with it. Without the crop a
-// subject off to one side arrives as a narrow strip in the corner of a wide
-// grid. Blocks, not braille: the model has to be able to edit this.
-// Prints the art; the caller measures it, since fitting keeps the aspect.
-var BOX_OF = [
-  "box_of() {",
-  "  awk '{ n=length($0); if (n>w) w=n; for (i=1;i<=n;i++) if (substr($0,i,1)!=\" \") { if (lo==0||i<lo) lo=i; if (i>hi) hi=i; if (top==0) top=NR; bot=NR } }",
-  "       END { if (top==0) exit 1; print lo, hi, top, bot, w, NR }' \"$1\"",
-  "}"
-].join("\n")
-
-// Where the subject sits in a picture, as a pixel box with a little air
-// around it. Both the conversion and the sway crop to this first, so a
-// figure off to one side fills the frame instead of sitting in a corner.
-var CROP_TO_SUBJECT = [
-  "crop_to_subject() {",
-  "  local src=$1 out=$2 cols=$3 rows=$4 mode=$5 flags=$6 lo hi top bot w1 h1 iw ih x0 x1 y0 y1 pad",
-  "  omarchy-transcode-ascii \"$src\" \"$tmp/probe.txt\" --width \"$cols\" --height \"$rows\" --mode \"$mode\" --no-trim $flags >/dev/null 2>&1 || return 1",
-  "  read -r lo hi top bot w1 h1 <<<\"$(box_of \"$tmp/probe.txt\")\" || return 1",
-  "  read -r iw ih <<<\"$(magick \"$src\" -format '%w %h' info: 2>/dev/null)\"",
-  "  [[ ${lo:-0} -gt 0 && ${w1:-0} -gt 0 && ${h1:-0} -gt 0 && ${iw:-0} -gt 0 && ${ih:-0} -gt 0 ]] || return 1",
-  "  x0=$(( (lo - 1) * iw / w1 )); x1=$(( hi * iw / w1 ))",
-  "  y0=$(( (top - 1) * ih / h1 )); y1=$(( bot * ih / h1 ))",
-  "  pad=$(( (x1 - x0) / 12 ))",
-  "  (( x0 -= pad )); (( x0 < 0 )) && x0=0",
-  "  (( y0 -= pad )); (( y0 < 0 )) && y0=0",
-  "  (( x1 += pad )); (( x1 > iw )) && x1=$iw",
-  "  (( y1 += pad )); (( y1 > ih )) && y1=$ih",
-  "  (( x1 - x0 > 32 && y1 - y0 > 32 )) || return 1",
-  "  magick \"$src\" -crop \"$((x1-x0))x$((y1-y0))+$x0+$y0\" +repage \"$out\" 2>/dev/null",
-  "}"
-].join("\n")
-
 // Which agent answers, the same way the described savers pick one.
 var AGENT_PICK = [
   "agent=$(omarchy-default-agent 2>/dev/null || true)",
   "[[ -n $agent ]] && command -v \"$agent\" >/dev/null 2>&1 || agent=''",
   "[[ -z $agent ]] && command -v claude >/dev/null 2>&1 && agent=claude"
-].join("\n")
-
-// ---- the subject -----------------------------------------------------------
-//
-// A picture should become a likeness of the thing it is a picture of, not of
-// the whole frame. This is the one question an agent is genuinely good at
-// here: not drawing, looking. It answers with a box and which way round the
-// tones run, and everything after that is arithmetic.
-
-function subjectPrompt(name) {
-  return [
-    "Look at " + name + " and find the one thing the picture is of: the person, the animal, the object someone would say it is a picture of.",
-    "Answer with one line of JSON and nothing else:",
-    '{"subject":"a short name for it","box":[x0,y0,x1,y1],"tone":"light-on-dark"}',
-    "The box is where that thing sits: x from 0 at the left edge to 1 at the right, y from 0 at the top to 1 at the bottom. Tight around it, but do not cut any of it off.",
-    "tone is \"light-on-dark\" when the thing is brighter than what is behind it, \"dark-on-light\" when it is darker.",
-    "Answer {} on its own if there is no one clear subject."
-  ].join("\n")
-}
-
-// The answer, or null when there is nothing usable in it. A box has to be
-// four fractions in order and big enough to be worth cropping to.
-function parseSubject(text) {
-  var m = String(text || "").replace(/\s+/g, " ").match(/\{[^{}]*\}/)
-  if (!m) return null
-  var j
-  try { j = JSON.parse(m[0]) } catch (e) { return null }
-  if (!isPlainObject(j)) return null
-  var raw = Array.isArray(j.box) ? j.box.map(Number) : null
-  var box = raw && raw.length === 4 && raw.every(function(v) { return isFinite(v) && v >= 0 && v <= 1 })
-    && raw[2] - raw[0] > 0.05 && raw[3] - raw[1] > 0.05 ? raw : null
-  var tone = j.tone === "dark-on-light" || j.tone === "light-on-dark" ? j.tone : ""
-  var name = typeof j.subject === "string" ? j.subject.trim() : ""
-  if (!box && !tone && name === "") return null
-  return { subject: name, box: box, tone: tone }
-}
-
-// Only the agents that can open a picture are asked; anything else answers
-// nothing and the lit area is used instead.
-var ASK_SUBJECT = [
-  "ask_subject() {",
-  "  local out=''",
-  "  case \"$agent\" in",
-  "    claude) out=$(timeout 180 env -u CLAUDECODE claude -p \"$subjectprompt\" --output-format text --tools Read --no-session-persistence --effort low </dev/null 2>\"$tmp/subject.err\") ;;",
-  "    codex) timeout 180 env -u CLAUDECODE codex exec --skip-git-repo-check --ephemeral -s read-only -c model_reasoning_effort=low -i \"$1\" -o \"$tmp/subject.out\" \"$subjectprompt\" >/dev/null 2>&1 && out=$(cat \"$tmp/subject.out\" 2>/dev/null) ;;",
-  "    gemini) out=$(timeout 180 gemini -p \"$subjectprompt\" -o text --approval-mode plan --include-directories \"$PWD\" </dev/null 2>\"$tmp/subject.err\") ;;",
-  "  esac",
-  "  printf '%s' \"$out\" | tr -d '\\n' | grep -o '{[^{}]*}' | tail -n1",
-  "}"
-].join("\n")
-
-// The subject, as dots: cropped to the agent's box when there is one and to
-// the lit area otherwise, then one pass of the transcoder and nothing after
-// it. Quantised once, so there is nothing left to drift.
-var SUBJECT_ART = [
-  BOX_OF,
-  CROP_TO_SUBJECT,
-  "subject_art() {",
-  "  local src=$1 out=$2 cols=$3 rows=$4 flags=$5 box=$6 iw ih crop cropped=0",
-  "  if [[ -n $box ]]; then",
-  "    read -r iw ih <<<\"$(magick \"$src\" -format '%w %h' info: 2>/dev/null)\"",
-  "    crop=$(awk -v b=\"$box\" -v w=\"${iw:-0}\" -v h=\"${ih:-0}\" 'BEGIN {",
-  "      n = split(b, a, \" \"); if (n != 4 || w < 16 || h < 16) exit 1",
-  "      x0 = a[1] * w; y0 = a[2] * h; x1 = a[3] * w; y1 = a[4] * h",
-  "      pad = (x1 - x0) / 14",
-  "      x0 -= pad; x1 += pad; y0 -= pad; y1 += pad",
-  "      if (x0 < 0) x0 = 0; if (y0 < 0) y0 = 0; if (x1 > w) x1 = w; if (y1 > h) y1 = h",
-  "      if (x1 - x0 < 32 || y1 - y0 < 32) exit 1",
-  "      printf \"%dx%d+%d+%d\", x1 - x0, y1 - y0, x0, y0 }')",
-  "    if [[ -n $crop ]] && magick \"$src\" -crop \"$crop\" +repage \"$tmp/subject.png\" 2>/dev/null; then src=$tmp/subject.png; cropped=1; fi",
-  "  fi",
-  "  if (( ! cropped )); then",
-  "    crop_to_subject \"$src\" \"$tmp/subject.png\" \"$cols\" \"$rows\" braille \"$flags\" && src=$tmp/subject.png",
-  "  fi",
-  "  omarchy-transcode-ascii \"$src\" \"$out\" --width \"$cols\" --height \"$rows\" --mode braille --no-trim $flags >/dev/null 2>&1 || return 1",
-  "  [[ -s $out ]]",
-  "}"
 ].join("\n")
 
 // What a described saver is drawn with, from the settings: the agent's own
@@ -1884,9 +1788,6 @@ function importScript(spec, rootDir, stageDir) {
   var listTxt = "pieces=$(ls -1 \"$dir\"/*.txt 2>/dev/null | xargs -rn1 basename | jq -R . | jq -sc .); [[ $pieces != '[]' ]] || fail 'nothing could be converted'"
   var paths = (spec.paths || []).map(q).join(" ")
   var style = spec.style === "image" ? "image" : "ascii"
-  // One picture on its own is a likeness of its subject: the agent is asked
-  // where that subject is, and the conversion happens once.
-  var one = spec.source === "images" && style === "ascii" && (spec.paths || []).length === 1
   // A pasted picture lives in the runtime directory, gone at logout: it is
   // copied into the saver, and saver.json names the copy.
   var keep = function(arr) {
@@ -1904,31 +1805,7 @@ function importScript(spec, rootDir, stageDir) {
     lines.push("(( ${#srcs[@]} > 0 )) || fail 'no pictures found'")
     if (spec.source === "images") lines.push(keep("srcs"), srcJson("srcs"))
     else lines.push("srcjson=" + q(JSON.stringify(spec.paths || [])))
-    if (one) {
-      lines.push(
-        SUBJECT_ART,
-        ASK_SUBJECT,
-        AGENT_PICK,
-        "prep \"${srcs[0]}\" \"$tmp/one.png\"",
-        "src=$prep_path; flags=$prep_flags; box=''",
-        // The agent is asked where the subject is, from a copy it is allowed
-        // to open. Its answer also settles which way round the tones run,
-        // which a mean brightness gets wrong on a dark subject in a bright scene.
-        "if [[ -n $agent ]]; then",
-        "  mkdir -p \"$tmp/pics\" && cp -f \"$src\" \"$tmp/pics/picture.png\" 2>/dev/null",
-        "  subjectprompt=" + q(subjectPrompt("picture.png")),
-        "  found=$( cd \"$tmp/pics\" 2>/dev/null && ask_subject \"$tmp/pics/picture.png\" )",
-        // A silent agent is a mystery at the wrong moment; say why in the log.
-        "  [[ -n $found ]] || echo \"subject: $agent said nothing — $(tail -c 200 \"$tmp/subject.err\" 2>/dev/null | tr -s '\\n ' ' ')\" >&2",
-        "  if [[ -n $found ]]; then",
-        "    box=$(jq -r 'if (.box | type) == \"array\" and (.box | length) == 4 then (.box | map(tostring) | join(\" \")) else empty end' <<<\"$found\" 2>/dev/null)",
-        "    case $(jq -r '.tone // empty' <<<\"$found\" 2>/dev/null) in light-on-dark) flags=--invert ;; dark-on-light) flags='' ;; esac",
-        "  fi",
-        "fi",
-        "subject_art \"$src\" \"$dir/001.txt\" " + ASCII_COLUMNS + " " + ASCII_ROWS + " \"$flags\" \"$box\" || fail 'that picture could not be converted'",
-        finish("--argjson srcs \"$srcjson\" '.pieces=[\"001.txt\"] | .play=\"slideshow\" | .source.paths=$srcs'")
-      )
-    } else if (style === "image") {
+    if (style === "image") {
       if (spec.source === "folder") lines.push(finish("--arg folder " + paths + " '.folder=$folder'"))
       else lines.push(finish("--argjson srcs \"$srcjson\" '.pieces=$srcs | .source.paths=$srcs'"))
     } else {
@@ -2343,8 +2220,6 @@ if (typeof module !== "undefined") {
     agentName: agentName,
     aiPrompt: aiPrompt,
     aiSystem: aiSystem,
-    subjectPrompt: subjectPrompt,
-    parseSubject: parseSubject,
     artPlan: artPlan,
     wantsDetail: wantsDetail,
     describeSettings: describeSettings,
@@ -2364,6 +2239,8 @@ if (typeof module !== "undefined") {
     seesPictures: seesPictures,
     composeMode: composeMode,
     canMove: canMove,
+    canOrder: canOrder,
+    removePicture: removePicture,
     composeSpec: composeSpec,
     shortName: shortName,
     redescribeSpec: redescribeSpec,

@@ -712,17 +712,23 @@ test("composeMode: what the card makes follows from what it holds", () => {
   assert.equal(M.composeMode({ ...empty, words: "a robot", letters: true }, "agent:claude"), "letters")
   const pics = { ...empty, source: "images", paths: ["/p/a.png"] }
   assert.equal(M.composeMode(pics, "agent:claude"), "pictures")
-  // a picture is the subject: words describe how it moves, they do not hand
-  // it to the agent to redraw
-  assert.equal(M.composeMode({ ...pics, words: "make it snow" }, "agent:claude"), "pictures")
+  // words with a picture are a prompt, for an agent that can look at one
+  assert.equal(M.composeMode({ ...pics, words: "make it snow" }, "agent:claude"), "describe-pictures")
+  // with no agent, or one that cannot be handed a picture, the words name it
   assert.equal(M.composeMode({ ...pics, words: "make it snow" }, ""), "pictures")
-  // a picture is never handed to the agent to redraw, however it is asked
+  assert.equal(M.composeMode({ ...pics, words: "make it snow" }, "agent:pi"), "pictures")
+  // no words: the picture is converted as it is
   assert.equal(M.composeMode({ ...pics, drawn: true }, "agent:claude"), "pictures")
-  // only one picture, as a dot matrix, can be asked to move or sit still
+  // pictures, one or many, either style, can move or sit still; a clip is not asked
   assert.equal(M.canMove(pics, "pictures"), true)
-  assert.equal(M.canMove({ ...pics, paths: ["/p/a.png", "/p/b.png"] }, "pictures"), false)
-  assert.equal(M.canMove({ ...pics, style: "image" }, "pictures"), false)
-  assert.equal(M.canMove(pics, "folder"), false)
+  assert.equal(M.canMove({ ...pics, paths: ["/p/a.png", "/p/b.png"] }, "pictures"), true)
+  assert.equal(M.canMove({ ...pics, style: "image" }, "pictures"), true)
+  assert.equal(M.canMove(pics, "folder"), true)
+  assert.equal(M.canMove(pics, "clip"), false)
+  // only more than one picture has an order to choose
+  assert.equal(M.canOrder(pics, "pictures"), false)
+  assert.equal(M.canOrder({ ...pics, paths: ["/p/a.png", "/p/b.png"] }, "pictures"), true)
+  assert.equal(M.canOrder(pics, "folder"), true)
   assert.equal(M.composeMode({ ...empty, source: "folder", paths: ["/p/h"], words: "x" }, "agent:claude"), "folder")
   assert.equal(M.composeMode({ ...empty, source: "video", paths: ["/p/c.mp4"] }, "agent:claude"), "clip")
   assert.equal(M.seesPictures("agent:codex"), true)
@@ -917,57 +923,6 @@ test("wantsDetail reads the subject's own words", () => {
 })
 
 
-// ---- the subject, as dots ----
-
-test("the subject request asks where the thing is, and nothing else", () => {
-  const p = M.subjectPrompt("picture.png")
-  assert.match(p, /Look at picture\.png/)
-  assert.match(p, /one line of JSON and nothing else/)
-  assert.match(p, /"box":\[x0,y0,x1,y1\]/)
-  assert.match(p, /light-on-dark/)
-  // not knowing is a valid answer
-  assert.match(p, /\{\} on its own if there is no one clear subject/)
-})
-
-test("parseSubject keeps a usable box and throws the rest away", () => {
-  const good = M.parseSubject('here you go {"subject":"a woman","box":[0.4,0.1,0.9,1],"tone":"light-on-dark"} ok')
-  assert.deepEqual(good, { subject: "a woman", box: [0.4, 0.1, 0.9, 1], tone: "light-on-dark" })
-  // a box has to be four fractions, in order, and big enough to crop to
-  assert.equal(M.parseSubject('{"box":[0.4,0.1,0.41,0.9]}'), null)
-  assert.equal(M.parseSubject('{"box":[0.4,0.1,2,0.9]}'), null)
-  assert.equal(M.parseSubject('{"box":[0.1,0.1,0.9]}'), null)
-  assert.equal(M.parseSubject('{"box":"nope"}'), null)
-  // a tone or a name on its own is still worth having
-  assert.deepEqual(M.parseSubject('{"tone":"dark-on-light"}'), { subject: "", box: null, tone: "dark-on-light" })
-  assert.equal(M.parseSubject("{}"), null)
-  assert.equal(M.parseSubject("no json at all"), null)
-  assert.equal(M.parseSubject(""), null)
-})
-
-test("one picture becomes one dot matrix of its subject, and nothing moves", () => {
-  const spec = { ...M.importDefaults(), id: "d", name: "D", source: "images", paths: ["/p/a.png"], style: "ascii" }
-  const s = M.importScript(spec, "/home/u/savers")
-  // the agent is asked where the subject is, from a copy it may open
-  assert.ok(s.includes('cp -f "$src" "$tmp/pics/picture.png"'))
-  // the prompt names it by the local name, the argument by a real path,
-  // because Codex takes the file itself and Claude Code reads its own folder
-  assert.ok(s.includes('ask_subject "$tmp/pics/picture.png"'))
-  assert.ok(s.includes("Look at picture.png"))
-  // a silent agent says why, in the log
-  assert.ok(s.includes("said nothing"))
-  // its answer settles the crop and which way round the tones run
-  assert.ok(s.includes("subject_art \"$src\" \"$dir/001.txt\" 160 64"))
-  assert.ok(s.includes("light-on-dark) flags=--invert"))
-  // one piece, played as a slideshow, so the effects engine animates it
-  assert.ok(s.includes('.pieces=["001.txt"] | .play="slideshow"'))
-  // and none of the machinery that used to move the dots about
-  for (const gone of ["sway_art", "figure_art", "shear_rot", "-distort Shepards", "===BASE===", "ask_pose"])
-    assert.ok(!s.includes(gone), gone + " should be gone")
-  // no agent, or it declines: the lit area is cropped to instead
-  assert.ok(s.includes("crop_to_subject"))
-  assert.ok(s.includes("box_of"))
-})
-
 test("several pictures and folders are left alone", () => {
   const two = M.importScript({ ...M.importDefaults(), id: "t", name: "T", source: "images", paths: ["/p/a.png", "/p/b.png"], style: "ascii" }, "/home/u/savers")
   assert.ok(!two.includes("ask_subject"))
@@ -1029,4 +984,34 @@ test("block characters become the braille cell holding the same dots", () => {
   assert.equal(M.blocksToBraille("ab ⣿·|\n─"), "ab ⣿·|\n─")
   assert.equal(M.blocksToBraille(""), "")
   assert.equal(M.blocksToBraille(null), "")
+})
+
+test("pictures carry motion and order into the spec, and come off one at a time", () => {
+  const two = { ...M.importDefaults(), source: "images", paths: ["/p/a.png", "/p/b.png"], style: "image", animated: false }
+  const spec = M.composeSpec(two, "", "")
+  assert.equal(spec.animated, false)
+  assert.equal(spec.order, "shuffle")
+  assert.equal(M.composeSpec({ ...two, order: "sequence" }, "", "").order, "sequence")
+  // one picture has no order to carry
+  assert.equal(M.composeSpec({ ...two, paths: ["/p/a.png"] }, "", "").order, undefined)
+  const one = M.removePicture(two, "/p/a.png")
+  assert.deepEqual(one.paths, ["/p/b.png"])
+  assert.equal(one.source, "images")
+  assert.equal(M.removePicture(one, "/p/b.png").source, "")
+})
+
+test("a picture is converted as it is: no agent is asked, nothing is cropped", () => {
+  const sh = M.importScript({ id: "x", source: "images", paths: ["/p/a.png"], style: "ascii", name: "A" }, "/r", "/s")
+  assert.doesNotMatch(sh, /subject|crop/)
+  assert.match(sh, /omarchy-transcode-ascii "\$prep_path"/)
+})
+
+test("words with pictures ask the agent to draw from them", () => {
+  const d = { ...M.importDefaults(), source: "images", paths: ["/p/a.png", "/p/b.png"], words: "the dog, snowing", animated: false }
+  const spec = M.composeSpec(d, "agent:claude", "")
+  assert.equal(spec.source, "prompt")
+  assert.equal(spec.prompt, "the dog, snowing")
+  assert.deepEqual(spec.paths, ["/p/a.png", "/p/b.png"])
+  assert.equal(spec.animated, false)
+  assert.equal(spec.name, "the dog")
 })

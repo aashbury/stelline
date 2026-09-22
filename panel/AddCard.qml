@@ -5,11 +5,11 @@ import "../savers"
 import "../StellineModel.js" as M
 
 // Adding a saver is one card. Say what it should show, or attach a picture,
-// or both; what gets made follows from what is there, and the card asks
-// only the one question that is left open. Words alone are drawn by your
-// agent, or set in big letters. A picture is the subject: it becomes a dot
-// matrix of whatever it is a picture of, and you see both ways of showing it
-// before choosing. Words alongside a picture name it. The draft lives in the
+// or both; what gets made follows from what is there. Words alone are drawn
+// by your agent, or set in big letters. Pictures — one or as many as you
+// like — are shown exactly as the preview shows them, nothing cropped: you
+// pick a dot matrix or the picture as it is, moving or still, and several
+// come round shuffled or in turn. Words alongside pictures name the saver. The draft lives in the
 // service so it survives the panel closing for the file chooser; the words
 // live in the field until the card needs them.
 BorderSurface {
@@ -34,17 +34,20 @@ BorderSurface {
   property string style: "ascii"
   property bool animated: true
   property bool letters: false
+  property string order: "shuffle"
   // The draft as it stands with what the card holds right now.
   readonly property var live: {
     var d = draft ? M.cloneJson(draft) : M.importDefaults()
-    d.words = root.words; d.style = root.style; d.animated = root.animated; d.letters = root.letters
+    d.words = root.words; d.style = root.style; d.animated = root.animated; d.letters = root.letters; d.order = root.order
     return d
   }
   readonly property string mode: M.composeMode(live, ai)
   readonly property bool describing: mode === "describe" || mode === "describe-pictures"
-  // One picture as ASCII is the only conversion that can be still or moving.
-  // One picture is the only thing that can be asked to move or sit still.
+  // Pictures can move or sit still; more than one can be shuffled.
   readonly property bool movable: M.canMove(live, mode)
+  readonly property bool orderable: M.canOrder(live, mode)
+  readonly property bool pictures: source === "images" && attached
+  readonly property int count: attached ? draft.paths.length : 0
   readonly property bool converting: mode === "pictures" || mode === "folder" || mode === "clip"
   // The conversion of what is attached, once it is of the current attachment.
   readonly property var preview: svc && svc.draftPreview && attached && String(svc.draftPreview.path) === String(draft.paths[0]) ? svc.draftPreview : null
@@ -55,20 +58,24 @@ BorderSurface {
 
   readonly property string placeholder: {
     if (!attached) return ai !== "" ? "Describe it, or paste a picture" : "Words to show in big letters, or paste a picture"
-    if (source === "images" && M.seesPictures(ai)) return "What to draw from it, or leave this empty"
+    if (source === "images" && M.seesPictures(ai)) return count > 1 ? "What to draw from them, or leave this empty" : "What to draw from it, or leave this empty"
     return "A name for it, or leave this empty"
   }
   readonly property string caption: {
     if (mode === "describe") return "Asks " + agentName + ". Usually under a minute; the tile fills in when it is ready."
+    // An agent redraws rather than copies; the conversion copies exactly.
+    if (mode === "describe-pictures") return "Asks " + agentName + " to draw it from " + (count > 1 ? "the pictures" : "the picture") + ", the way you describe. It redraws rather than copies — clear the words to show " + (count > 1 ? "them" : "it") + " as " + (count > 1 ? "they are" : "it is") + "."
     // A likeness asked of an agent is the one thing it cannot give: it
     // redraws rather than copies. The conversion does copy, exactly.
 
     if (mode === "letters") return "Big letters in your theme's colours."
     if (movable) {
-      var who = root.ai !== "" ? agentName + " is asked what the picture is of, so the dots are of that rather than of the whole frame. " : ""
-      return who + (animated
-        ? "The dots light up across it, rest, go out, and light up another way."
-        : "Every dot at once, the colour breathing.")
+      var how = style === "image"
+        ? (animated ? "A slow push-in on each picture." : "Each picture shown whole, and held.")
+        : (animated ? "The dots light up across it, rest, go out, and light up another way." : "Every dot at once, the colour breathing.")
+      var turn = orderable ? (order === "shuffle" ? " Shuffled, a new one every 12 seconds." : " In turn, a new one every 12 seconds.") : ""
+      var first = count > 1 ? " The preview is the first picture." : ""
+      return how + turn + first
     }
     if (mode === "clip") return style === "ascii" ? "The first 20 seconds; takes a minute or so." : "The first 20 seconds."
     if (converting && words !== "") return "Named “" + M.shortName(words) + "”."
@@ -82,6 +89,7 @@ BorderSurface {
     style = draft && draft.style === "image" ? "image" : "ascii"
     animated = !draft || draft.animated !== false
     letters = !!(draft && draft.letters)
+    order = draft && draft.order === "sequence" ? "sequence" : "shuffle"
   }
   onOpenChanged: if (open) { restore(); if (svc) svc.refreshClipboard(); wordsField.forceActiveFocus() }
   onStepChanged: if (step === "start" && wordsField.text === "" && draft && draft.words) wordsField.text = String(draft.words)
@@ -95,7 +103,7 @@ BorderSurface {
   }
   // The field's words go to the draft before anything closes the panel.
   function sync(extra) {
-    var patch = { words: wordsField.text, style: root.style, animated: root.animated, letters: root.letters }
+    var patch = { words: wordsField.text, style: root.style, animated: root.animated, letters: root.letters, order: root.order }
     for (var k in (extra || {})) patch[k] = extra[k]
     update(patch)
   }
@@ -110,6 +118,7 @@ BorderSurface {
     svc.pasteClipboard()
   }
   function detach() { if (svc) { var d = M.detach(live); d.step = "start"; svc.importDraft = d } }
+  function removePicture(path) { if (svc) { var d = M.removePicture(live, path); d.step = "start"; svc.importDraft = d } }
   // A clock, or an empty screen for widgets: nothing to convert, made at once.
   function createNow(source) {
     if (!svc) return
@@ -227,7 +236,7 @@ BorderSurface {
       Button {
         visible: root.pasteable !== "" && !root.picking
         leftAlign: true
-        text: root.pasteable === "image" ? "Paste the picture" : "Paste what you copied"
+        text: root.pasteable === "image" ? (root.pictures ? "Paste another picture" : "Paste the picture") : "Paste what you copied"
         iconText: "󰆒"
         bordered: true
         foreground: root.foreground
@@ -236,11 +245,11 @@ BorderSurface {
         tooltipText: "What's on your clipboard — a picture, a file, or a folder. Ctrl+V does the same."
         onClicked: root.paste()
       }
-      Button { visible: !root.picking; leftAlign: true; text: "Pictures or a clip…"; iconText: "󰋩"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: root.pick("media") }
-      Button { visible: !root.picking; leftAlign: true; text: "A folder…"; iconText: "󰉋"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; tooltipText: "Every picture in it"; onClicked: root.pick("folder") }
+      Button { visible: !root.picking; leftAlign: true; text: root.pictures ? "Add more pictures…" : "Pictures or a clip…"; iconText: root.pictures ? "󰐕" : "󰋩"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: root.pick("media") }
+      Button { visible: !root.picking && !root.pictures; leftAlign: true; text: "A folder…"; iconText: "󰉋"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; tooltipText: "Every picture in it"; onClicked: root.pick("folder") }
       // The attachment, as a chip that can be taken off again.
       BorderSurface {
-        visible: root.attached
+        visible: root.attached && !root.pictures
         width: chipRow.implicitWidth + Style.space(16)
         height: chipRow.implicitHeight + Style.space(8)
         radius: Style.cornerRadius
@@ -266,16 +275,59 @@ BorderSurface {
       }
     }
 
+    // ---- the pictures on the card, each one removable ----
+    Flow {
+      visible: root.pictures
+      width: parent.width
+      spacing: Style.space(6)
+      Repeater {
+        model: root.pictures ? root.draft.paths : []
+        BorderSurface {
+          id: pic
+          required property var modelData
+          width: Style.space(64)
+          height: Style.space(48)
+          radius: Style.cornerRadius
+          color: "transparent"
+          borderSpec: Border.controlSpec(picMouse.containsMouse ? "hover-cursor" : "normal", root.foreground, Color.accent)
+          Image {
+            anchors.fill: parent
+            anchors.margins: Style.space(3)
+            source: "file://" + String(pic.modelData)
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            sourceSize.width: 128
+            smooth: true
+          }
+          MouseArea { id: picMouse; anchors.fill: parent; hoverEnabled: true }
+          // Take this one off: shown on hover, so the row stays calm.
+          Rectangle {
+            visible: picMouse.containsMouse || offOne.containsMouse
+            anchors.top: parent.top
+            anchors.right: parent.right
+            anchors.margins: Style.space(2)
+            width: Style.space(16)
+            height: width
+            radius: width / 2
+            color: Color.notifications.background
+            Text { anchors.centerIn: parent; textFormat: Text.PlainText; text: "󰅖"; color: root.foreground; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
+            MouseArea { id: offOne; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.PointingHandCursor; onClicked: root.removePicture(String(pic.modelData)) }
+          }
+          PanelToolTip { visible: offOne.containsMouse; text: "Take this one off" }
+        }
+      }
+    }
+
     // ---- the one question left: what to make of words ----
     Row {
-      visible: root.describing || root.movable || (root.mode === "letters" && root.ai !== "")
+      visible: root.describing || (root.mode === "letters" && root.ai !== "")
       spacing: Style.space(8)
       Text { anchors.verticalCenter: parent.verticalCenter; textFormat: Text.PlainText; text: "Make it"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
       ButtonGroup {
-        options: root.movable
-          ? [{ value: "animation", label: "moving" }, { value: "still", label: "a still" }]
+        options: root.mode === "describe-pictures"
+          ? [{ value: "animation", label: "an animation" }, { value: "still", label: "a still" }]
           : [{ value: "animation", label: "an animation" }, { value: "still", label: "a still" }, { value: "letters", label: "big letters" }]
-        value: root.letters && !root.movable ? "letters" : (root.animated ? "animation" : "still")
+        value: root.letters && root.mode !== "describe-pictures" ? "letters" : (root.animated ? "animation" : "still")
         foreground: root.foreground
         fontFamily: root.fontFamily
         focusable: false
@@ -295,7 +347,7 @@ BorderSurface {
       Row {
         spacing: Style.space(8)
         Thumb {
-          label: root.mode === "clip" ? "an ASCII animation" : (root.movable && root.animated ? "a dot matrix, moving" : "a dot matrix")
+          label: root.mode === "clip" ? "an ASCII animation" : "a dot matrix"
           chosen: root.style === "ascii"
           onPicked: root.style = "ascii"
           AsciiArt {
@@ -325,6 +377,34 @@ BorderSurface {
           }
           Text { anchors.centerIn: parent; visible: !root.preview; textFormat: Text.PlainText; text: "…"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
         }
+      }
+    }
+
+    // ---- how pictures play: moving or still, shuffled or in turn ----
+    Row {
+      visible: root.movable
+      spacing: Style.space(8)
+      Text { anchors.verticalCenter: parent.verticalCenter; width: Style.space(52); textFormat: Text.PlainText; text: "Motion"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
+      ButtonGroup {
+        options: [{ value: "animation", label: "animated" }, { value: "still", label: "still" }]
+        value: root.animated ? "animation" : "still"
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        focusable: false
+        onChanged: function(v) { root.animated = v === "animation" }
+      }
+    }
+    Row {
+      visible: root.orderable
+      spacing: Style.space(8)
+      Text { anchors.verticalCenter: parent.verticalCenter; width: Style.space(52); textFormat: Text.PlainText; text: "Order"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
+      ButtonGroup {
+        options: [{ value: "shuffle", label: "shuffled" }, { value: "sequence", label: "in order" }]
+        value: root.order
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        focusable: false
+        onChanged: function(v) { root.order = v }
       }
     }
 
