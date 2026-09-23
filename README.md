@@ -2,16 +2,16 @@
 
 A native screensaver manager for [Omarchy](https://omarchy.org) 4 (Quattro).
 
-Stelline keeps Omarchy's own screensaver as the default and adds to it — your
-branding redrawn in the theme's colours, a clock, nothing at all, or
+Stelline keeps Omarchy's own screensaver one click away and adds to it — a
+wordmark in the theme's colours, a clock, nothing at all, or
 **your own**: whatever you copied, pictures, a folder of them, a video clip,
 some text, or a description, turned into ASCII art in your theme's colours (or
 shown as they are). Every tile is an instance of a type anyone can add, and on
 top of any of them sit **widgets** — a clock, what arrived while you were away,
 whether your coding agent is waiting — in a corner or in the middle. A grid of
 tiles, one click to choose, and a rule per tile — at night, on battery, with a
-theme, docked — for when each one plays. Until you choose otherwise, what plays
-is the stock screensaver, untouched.
+theme, docked — for when each one plays. A fresh install plays the Wordmark;
+the stock screensaver is the Original tile, untouched.
 
 ![Stelline](preview.png)
 
@@ -100,8 +100,8 @@ that does not parse, and the toggle removes exactly those lines again.
 
 | | |
 |---|---|
-| **Original** | Omarchy's own screensaver, exactly as it ships and the default: `ttfx` in your terminal, cycling through its 37 effects at random. Choose a subset in ⚙ — with a choice, Stelline starts the terminal itself running a copy of Omarchy's loop with `--include-effects`; without, it runs the stock launcher untouched. Its ⚙ also has the same three artwork edits as *Style › Screensaver* (a picture, the text, back to the logo). |
-| **Wordmark** | A word you type — **Text** in its ⚙, `stelline` to begin with — drawn by Stelline instead of `ttfx`, in the same four tones of dots as the figures — `stelline` itself is hand-drawn (`art/wordmark.js`: slanted capitals, lit tops, a shaded extrusion, scanlines, a ruled line), and any other word gets the same treatment from ImageMagick — with one of **eighteen animations of Stelline's own** every few seconds — `decrypt`, `rain`, `beams`, `scatter`, `wipe`, `typewriter`, `reveal`, `pulse`, and six that assemble the art rather than fade it in: `scanline` (a bright bar sweeps down), `grid` (a lattice snaps in, then fills), `shockwave` (an expanding ring), `slit` (opens from one column and widens), `glitch` (bands tear sideways and lock back), `dust` (particles drift in and converge), `spotlight` (a beam crosses and leaves the letters lit behind it), `cascade` (columns fall and each drops a letter as its head goes by), `derez` (diagonal shards slide in from alternating sides), `collapse` (spun in from far out and tightened onto the letterform), `storm` (rain in the dark, the sky going off behind it). Five of them animate the **whole canvas** rather than the letters alone — a beam crossing the dark, rain falling past the word, a ring expanding through the emptiness — the way Omarchy's own effects use the whole terminal. They are not Omarchy's 37 — those run only inside `ttfx`, so only the Original has them. What you get instead is the cost: almost nothing, against several cores. Clear the field and it shows Omarchy's shared artwork instead, the same file the Original plays. |
+| **Original** | Omarchy's own screensaver, exactly as it ships: `ttfx` in your terminal, cycling through its 37 effects at random. Choose a subset in ⚙ — with a choice, Stelline starts the terminal itself running a copy of Omarchy's loop with `--include-effects`; without, it runs the stock launcher untouched. Its ⚙ also has the same three artwork edits as *Style › Screensaver* (a picture, the text, back to the logo). |
+| **Wordmark** | What a fresh install plays. A word you type — **Text** in its ⚙, `stelline` to begin with — drawn by Stelline instead of `ttfx`, in the same four tones of dots as the figures — `stelline` itself is hand-drawn (`art/wordmark.js`: slanted capitals, lit tops, a shaded extrusion, scanlines, a ruled line), and any other word gets the same treatment from ImageMagick — with one of **Stelline's own animations** every few seconds — `decrypt`, `rain`, `beams`, `scatter`, `wipe`, `typewriter`, `reveal`, `pulse`, and six that assemble the art rather than fade it in: `scanline` (a bright bar sweeps down), `grid` (a lattice snaps in, then fills), `shockwave` (an expanding ring), `slit` (opens from one column and widens), `glitch` (bands tear sideways and lock back), `dust` (particles drift in and converge), `spotlight` (a beam crosses and leaves the letters lit behind it), `cascade` (columns fall and each drops a letter as its head goes by), `derez` (diagonal shards slide in from alternating sides), `collapse` (spun in from far out and tightened onto the letterform), `storm` (rain in the dark, the sky going off behind it). Five of them animate the **whole canvas** rather than the letters alone — a beam crossing the dark, rain falling past the word, a ring expanding through the emptiness — the way Omarchy's own effects use the whole terminal. They are not Omarchy's 37 — those run only inside `ttfx`, so only the Original has them. What you get instead is the cost: almost nothing, against several cores. Clear the field and it shows Omarchy's shared artwork instead, the same file the Original plays. |
 | **Clock** | An empty screen with the clock widget in the middle: seven-segment digits built from block characters, the colon blinking in the accent, the date in small wide-tracked capitals beneath. Repaints only when the text changes. *Add › Clock* makes another. |
 | **Blank** | An empty screen, black. Exists so a battery rule has somewhere free to point, and for whatever you put on top of it. *Add › Blank* makes another. |
 
@@ -144,7 +144,7 @@ animation always reads as an animation. The font is the shell's monospace font.
 **A saver's settings follow its type**, so two savers of the same type are
 configured the same way whether they shipped with Stelline or you made them,
 and every ⚙ has the same three blocks. **LOOK** holds the type's knobs: a
-**text** saver — the built-in Wordmark, or anything the Add card set in big letters —
+**text** saver — the built-in Wordmark, or a Words saver from the Add card —
 has a **Text** field and Stelline's animations; **pictures** get a fit and a
 crossfade; **art** gets the animations and a dwell; an **animation** gets a
 frame rate; an **empty** screen has only its background; the **Original** has
@@ -162,7 +162,7 @@ empty screen is the Clock tile; the agent in the middle of an empty screen is
 a status board. The Original is Omarchy's own window and carries none.
 
 **Which animations play** is one control in a saver's ⚙, for Stelline's
-fourteen and Omarchy's thirty-seven alike: **Everything**, or a mood —
+own and Omarchy's thirty-seven alike: **Everything**, or a mood —
 **Calm** (quiet reveals), **Neon** (decode and CRT), **Kinetic** (motion and
 particles). A mood is just a set of effects, so *Choose individually* under it
 opens the full list and ticking your own is still there; the moods together
@@ -170,19 +170,25 @@ are exactly the whole list, and nothing extra is stored either way.
 
 ### Your own
 
-The **Add** tile is one card: a field, and whatever you attach to it. What
-gets made follows from what is there, and the card asks only the one
-question that is left open:
+The **Add** tile is one card. At the top, what kind of saver — one card
+each for every kind a shipped saver is, and a couple more. Under it, only
+what that kind needs, and a line saying what will happen. Pasting a picture,
+a file or a folder anywhere on the card (Ctrl+V, or the Paste button, which
+appears the moment the clipboard holds one) picks the kind for you.
 
-| On the card | Becomes |
-|---|---|
-| **Words** | ASCII art drawn by your **default coding agent** (`omarchy default agent` — Claude Code, Codex, Gemini, OpenCode, Copilot, Crush, Pi, Oh My Pi or Grok), each in its one-shot mode with tools off or read-only where it has such a switch; Claude Code if no default is set; the Claude API with `ANTHROPIC_API_KEY` as a last resort. *Make it* an animation loop, a still, or **big letters** — block art of the words themselves, a wordmark of your own. With no agent about, words are big letters. |
-| **One picture** — pasted (a screenshot, a file, a folder copied in the file manager; Ctrl+V or the Paste button, which appears the moment the clipboard holds one), or picked with *Pictures or a clip…* | a dot matrix of the whole picture, exactly as the card's preview shows it — nothing is cropped and no agent is asked — or the picture as it is. Both ways are shown on the card before you choose. **Motion**: *animated* or *still* (a dot matrix lights up or breathes; a picture pushes in slowly or holds). As a dot matrix, **Detail** runs from *bold* — one cut, lit or not, for shapes — through *simple*, *balanced* (the default) and *fine* to *finest*, which dither the picture and keep its shading; it can be changed later in the saver's settings, which draws the dots again. |
-| **Several pictures** — paste or pick more onto the card; each shows as a thumbnail you can take off | one piece each, the same two ways and the same **Motion**, plus **Order**: *shuffled* (the default) or *in order*, a new one every 12 seconds |
-| **A folder** (*A folder…*) | the same, and a folder shown as-is is read live: drop a picture in, it joins |
-| **A clip** — a video or a GIF on its own | an ASCII animation, frame by frame (the first 20 s at 10 fps) — or the clip as it is, as an animated picture |
-| **Words and a picture** | a prompt: your agent draws from the picture — up to four of them — the way the words ask, as *an animation* or *a still*. Needs an agent that can be handed a picture (Claude Code, Codex, Gemini, or the Claude API); with any other, the words name the saver and the picture is converted as it is. An agent redraws rather than copies, so for a true likeness leave the words empty. |
-| *a clock* · *an empty screen* (the quiet line at the right) | an empty screen with the clock widget in the middle, the same as the shipped Clock; or an empty screen in the theme's background, for whatever you put on top |
+| Kind | What it asks for | Becomes |
+|---|---|---|
+| **Describe it** | a description; optionally up to four pictures to draw from; *an animation* or *a still* | ASCII art drawn by your **default coding agent** (`omarchy default agent` — Claude Code, Codex, Gemini, OpenCode, Copilot, Crush, Pi, Oh My Pi or Grok), each in its one-shot mode with tools off or read-only where it has such a switch; Claude Code if no default is set; the Claude API with `ANTHROPIC_API_KEY` as a last resort. Pictures are offered only with an agent that can be handed one (Claude Code, Codex, Gemini, or the API); it draws from them the way the words ask, and redraws rather than copies — for a true likeness use **Pictures**. With none of these about, the card is greyed and says what to install. |
+| **Words** | a word or two | the word drawn as a title card — slanted capitals, lit tops, an extrusion, scanlines — in the theme's colours, previewed on the card as you type; played with the saver animations |
+| **Pictures** | one or several pictures (pasted, or *Choose…*), or *A folder…* | a dot matrix of the whole picture, exactly as the card's preview shows it — nothing is cropped and no agent is asked — or the picture as it is; both are shown on the card before you choose. **Detail** (dot matrix) runs from *bold* — one cut, lit or not, for shapes — through *simple*, *balanced* (the default) and *fine* to *finest*, which dither the picture and keep its shading; it can be changed later in the saver's settings, which draws the dots again. **Motion**: *animated* or *still* (a dot matrix lights up or breathes; a picture pushes in slowly or holds). Several pictures, or a folder, add **Order**: *shuffled* (the default) or *in order*, a new one every 12 seconds. A folder shown as it is is read again each time it comes on: drop a picture in, and it joins. |
+| **A clip** | a video or a GIF | an animation of dots, frame by frame (the first 20 s at 10 fps), at the **Detail** you pick and exactly as the preview shows it — or the clip as it is, as an animated picture |
+| **Clock** | a name | an empty screen with the clock widget in the middle, the same as the shipped Clock |
+| **Blank** | a name | an empty black screen, for whatever you put on top |
+
+When a preview cannot be made, the card says why — *no pictures in that
+folder*, *needs ffmpeg for clips* — and an import that fails says the same
+on its tile, with **Retry** there once it is put right. Retry asks for the
+same thing again and leaves the saver's settings as they were.
 
 ### Moving, or a still
 
@@ -190,7 +196,7 @@ Both are the same dot matrix; only the saver's own effect setting differs,
 so either can be changed afterwards from the tile's settings.
 
 **Moving** is the LED sign: the dots light up across the art under one of
-eighteen effects, then rest — never still, because a band of light keeps
+its effects, then rest — never still, because a band of light keeps
 rolling through them (`scan`) or a slow swell travels across on the
 diagonal with a few dots catching it early and burning bright (`shimmer`).
 Then they go out and light up again a different way. Nothing deforms and
@@ -227,7 +233,7 @@ dot is not square: two of them span a cell's width and four its height, and
 a monospace cell is roughly 0.46 as wide as it is tall, so a dot ends up
 about a tenth taller than it is wide. Converted straight onto that grid, a
 picture comes out stretched upward by the same tenth. So every picture is
-widened by that much before the transcoder samples it, and the shell
+widened by that much before it is sampled, and the shell
 measures the ratio from the font the theme actually uses rather than
 assuming one. Block art halves the same way and takes the same correction.
 
@@ -261,32 +267,25 @@ by spending frames:
 | an animation | 80 × 28 | 10 |
 | an animation, detailed | 120 × 38 | 6 |
 
-With a picture attached, the picture is converted to that grid first and
-handed over as the starting point, so the proportions come from the
-transcoder rather than the model's memory. That also means **any** agent can work from a picture, including
-the ones that cannot open a file.
+With pictures attached, they go to the agent as they are, and it is
+pointed at them: Claude Code may read them, Codex takes them as images,
+Gemini may read inside their folder, and the API gets them as image blocks.
 
 One honest limit: an agent redraws, it does not copy. For a true likeness
-of a photograph, attach the picture with no words at all — then it goes
-through the transcoder untouched, at full braille resolution, which is far
-more faithful than anything a model draws. The card says so when you ask an
-agent for a likeness.
-
-The transcoder is made for logos on transparency; a screenshot or a
-photograph is flattened first, and a dark one inverted, so it does not come
-out as a solid block. When an agent says which way round the tones run, that
-answer is used instead of guessing from the average brightness — which is
-what fools it on a dark subject in a bright scene.
+of a photograph, use **Pictures** instead — the picture is converted
+untouched, at full braille resolution, which is far more faithful than
+anything a model draws.
 
 Imports run in the background — the tile appears at once and fills in; a
-notification says when it is ready — one after another. ASCII conversion is
-Omarchy's own `omarchy-transcode-ascii` (braille for pictures, block for text),
-frames come from `ffmpeg`, letters from ImageMagick; all of them ship with
-Omarchy. Line art, logos and silhouettes convert well; busy photographs are
-better shown as they are. The transcoder is made for logos on transparency;
-a screenshot or a photograph is flattened first, and a dark one inverted, so
-it does not come out as a solid block. A pasted picture is copied into the
-saver, so it outlives the session.
+notification says when it is ready — one after another. Pictures and clip
+frames become dots through ImageMagick and a small awk packer (the same
+dither the figures use); frames come from `ffmpeg`, and words from
+ImageMagick too; all of them ship with Omarchy, and an import that finds one
+missing says which. A photograph is flattened first and, if it is mostly
+dark, its light parts are taken as the subject; a logo on transparency is
+read by its shape. Line art, logos and silhouettes convert well; busy
+photographs are often better shown as they are. A pasted picture is copied
+into the saver, so it outlives the session.
 
 Each saver is a folder under `~/.config/omarchy/stelline/savers/<id>/` holding
 a `saver.json` and its pieces — `001.txt`, `002.txt`… for ASCII pieces, a
@@ -456,7 +455,7 @@ A saver's knobs sit under `savers.<id>`: `text`, `play`, `dwellSec`, `fps`,
 (`none`/`zoom`), `background`, and `widgets` — `clock` (`on`, `place`,
 `format`, `showDate`, `showSeconds`), `notifications` (`on`, `place`,
 `detail` `counts`/`summaries`/`bodies`), `agent` (`on`, `place`, `figure`
-`deck`/`visor`). A `place`
+`deck`/`visor`/`morty`). A `place`
 is `top-left`, `top-right`, `bottom-left`, `bottom-right` or `centre`;
 anything else (including the older `corner`) means the tile's `corner`, which
 in turn defaults to the `card` below. `effects` empty means all of them.
@@ -465,22 +464,22 @@ default now.
 
 ## IPC
 
-`omarchy-shell stelline <method>`: `status`, `preview [saver]`, `show`, `hide`,
-`next`, `mini [saver]` / `hideMini` (a small corner preview that takes no
-focus), `list`, `get`, `set`, `set64`, `setSaver`, `toggleShuffle`,
-`setStage <screensaver|lock> <on|off>`, `setTimeout <stage> <seconds>`,
-`toggleStayAwake`, `setRule <saver> <night|battery|theme> <on|off>`,
+`omarchy-shell stelline <method>`: `status`, `ping`, `preview [saver]`,
+`show`, `hide`, `next`, `list`, `get`, `set`, `set64`, `setSaver`,
+`toggleShuffle`, `setStage <screensaver|lock> <on|off>`,
+`setScreensaverOff <on|off>`, `setDockedNoLock <on|off>`,
+`setTimeout <stage> <seconds>`, `toggleStayAwake`,
+`setRule <saver> <night|battery|theme|docked> <on|off>`,
 `import64 <base64 json>` (the spec the Add card builds: `source`
-`images|folder|video|text|prompt`, `paths` (with `prompt`: the pictures the
-words start from), `text`, `prompt`, `style` `ascii|image`, `name`, `fps`,
-`seconds`, `animated`, `frames`, `retryOf <id>` to draw under an existing
-tile), `retry <id>`, `stop <id>`, `rename64 <id> <base64 name>`,
+`images|folder|video|text|prompt|clock|empty`, `paths` (with `prompt`: the
+pictures to draw from), `text`, `prompt`, `style` `ascii|image`, `detail`
+`0`–`4`, `order` `shuffle|sequence`, `animated`, `name`, `fps`, `seconds`),
+`retry <id>`, `redetail <id> <0-4>`, `stop <id>`, `rename64 <id> <base64 name>`,
 `describe64 <id> <base64 json>` (`words`, `animated`), `deleteSaver <id>`,
-`rescan`, `beginAdd`, `pick <media|folder|images|video>`, `paste`,
-`cancelAdd`, `finishSetup`, `undoSetup`,
-`setMenuEntry <on|off>`, `branding <image|text|reset>` (the artwork edits),
-`simulateIdle`, `simulateLock [dry-run|off|real]`,
-`reloadCard`, `ping`.
+`setText64 <id> <base64 word>` (a wordmark's text), `rescan`, `beginAdd`,
+`pick <images|video|folder>`, `paste`, `cancelAdd`, `finishSetup`,
+`undoSetup`, `setMenuEntry <on|off>`, `branding <image|text|reset>` (the
+artwork edits).
 
 ```sh
 omarchy-shell stelline import64 "$(printf '%s' '{"source":"text","text":"Acme Co.","style":"ascii"}' | base64 -w0)"
@@ -495,16 +494,16 @@ the stock service; `status` reports `"clone": "stelline"`.
   (`omarchy-branding-screensaver` calls the launcher itself). The art shows
   up in Stelline's Wordmark live; use the panel's Preview to see it.
 - Fields inside editors are mouse-driven; rows and tiles are keyboard-navigable.
-- Converting a clip to ASCII runs the stock transcoder once per frame: about a
-  minute for 20 seconds of video. It runs in the background.
+- Converting a clip to dots runs ImageMagick once per frame: about a minute
+  for 20 seconds of video. It runs in the background.
 - An agent reads only inside its own working directory, so pictures handed
   to one are copied into a scratch folder first and it is run from there.
 - A described saver needs a default coding agent (`omarchy default agent`),
-  Claude Code, or `ANTHROPIC_API_KEY`; without one, words on the Add card are
-  big letters, and the card names who it will ask when there is someone. The
-  agent is asked at low effort where it takes that switch (at the default a
-  model deliberates over the grid spec for minutes; `describe.effort` picks
-  it); an animation usually takes under a minute at low, a few at high. The
+  Claude Code, or `ANTHROPIC_API_KEY`; without one, *Describe it* is greyed
+  and says so, and the card names who it will ask when there is someone. The
+  agent is asked at medium effort where it takes that switch (left to itself
+  a model deliberates over the grid spec for minutes; `describe.effort`
+  picks it); it takes a minute or two, longer at high. The
   art is read between marker lines the prompt asks
   for, so an agent's own chatter cannot end up in a frame, and every frame is
   laid on the grid of the largest so the picture holds still. What comes back
@@ -542,11 +541,13 @@ omarchy restart shell
 The service is `keepLoaded`, so every QML edit needs `omarchy restart shell`.
 Logic lives in `StellineModel.js`, which runs under Node: `node --test
 tests/*.test.js`. `omarchy plugin validate .` runs the shell's manifest checks.
-`omarchy-shell stelline mini clock` shows a saver in a corner without taking
-over the screen; `journalctl --user -t omarchy-shell -f` shows every idle
-event. Renderer experiments go in a second Quickshell instance (a folder with
-`Commons`, `Ui` and `savers` symlinked, and a `shell.qml` that loads one
-component) so a runaway paint loop cannot take the bar down with it.
+`qs log -p /usr/share/omarchy/shell` shows every idle event. The figures
+and the wordmark are vector drawings in `art/`, baked to dots by
+`node tools/bake.js` (needs `rsvg-convert` and ImageMagick). Renderer
+experiments go in a second Quickshell instance under `~/Work/tries/` (a
+folder with `Commons`, `Ui` and `savers` symlinked, and a `shell.qml` that
+loads one component) so a runaway paint loop cannot take the bar down with
+it.
 
 ## Licence
 
