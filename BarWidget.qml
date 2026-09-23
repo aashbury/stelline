@@ -127,6 +127,10 @@ Panel {
         boundsBehavior: Flickable.StopAtBounds
         flickableDirection: Flickable.VerticalFlick
         interactive: contentHeight > height
+        // Scrolled by the wheel and the bar, never by dragging: a drag on a
+        // slider that strayed a pixel up or down was taken over by the panel,
+        // which scrolled and left the slider's knob chasing the pointer.
+        acceptedButtons: Qt.NoButton
         ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
 
         Body {

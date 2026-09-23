@@ -15,6 +15,8 @@ CursorSurface {
   // something to type into.
   property real readoutWidth: Style.space(52)
   property bool typeable: true
+  // Notches cut into the track, for a row with only a few stops.
+  property int ticks: 0
   property string label: ""
   property real value: 0
   property real minimum: 0
@@ -116,6 +118,7 @@ CursorSurface {
     maximum: root.maximum
     step: root.step
     integer: true
+    tickCount: root.ticks
     value: root.value
     opacity: root.settable ? 1 : 0.4
     // A drag lands on any whole second; the row's own step is what the

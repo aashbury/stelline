@@ -360,12 +360,14 @@ BorderSurface {
     minimum: 0
     maximum: 4
     step: 1
+    ticks: 5
     format: function(v) { return M.detailName(v) }
     readoutWidth: Style.space(72)
     typeable: false
     foreground: root.foreground
     fontFamily: root.fontFamily
     onReleased: function(v) { root.detail = Math.round(v); root.sync({}) }
+    onWheeled: function(d) { if (root.body) root.body.scrollBy(d) }
   }
 
   Column {

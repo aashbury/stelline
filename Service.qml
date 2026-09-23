@@ -223,8 +223,9 @@ Item {
     var s = M.saverById(id, root.userSavers)
     var spec = s ? M.redetailSpec(s, detail) : null
     if (!spec) return "no-detail"
-    if (M.savedDetail(s) === spec.detail) return "ok"
-    if (s.series && s.series.importing) stopImport(id)
+    var busy = !!(s.series && s.series.importing)
+    if (!busy && M.savedDetail(s) === spec.detail) return "ok"
+    if (busy) stopImport(id)
     return importSaver(spec) ? "ok" : "failed"
   }
   // A described saver, drawn again from new words under the same tile.

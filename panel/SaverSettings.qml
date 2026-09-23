@@ -38,6 +38,8 @@ Column {
   readonly property var pinned: Array.isArray(settings.effects) ? settings.effects : []
 
   signal patched(var patch)
+  // A wheel over a slider, handed back so it scrolls the panel.
+  signal scrollBy(real delta)
 
   function fps(v) { return Math.round(v) + " fps" }
   function secs(v) { return Math.round(v) + " s" }
@@ -112,26 +114,39 @@ Column {
     foreground: root.foreground
     fontFamily: root.fontFamily
     onReleased: function(v) { root.patched(root.isSeries && !root.isWordmark ? { dwellSec: Math.round(v) } : { holdSec: Math.round(v) }) }
+    onWheeled: function(d) { root.scrollBy(d) }
   }
 
   // ---- detail, for pictures drawn as dots: changing it draws them again ----
+  // The level asked for is what the slider shows while they are redrawn:
+  // the saver's own record only catches up once the redraw has started, and
+  // until then the knob would spring back to the old level.
+  property int askedDetail: -1
+  onSaverIdChanged: askedDetail = -1
+  onImportingChanged: if (!importing) askedDetail = -1
   SliderRow {
-    visible: M.savedDetail(root.saver) >= 0 && !root.importing
+    visible: M.savedDetail(root.saver) >= 0
     width: parent.width
     bar: root.bar
     glyph: "󰈊"
     labelWidth: root.labelWidth
     label: "Detail"
-    value: Math.max(0, M.savedDetail(root.saver))
+    value: root.askedDetail >= 0 ? root.askedDetail : Math.max(0, M.savedDetail(root.saver))
     minimum: 0
     maximum: 4
     step: 1
+    ticks: 5
     format: function(v) { return M.detailName(v) }
     readoutWidth: root.readoutWidth
     typeable: false
     foreground: root.foreground
     fontFamily: root.fontFamily
-    onReleased: function(v) { if (root.svc) root.svc.redetailSaver(root.saverId, Math.round(v)) }
+    onReleased: function(v) {
+      if (!root.svc || Math.round(v) === Math.round(value)) return
+      root.askedDetail = Math.round(v)
+      root.svc.redetailSaver(root.saverId, root.askedDetail)
+    }
+    onWheeled: function(d) { root.scrollBy(d) }
   }
 
   // ---- series: how the pieces play ----
@@ -169,6 +184,7 @@ Column {
     foreground: root.foreground
     fontFamily: root.fontFamily
     onReleased: function(v) { root.patched({ fps: Math.round(v) }) }
+    onWheeled: function(d) { root.scrollBy(d) }
   }
   SliderRow {
     visible: root.isImage && root.frameCount > 1
@@ -186,6 +202,7 @@ Column {
     foreground: root.foreground
     fontFamily: root.fontFamily
     onReleased: function(v) { root.patched({ dwellSec: Math.round(v) }) }
+    onWheeled: function(d) { root.scrollBy(d) }
   }
   SwitchRow {
     visible: root.isSeries && root.frameCount > 1 && !root.animation

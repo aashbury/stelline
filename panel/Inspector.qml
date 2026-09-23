@@ -412,6 +412,7 @@ BorderSurface {
       fontFamily: root.fontFamily
       leftPadding: 0
       onPatched: function(patch) { if (root.svc) root.svc.writeSaverSetting(root.saverId, patch) }
+      onScrollBy: function(d) { if (root.body) root.body.scrollBy(d) }
     }
 
     // ---- on top: the widgets. The Original is Omarchy's own window and
