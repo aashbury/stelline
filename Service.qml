@@ -138,6 +138,8 @@ Item {
     // moving, it cycles through the effects as usual. A picture as it is
     // pushes in slowly when moving and holds when still. Several come round
     // shuffled unless asked to go in turn.
+    // Drawn again at another level of detail: the saver's settings stay as they are.
+    else if (next.keepSettings === true) {}
     else if (next.source === "images" || next.source === "folder") {
       var how = {}
       if (next.style === "image") { if (next.animated !== false) how.motion = "zoom" }
@@ -207,6 +209,16 @@ Item {
     var s = M.saverById(id, root.userSavers)
     var spec = s ? M.retrySpec(s) : null
     if (!spec) return "nothing-to-retry"
+    return importSaver(spec) ? "ok" : "failed"
+  }
+  // A dot-matrix picture saver's pictures converted again at another level
+  // of detail, under the same tile.
+  function redetailSaver(id, detail) {
+    var s = M.saverById(id, root.userSavers)
+    var spec = s ? M.redetailSpec(s, detail) : null
+    if (!spec) return "no-detail"
+    if (M.savedDetail(s) === spec.detail) return "ok"
+    if (s.series && s.series.importing) stopImport(id)
     return importSaver(spec) ? "ok" : "failed"
   }
   // A described saver, drawn again from new words under the same tile.
@@ -1581,6 +1593,7 @@ Item {
     }
     function deleteSaver(saverId: string): string { return root.deleteSaver(saverId) }
     function retry(saverId: string): string { return root.retryImport(saverId) }
+    function redetail(saverId: string, level: string): string { return root.redetailSaver(saverId, Number(level)) }
     function stop(saverId: string): string { return root.stopImport(saverId) }
     function rename64(saverId: string, base64Name: string): string {
       var t

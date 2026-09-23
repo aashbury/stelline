@@ -24,6 +24,7 @@ Column {
   readonly property bool isSeries: !!series
   readonly property bool isAscii: isSeries && series.kind === "ascii"
   readonly property bool isImage: isSeries && series.kind === "image"
+  readonly property bool importing: isSeries && series.importing === true
   readonly property int frameCount: isSeries && Number(series.frameCount) > 0 ? Number(series.frameCount) : 1
   readonly property string play: settings && settings.play ? String(settings.play) : (series && series.play ? String(series.play) : "slideshow")
   readonly property bool animation: isAscii && play === "animation" && frameCount > 1
@@ -49,6 +50,8 @@ Column {
   // Every row is a glyph, a label and its control, with the label column
   // wide enough for the longest label here.
   readonly property real labelWidth: Style.space(112)
+  // One readout width, so every slider's track ends in the same place.
+  readonly property real readoutWidth: Style.space(72)
 
   spacing: Style.space(2)
   bottomPadding: Style.space(6)
@@ -100,6 +103,7 @@ Column {
     bar: root.bar
     glyph: "󰔛"
     labelWidth: root.labelWidth
+    readoutWidth: root.readoutWidth
     label: root.isSeries && !root.isWordmark ? "Each piece" : "Rest between"
     value: root.isSeries && !root.isWordmark
       ? (Number(root.settings.dwellSec) || Number(root.series.dwellSec) || 12)
@@ -111,6 +115,26 @@ Column {
     foreground: root.foreground
     fontFamily: root.fontFamily
     onReleased: function(v) { root.patched(root.isSeries && !root.isWordmark ? { dwellSec: Math.round(v) } : { holdSec: Math.round(v) }) }
+  }
+
+  // ---- detail, for pictures drawn as dots: changing it draws them again ----
+  SliderRow {
+    visible: M.savedDetail(root.saver) >= 0 && !root.importing
+    width: parent.width
+    bar: root.bar
+    glyph: "󰈊"
+    labelWidth: root.labelWidth
+    label: "Detail"
+    value: Math.max(0, M.savedDetail(root.saver))
+    minimum: 0
+    maximum: 4
+    step: 1
+    format: function(v) { return M.detailName(v) }
+    readoutWidth: root.readoutWidth
+    typeable: false
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    onReleased: function(v) { if (root.svc) root.svc.redetailSaver(root.saverId, Math.round(v)) }
   }
 
   // ---- series: how the pieces play ----
@@ -138,6 +162,7 @@ Column {
     bar: root.bar
     glyph: "󰓅"
     labelWidth: root.labelWidth
+    readoutWidth: root.readoutWidth
     label: "Speed"
     value: Number(root.settings.fps) || (root.series ? Number(root.series.fps) : 0) || 10
     minimum: 2
@@ -154,6 +179,7 @@ Column {
     bar: root.bar
     glyph: "󰔛"
     labelWidth: root.labelWidth
+    readoutWidth: root.readoutWidth
     label: "Each picture"
     value: Number(root.settings.dwellSec) || (root.series ? Number(root.series.dwellSec) : 0) || 12
     minimum: 5

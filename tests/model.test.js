@@ -1073,3 +1073,22 @@ test("each state has its own colour, from the theme where it names one", () => {
   assert.equal(M.stateColor("needs", {}, f), "#e0af68")
   assert.equal(M.stateColor("error", {}, f), "#ff0000")
 })
+
+test("a dot-matrix picture saver keeps its detail and can be drawn again at another", () => {
+  const made = (source, kind) => ({ id: "p", name: "P", series: { kind: kind || "ascii", source } })
+  // what it was drawn with; bold for one from before detail was a choice
+  assert.equal(M.savedDetail(made({ type: "images", paths: ["/p/a.png"], detail: 3 })), 3)
+  assert.equal(M.savedDetail(made({ type: "folder", paths: ["/p/h"] })), 0)
+  // nothing else has the choice
+  assert.equal(M.savedDetail(made({ type: "images", paths: ["/p/a.png"] }, "image")), -1)
+  assert.equal(M.savedDetail(made({ type: "text", text: "x" })), -1)
+  const spec = M.redetailSpec(made({ type: "images", paths: ["/p/a.png", "/p/b.png"], detail: 1 }), 4)
+  assert.equal(spec.retryOf, "p")
+  assert.equal(spec.detail, 4)
+  assert.equal(spec.keepSettings, true)
+  assert.deepEqual(spec.paths, ["/p/a.png", "/p/b.png"])
+  // the saver records the level it was drawn at
+  assert.equal(JSON.parse(M.metaJson({ ...spec, id: "p" }, {})).source.detail, 4)
+  // and the old pieces go before the new ones are drawn
+  assert.match(M.importScript({ ...spec, id: "p" }, "/r", "/s"), /rm -f "\$dir"\/\[0-9\]\[0-9\]\[0-9\]\.txt/)
+})

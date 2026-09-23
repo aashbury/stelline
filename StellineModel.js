@@ -1552,6 +1552,8 @@ function metaJson(spec, extra) {
   var j = { name: spec.name, kind: isEmptySource(spec.source) ? "empty" : (spec.style === "image" ? "image" : "ascii"), source: { type: spec.source }, created: Math.floor(Date.now() / 1000) }
   if (spec.source === "images" || spec.source === "video") j.source.paths = spec.paths
   if (spec.source === "folder") j.source.paths = spec.paths
+  // How much detail the dots were drawn with, so it can be changed later.
+  if ((spec.source === "images" || spec.source === "folder") && spec.style !== "image") j.source.detail = detailLevel(spec.detail)
   if (spec.source === "text") j.source.text = spec.text
   if (spec.source === "prompt") { j.source.prompt = spec.prompt; j.source.animated = spec.animated !== false; if (Array.isArray(spec.paths) && spec.paths.length) j.source.paths = spec.paths }
   for (var k in (extra || {})) j[k] = extra[k]
@@ -1919,6 +1921,9 @@ function importScript(spec, rootDir, stageDir) {
     } else {
       lines.push(
         dotsArtBash(),
+        // drawn again: the old pieces go first, or a folder that has lost a
+        // picture keeps showing it
+        "rm -f \"$dir\"/[0-9][0-9][0-9].txt",
         "i=0",
         "for f in \"${srcs[@]}\"; do",
         "  i=$((i+1)); n=$(printf %03d \"$i\")",
@@ -2155,6 +2160,34 @@ function retrySpec(saver) {
   return spec
 }
 
+// The detail a dot-matrix picture saver was drawn with: what it recorded,
+// or bold for one made before detail was a choice — that is how it was
+// drawn. -1 for anything that has no such choice.
+function savedDetail(saver) {
+  var series = saver && saver.series
+  var src = series && isPlainObject(series.source) ? series.source : null
+  if (!src || series.kind !== "ascii" || (src.type !== "images" && src.type !== "folder")) return -1
+  return src.detail === undefined ? 0 : detailLevel(src.detail)
+}
+
+// The same pictures converted again at another level of detail, under the
+// same tile. Only the dots are redone; the saver's settings stay.
+function redetailSpec(saver, detail) {
+  if (savedDetail(saver) < 0) return null
+  var src = saver.series.source
+  var paths = Array.isArray(src.paths) ? src.paths.slice() : []
+  if (paths.length === 0) return null
+  var spec = importDefaults()
+  spec.source = src.type
+  spec.name = saver.name
+  spec.retryOf = saver.id
+  spec.style = "ascii"
+  spec.paths = paths
+  spec.detail = detailLevel(detail)
+  spec.keepSettings = true
+  return spec
+}
+
 // A described saver drawn again from new words, under the same tile, from
 // the same pictures if it had any. Failed or not.
 function redescribeSpec(saver, words, animated, fromPrevious) {
@@ -2345,6 +2378,8 @@ if (typeof module !== "undefined") {
     seesPictures: seesPictures,
     composeMode: composeMode,
     canMove: canMove,
+    savedDetail: savedDetail,
+    redetailSpec: redetailSpec,
     parseThemeColors: parseThemeColors,
     stateColor: stateColor,
     DETAIL_NAMES: DETAIL_NAMES,
