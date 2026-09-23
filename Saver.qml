@@ -107,11 +107,25 @@ Item {
         target: host
         function onShownChanged() {
           gate.reset()
-          if (host.shown) Qt.callLater(function() { keys.forceActiveFocus() })
+          fadeIn.stop()
+          face.opacity = 0
+          if (host.shown) { fadeIn.start(); Qt.callLater(function() { keys.forceActiveFocus() }) }
         }
       }
 
-      SaverStage { anchors.fill: parent; saverId: host.saverId; running: host.shown; showCard: win.primary }
+      // The window maps before the saver has painted, so on its own the
+      // first frame is the desktop half showing through a surface that is
+      // still filling in. An opaque backdrop in the theme's background, and
+      // the whole face fading in over a fifth of a second, turn that into
+      // one deliberate arrival.
+      Item {
+        id: face
+        anchors.fill: parent
+        opacity: 0
+        Rectangle { anchors.fill: parent; color: Color.background }
+        SaverStage { anchors.fill: parent; saverId: host.saverId; running: host.shown; showCard: win.primary }
+        NumberAnimation { id: fadeIn; target: face; property: "opacity"; from: 0; to: 1; duration: 220; easing.type: Easing.OutCubic }
+      }
 
       MouseArea {
         anchors.fill: parent

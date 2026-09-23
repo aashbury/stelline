@@ -437,6 +437,7 @@ Column {
     enabled: root.serviceOk
     opacity: root.inertOpacity
     bar: root.bar
+    glyph: "󱄄"
     label: "Screensaver"
     value: root.screensaverSeconds
     minimum: 30
@@ -459,6 +460,7 @@ Column {
     enabled: root.serviceOk
     opacity: root.inertOpacity
     bar: root.bar
+    glyph: "󰌾"
     label: "Lock"
     value: root.lockSeconds
     minimum: 60
@@ -507,6 +509,7 @@ Column {
       id: batteryScreensaverRow
       width: parent.width - parent.leftPadding
       bar: root.bar
+      glyph: "󱄄"
       label: "Screensaver"
       value: root.batteryScreensaver
       minimum: 30
@@ -526,6 +529,7 @@ Column {
       id: batteryLockRow
       width: parent.width - parent.leftPadding
       bar: root.bar
+      glyph: "󰌾"
       label: "Lock"
       value: root.batteryLock
       minimum: 60

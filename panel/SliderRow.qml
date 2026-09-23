@@ -9,6 +9,7 @@ CursorSurface {
   id: root
 
   property var bar: null
+  property string glyph: ""
   property string label: ""
   property real value: 0
   property real minimum: 0
@@ -66,10 +67,28 @@ CursorSurface {
     if (next !== root.value) root.released(next)
   }
 
-  Text {
-    id: labelText
+  // The same fixed glyph slot as a switch row, so every label in a section
+  // starts at the same place.
+  Item {
+    id: mark
     anchors.left: parent.left
     anchors.leftMargin: Style.space(10)
+    anchors.verticalCenter: parent.verticalCenter
+    width: root.glyph !== "" ? Style.space(26) : 0
+    height: glyphText.implicitHeight
+    Text {
+      id: glyphText
+      textFormat: Text.PlainText
+      text: root.glyph
+      color: root.settable ? root.foreground : root.dim
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.subtitle
+    }
+  }
+
+  Text {
+    id: labelText
+    anchors.left: mark.right
     anchors.verticalCenter: parent.verticalCenter
     width: Style.space(92)
     textFormat: Text.PlainText
@@ -166,7 +185,9 @@ CursorSurface {
     id: lockSwitch
     visible: root.showSwitch
     anchors.right: parent.right
-    anchors.rightMargin: Style.space(8)
+    // A switch that takes its own click keeps room round it for its hover
+    // ring; the track itself lines up with every other row's switch.
+    anchors.rightMargin: Style.space(8) - (lockSwitch.cursorRing ? lockSwitch.cursorPad : 0)
     anchors.verticalCenter: parent.verticalCenter
     checked: root.switchChecked
     foreground: root.foreground

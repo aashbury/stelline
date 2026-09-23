@@ -62,6 +62,7 @@ BorderSurface {
         bordered: true
         foreground: root.foreground
         fontFamily: root.fontFamily
+        fontSize: Style.font.caption
         onClicked: Quickshell.execDetached(["omarchy-restart-shell"])
       }
 
@@ -72,6 +73,7 @@ BorderSurface {
         bordered: true
         foreground: root.foreground
         fontFamily: root.fontFamily
+        fontSize: Style.font.caption
         onClicked: if (root.svc) root.svc.finishSetup()
       }
 
@@ -80,6 +82,7 @@ BorderSurface {
         text: root.detailsOpen ? "Hide" : "What this changes"
         foreground: root.foreground
         fontFamily: root.fontFamily
+        fontSize: Style.font.caption
         onClicked: root.detailsOpen = !root.detailsOpen
       }
     }

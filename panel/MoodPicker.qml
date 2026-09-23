@@ -101,7 +101,7 @@ Column {
         foreground: root.foreground
         fontFamily: root.fontFamily
         fontSize: Style.font.caption
-        horizontalPadding: Style.space(7)
+        horizontalPadding: Style.space(9)
         verticalPadding: Style.space(3)
         onClicked: {
           var next = root.pinned.slice()

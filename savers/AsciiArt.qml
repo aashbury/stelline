@@ -66,11 +66,16 @@ Item {
   }
   readonly property real advanceAt100: Math.max(1, probe.advanceWidth)
   readonly property real lineHeightAt100: Math.max(1, probe.height)
+  readonly property int minPixelSize: 3
   readonly property int pixelSize: {
     if (root.columns === 0 || root.rows === 0 || root.width === 0 || root.height === 0) return 24
     var byWidth = (root.width * root.fitWidth) / (root.columns * root.advanceAt100 / 100)
     var byHeight = (root.height * root.fitHeight) / (root.rows * root.lineHeightAt100 / 100)
-    return Math.max(2, Math.floor(Math.min(byWidth, byHeight)))
+    // Never drawn smaller than this: under it a cell a pixel or two wide
+    // rounds to the wrong shape and the art comes out squeezed. At this size
+    // a cell is two pixels by four — one pixel to a dot, the dot's true
+    // shape — and the art is shrunk to fit as a whole from there.
+    return Math.max(root.minPixelSize, Math.floor(Math.min(byWidth, byHeight)))
   }
   readonly property int cellW: Math.max(1, Math.round(root.pixelSize * root.advanceAt100 / 100))
   readonly property int cellH: Math.max(1, Math.round(root.pixelSize * root.lineHeightAt100 / 100))
@@ -105,6 +110,17 @@ Item {
       // it should leave, and the fractional spacing merges rows of them into
       // stripes. There each dot is a square snapped to whole pixels, so the
       // gap between them survives.
+      // Under a pixel apart — a figure on a picker card, say — a dot cannot
+      // be a dot at all. Snapped to whole pixels, pairs of them land on the
+      // same column and the figure turns to vertical streaks; drawn at their
+      // true, fractional size instead, they blend into a clean small picture.
+      if (Math.min(dw, dh) < 1.2) {
+        for (var k = 0; k < map.length; k++) {
+          if (!(bits & map[k][2])) continue
+          ctx.fillRect(x + map[k][0] * dw, y + map[k][1] * dh, dw, dh)
+        }
+        return true
+      }
       if (Math.min(dw, dh) < 3.2) {
         var s = Math.max(1, Math.round(Math.min(dw, dh) * 0.55))
         for (var j = 0; j < map.length; j++) {

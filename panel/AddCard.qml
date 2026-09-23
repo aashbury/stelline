@@ -442,6 +442,7 @@ BorderSurface {
         }
         Button {
           text: "Never mind"
+          iconText: "󰅖"
           bordered: true
           foreground: root.foreground
           fontFamily: root.fontFamily
