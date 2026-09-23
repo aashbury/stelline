@@ -41,7 +41,8 @@ Column {
 
   readonly property var cfg: svc ? svc.cfg : M.defaults()
   readonly property var userSavers: svc ? svc.userSavers : []
-  readonly property var savers: M.allSavers(userSavers, cfg.hidden)
+  // What is being made shows at the end, before Add, as soon as it is asked for.
+  readonly property var savers: M.allSavers(userSavers, cfg.hidden).concat(svc && svc.pendingSavers ? svc.pendingSavers : [])
   readonly property var saver: M.saverById(cfg.saver, userSavers) || M.SAVERS[0]
   readonly property bool serviceOk: !!svc
   readonly property bool stayAwake: svc ? svc.stayAwake === true : false
@@ -636,10 +637,11 @@ Column {
         inRotation: isTile && (root.cfg.shuffleFrom || []).indexOf(entry.id) !== -1
         open: isTile && root.openSettings === entry.id
         caption: isTile ? M.playsLabel(root.cfg, entry.id, root.userSavers) : ""
+        deleting: isTile && !!root.svc && (root.svc.deletingIds || []).indexOf(entry.id) !== -1
         foreground: root.foreground
         fontFamily: root.fontFamily
         hasCursor: root.cursorActive && root.cursorIndex === root.rowTileFirst + index
-        onClicked: if (isMore) root.foldGrid(); else if (isAdd) root.startAdd(); else root.chooseSaver(entry.id)
+        onClicked: if (isMore) root.foldGrid(); else if (isAdd) root.startAdd(); else if (!deleting) root.chooseSaver(entry.id)
         onPreviewRequested: root.preview(entry.id)
         onSettingsRequested: root.toggleSettings(entry.id)
         onHovered: function(h) { root.hoverRow(root.rowTileFirst + index, h) }

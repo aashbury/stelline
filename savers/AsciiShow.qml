@@ -186,8 +186,12 @@ Item {
     y: view.artY
     width: view.artW
     height: view.artH
-    scale: view.shrink
-    transformOrigin: Item.Center
+    transform: Scale {
+      origin.x: view.artW / 2
+      origin.y: view.artH / 2
+      xScale: view.shrink * view.aspectFix
+      yScale: view.shrink
+    }
 
     Repeater {
       model: 3

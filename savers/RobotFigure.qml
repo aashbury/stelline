@@ -63,8 +63,13 @@ Item {
     y: body.artY
     width: body.artW
     height: body.artH
-    scale: body.shrink
-    transformOrigin: Item.Center
+    // Scaled exactly as the body's canvas is, so the light stays on it.
+    transform: Scale {
+      origin.x: body.artW / 2
+      origin.y: body.artH / 2
+      xScale: body.shrink * body.aspectFix
+      yScale: body.shrink
+    }
     Text {
       textFormat: Text.PlainText
       renderType: Text.NativeRendering

@@ -34,9 +34,10 @@ BorderSurface {
   property string style: "ascii"
   property bool animated: true
   property string order: "shuffle"
+  property int detail: M.DEFAULT_DETAIL
   readonly property var live: {
     var d = draft ? M.cloneJson(draft) : M.importDefaults()
-    d.kind = root.kind; d.words = root.typed; d.style = root.style; d.animated = root.animated; d.order = root.order
+    d.kind = root.kind; d.words = root.typed; d.style = root.style; d.animated = root.animated; d.order = root.order; d.detail = root.detail
     return d
   }
   readonly property string mode: M.composeMode(live, ai)
@@ -87,6 +88,7 @@ BorderSurface {
     style = draft && draft.style === "image" ? "image" : "ascii"
     animated = !draft || draft.animated !== false
     order = draft && draft.order === "sequence" ? "sequence" : "shuffle"
+    detail = M.detailLevel(draft ? draft.detail : undefined)
   }
   onOpenChanged: if (open) { restore(); if (svc) Qt.callLater(svc.refreshClipboard) }
   // A paste or a pick can change the kind under the card; follow it.
@@ -100,7 +102,7 @@ BorderSurface {
     svc.importDraft = d
   }
   function sync(extra) {
-    var patch = { kind: root.kind, words: root.typed, style: root.style, animated: root.animated, order: root.order }
+    var patch = { kind: root.kind, words: root.typed, style: root.style, animated: root.animated, order: root.order, detail: root.detail }
     for (var k in (extra || {})) patch[k] = extra[k]
     update(patch)
   }
@@ -492,6 +494,25 @@ BorderSurface {
         glyph: "󰈈"
         label: "Show as"
         ShowAs { width: parent.width }
+      }
+      // How much of the picture's shading the dots keep; the preview above
+      // redraws as it moves.
+      SliderRow {
+        visible: root.attached && root.style === "ascii"
+        width: parent.width
+        glyph: "󰈊"
+        label: "Detail"
+        labelWidth: root.labelWidth
+        value: root.detail
+        minimum: 0
+        maximum: 4
+        step: 1
+        format: function(v) { return M.detailName(v) }
+        readoutWidth: Style.space(72)
+        typeable: false
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        onReleased: function(v) { root.detail = Math.round(v); root.sync({}) }
       }
       CardRow {
         visible: root.movable

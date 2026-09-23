@@ -28,7 +28,16 @@ BorderSurface {
   readonly property color fg: Color.notifications.text
   readonly property color dim: Qt.darker(fg, 1.4)
   readonly property color tone: state === "error" ? Color.urgent : fg
-  readonly property color light: state === "error" ? Color.urgent : Color.accent
+  // The figure's lights — the visor, the lit keys, the eyes, the beacon —
+  // are in the state's colour too, so light and words agree.
+  readonly property color light: colorFor(state)
+  // Each state in its own colour from the theme, so the words say it at a
+  // glance: working in the accent, wanting you yellow, finished green, an
+  // error red, standby muted.
+  function colorFor(st) {
+    return M.stateColor(st, service && service.themeColors ? service.themeColors : {},
+      { accent: Color.accent, muted: Color.muted, urgent: Color.urgent, foreground: root.fg })
+  }
   // Every figure is fitted to one frame, three wide by four tall like the
   // hands' own grid, so the card is the same shape whichever figure it
   // holds; the words go under it, the width of the frame. In a corner the
@@ -76,7 +85,7 @@ BorderSurface {
         width: parent.width
         textFormat: Text.PlainText
         text: M.agentStateLabel(root.state)
-        color: root.state === "needs" ? Color.accent : root.tone
+        color: root.colorFor(root.state)
         font.family: root.fontFamily
         font.pixelSize: Style.font.body * root.k
         font.bold: true
@@ -100,7 +109,7 @@ BorderSurface {
           width: parent.width
           textFormat: Text.PlainText
           text: String(modelData.name) + " · " + String(modelData.title || modelData.project || "") + " · " + M.agentStateLabel(String(modelData.state))
-          color: modelData.state === "needs" ? Color.accent : (modelData.state === "error" ? Color.urgent : root.dim)
+          color: root.colorFor(String(modelData.state))
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption * root.k
           elide: Text.ElideRight

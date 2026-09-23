@@ -47,6 +47,21 @@ Item {
   readonly property string userSaversDir: home + "/" + M.USER_SAVERS_SUBDIR
   property var userSavers: []
   readonly property var userSaverIds: userSavers.map(function(s) { return s.id })
+  // A saver being made shows as a tile the moment Create is pressed, not
+  // once its folder has been written and scanned; one being deleted is
+  // marked until it is gone. Both are dropped when the scan catches up.
+  property var pendingNames: ({})
+  property var deletingIds: []
+  readonly property var pendingSavers: Object.keys(pendingNames)
+    .filter(function(id) { return root.userSaverIds.indexOf(id) === -1 })
+    .map(function(id) { return { id: id, name: root.pendingNames[id], kind: "series", glyph: "", meta: "making it…", series: { importing: true, pieces: [] } } })
+  onUserSaversChanged: {
+    var names = {}
+    for (var id in root.pendingNames) if (root.userSaverIds.indexOf(id) === -1) names[id] = root.pendingNames[id]
+    if (Object.keys(names).length !== Object.keys(root.pendingNames).length) root.pendingNames = names
+    var still = root.deletingIds.filter(function(i) { return root.userSaverIds.indexOf(i) !== -1 })
+    if (still.length !== root.deletingIds.length) root.deletingIds = still
+  }
   property bool scanAgain: false
   function rescan() { scanDebounce.restart() }
   Timer {
@@ -130,6 +145,7 @@ Item {
       if (next.order === "shuffle" || next.order === "sequence") how.order = next.order
       if (Object.keys(how).length) writeSaverSetting(next.id, how)
     }
+    var names = M.cloneJson(root.pendingNames); names[next.id] = next.name; root.pendingNames = names
     root.importQueue = root.importQueue.concat([next])
     root.importDraft = null
     runNextImport()
@@ -228,6 +244,7 @@ Item {
     if (Object.keys(patch).length) writeSettings(patch)
     // One at a time: runProcess skips a busy process, so deleting several in
     // a row would drop all but the first.
+    if (root.deletingIds.indexOf(id) === -1) root.deletingIds = root.deletingIds.concat([id])
     root.deleteQueue = root.deleteQueue.concat([{ id: id, script: script }])
     runNextDelete()
     return "ok"
@@ -390,7 +407,7 @@ Item {
     var d = M.importDefaults()
     d.step = "start"
     root.importDraft = d
-    root.draftPreview = { path: "", image: "", art: "" }
+    root.draftPreview = { path: "", detail: M.DEFAULT_DETAIL, image: "", art: "" }
     Quickshell.execDetached(["rm", "-rf", "--", root.pasteStageDir])
     refreshClipboard()
     return "ok"
@@ -459,24 +476,29 @@ Item {
   property var draftPreview: ({ path: "", image: "", art: "" })
   property string previewPending: ""
   readonly property string draftFirstPath: M.isPlainObject(importDraft) && Array.isArray(importDraft.paths) && importDraft.paths.length ? String(importDraft.paths[0]) : ""
+  // The level of detail is part of what the preview is of: moving it redraws.
+  readonly property int draftDetail: M.isPlainObject(importDraft) ? M.detailLevel(importDraft.detail) : M.DEFAULT_DETAIL
   onDraftFirstPathChanged: refreshDraftPreview()
+  onDraftDetailChanged: refreshDraftPreview()
   function refreshDraftPreview() {
     var path = root.draftFirstPath
-    if (path === "" || path === root.draftPreview.path) return
+    if (path === "" || (path === root.draftPreview.path && root.draftDetail === root.draftPreview.detail)) return
     if (previewer.running) { root.previewPending = path; return }
     previewer.forPath = path
-    previewer.command = ["bash", "-c", M.previewScript(root.previewStageDir, root.cellAspect), "_", path]
+    previewer.forDetail = root.draftDetail
+    previewer.command = ["bash", "-c", M.previewScript(root.previewStageDir, root.cellAspect, root.draftDetail), "_", path]
     previewer.running = true
   }
   Process {
     id: previewer
     property string forPath: ""
+    property int forDetail: M.DEFAULT_DETAIL
     stdout: StdioCollector {
       onStreamFinished: {
         var lines = String(text || "").split("\n")
         var image = lines.length && lines[0].indexOf("image\t") === 0 ? lines[0].substring(6) : ""
         var art = lines.slice(1).join("\n").replace(/\s+$/, "")
-        if (art !== "") root.draftPreview = { path: previewer.forPath, image: image, art: art }
+        if (art !== "") root.draftPreview = { path: previewer.forPath, detail: previewer.forDetail, image: image, art: art }
       }
     }
     onExited: function(exitCode) {
@@ -1207,6 +1229,21 @@ Item {
   property var themeNamesPending: []
   function refreshThemes() {
     if (!themeProbe.running) { root.themeNamesPending = []; themeProbe.running = true }
+    themeColorsFile.reload()
+  }
+
+  // The theme's named colours (colors.toml's red, yellow, green, …), which
+  // the shell's own palette does not carry: what a state is shown in, so it
+  // follows the theme like everything else. Read afresh on a theme change.
+  property var themeColors: ({})
+  FileView {
+    id: themeColorsFile
+    path: (Quickshell.env("XDG_STATE_HOME") || (root.home + "/.local/state")) + "/omarchy/current/theme/colors.toml"
+    watchChanges: true
+    printErrors: false
+    onLoaded: root.themeColors = M.parseThemeColors(text())
+    onFileChanged: reload()
+    onLoadFailed: root.themeColors = ({})
   }
   Process {
     id: themeProbe

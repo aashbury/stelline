@@ -11,6 +11,10 @@ CursorSurface {
   property var bar: null
   property string glyph: ""
   property real labelWidth: Style.space(92)
+  // A readout can be a word rather than a time: wide enough for it, and not
+  // something to type into.
+  property real readoutWidth: Style.space(52)
+  property bool typeable: true
   property string label: ""
   property real value: 0
   property real minimum: 0
@@ -137,7 +141,7 @@ CursorSurface {
     anchors.right: root.showSwitch ? lockSwitch.left : parent.right
     anchors.rightMargin: Style.space(10)
     anchors.verticalCenter: parent.verticalCenter
-    width: Style.space(52)
+    width: root.readoutWidth
     height: Style.space(26)
 
     Text {
@@ -148,7 +152,7 @@ CursorSurface {
       verticalAlignment: Text.AlignVCenter
       textFormat: Text.PlainText
       text: root.settable ? root.format(slider.liveValue) : "never"
-      color: root.settable ? (readoutMouse.containsMouse ? Color.accent : root.foreground) : root.dim
+      color: root.settable ? (readoutMouse.containsMouse && root.typeable ? Color.accent : root.foreground) : root.dim
       font.family: root.fontFamily
       font.pixelSize: Style.font.body
     }
@@ -156,7 +160,7 @@ CursorSurface {
     MouseArea {
       id: readoutMouse
       anchors.fill: parent
-      enabled: root.settable && !root.editing
+      enabled: root.settable && !root.editing && root.typeable
       hoverEnabled: true
       cursorShape: Qt.IBeamCursor
       onClicked: root.startEditing()

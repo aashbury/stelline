@@ -242,7 +242,7 @@ test("import scripts: each source produces a self-contained bash pipeline", () =
   const base = { ...M.importDefaults(), id: "acme-co", name: "Acme Co." }
   const imgs = M.importScript({ ...base, source: "images", paths: ["/p/a.png", "/p/it's.png"] }, root)
   assert.match(imgs, /^#!\/bin\/bash/)
-  assert.match(imgs, /omarchy-transcode-ascii "\$prep_path" "\$dir\/\$n\.txt" --width "\$cols" --height "\$rows" --mode braille/)
+  assert.match(imgs, /dots_art "\$prep_path" "\$dir\/\$n\.txt" "\$cols" "\$rows" "\$prep_flags" 2/)
   assert.match(imgs, /'\/p\/it'\\''s\.png'/)
   assert.match(imgs, /"importing":true/)
   assert.match(imgs, /\.play="slideshow"/)
@@ -812,12 +812,12 @@ test("a described saver remembers its pictures, and the script hands them to the
 test("the preview script converts the first picture the way the import would", () => {
   const s = M.previewScript("/run/u/stelline-preview")
   assert.ok(s.includes("omarchy-transcode-ascii"))
-  assert.ok(s.includes("--width " + M.ASCII_COLUMNS))
+  assert.ok(s.includes(" " + M.ASCII_COLUMNS + " " + M.ASCII_ROWS + " "))
   assert.ok(s.includes("ffmpeg"))
   assert.ok(s.includes("printf 'image\\t%s\\n'"))
   // a screenshot is flattened and a dark picture inverted before the transcoder sees it
   assert.ok(s.includes("prep() {"))
-  assert.ok(s.includes('omarchy-transcode-ascii "$prep_path"'))
+  assert.ok(s.includes('dots_art "$prep_path"'))
   // several pictures still go through prep one by one
   const pics = M.importScript({ ...M.importDefaults(), id: "p", name: "p", source: "images", paths: ["/p/a.png", "/p/b.png"] }, "/home/u/savers")
   assert.ok(pics.includes('prep "$f" "$tmp/prep.png"'))
@@ -1005,7 +1005,25 @@ test("pictures carry motion and order into the spec, and come off one at a time"
 test("a picture is converted as it is: no agent is asked, nothing is cropped", () => {
   const sh = M.importScript({ id: "x", source: "images", paths: ["/p/a.png"], style: "ascii", name: "A" }, "/r", "/s")
   assert.doesNotMatch(sh, /subject|crop/)
-  assert.match(sh, /omarchy-transcode-ascii "\$prep_path"/)
+  assert.match(sh, /dots_art "\$prep_path"/)
+})
+
+test("detail: bold is the transcoder's one cut, the rest are dithered", () => {
+  assert.equal(M.detailLevel(undefined), M.DEFAULT_DETAIL)
+  assert.equal(M.detailLevel(9), M.DEFAULT_DETAIL)
+  assert.equal(M.detailName(0), "bold")
+  assert.equal(M.detailName(4), "finest")
+  // the preview and the import convert at the same level
+  const pv = M.previewScript("/run/u/p", 1, 0)
+  assert.match(pv, /dots_art "\$prep_path" "\$stage\/preview\.txt" 160 64 "\$prep_flags" 0/)
+  const d = { ...M.importDefaults(), source: "images", paths: ["/p/a.png"], detail: 4 }
+  assert.equal(M.composeSpec(d, "", "").detail, 4)
+  assert.equal(M.composeSpec({ ...d, style: "image" }, "", "").detail, undefined)
+  const sh = M.importScript({ ...M.composeSpec(d, "", ""), id: "x" }, "/r", "/s")
+  assert.match(sh, /"\$prep_flags" 4 \|\| echo/)
+  // above bold it is dithered and packed here, not transcoded
+  assert.match(sh, /-posterize "\$tones"/)
+  assert.match(sh, /LC_ALL=C awk/)
 })
 
 test("words with pictures ask the agent to draw from them", () => {
@@ -1040,4 +1058,18 @@ test("the kind picked on Add decides what is made", () => {
   assert.equal(M.attach({ ...d, kind: "words" }, { source: "images", paths: ["/p/a.png"] }).kind, "pictures")
   assert.equal(M.attach({ ...d, kind: "describe" }, { source: "images", paths: ["/p/a.png"] }).kind, "describe")
   assert.equal(M.attach({ ...d, kind: "describe" }, { source: "video", paths: ["/p/c.mp4"] }).kind, "clip")
+})
+
+test("each state has its own colour, from the theme where it names one", () => {
+  const colors = M.parseThemeColors('mode = "dark"\nred = "#a77467"\nyellow = "#79885e"\ngreen = "#81a27d"\n# a comment\n')
+  assert.deepEqual(colors, { red: "#a77467", yellow: "#79885e", green: "#81a27d" })
+  const f = { accent: "#9aaad3", muted: "#626369", urgent: "#ff0000", foreground: "#fff" }
+  assert.equal(M.stateColor("working", colors, f), "#9aaad3")
+  assert.equal(M.stateColor("needs", colors, f), "#79885e")
+  assert.equal(M.stateColor("waiting", colors, f), "#81a27d")
+  assert.equal(M.stateColor("error", colors, f), "#a77467")
+  assert.equal(M.stateColor("idle", colors, f), "#626369")
+  // a theme that names none still gets the hues
+  assert.equal(M.stateColor("needs", {}, f), "#e0af68")
+  assert.equal(M.stateColor("error", {}, f), "#ff0000")
 })

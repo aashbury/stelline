@@ -281,7 +281,15 @@ Item {
 
   // Cells are whole pixels, so a tall piece in a small box (a tile) can still
   // overflow at the smallest cell; the finished layer is then scaled down.
-  readonly property real shrink: artW > 0 && artH > 0 ? Math.min(1, (root.width * root.fitWidth) / artW, (root.height * root.fitHeight) / artH) : 1
+  readonly property real shrink: artW > 0 && artH > 0 ? Math.min(1, (root.width * root.fitWidth) / (artW * aspectFix), (root.height * root.fitHeight) / artH) : 1
+  // Cells are whole pixels, so their shape is only near the font's; small,
+  // a cell two by four is well off it and the art comes out wide. Whenever
+  // the art is being scaled anyway — small, or shrunk to fit — it is scaled
+  // back to the font's own shape, so a thumbnail has the proportions the
+  // full-size art has. At full size nothing is resampled: dots stay crisp.
+  readonly property real rawFix: cellW > 0 && cellH > 0 ? (advanceAt100 / lineHeightAt100) / (cellW / cellH) : 1
+  readonly property real rawShrink: artW > 0 && artH > 0 ? Math.min(1, (root.width * root.fitWidth) / artW, (root.height * root.fitHeight) / artH) : 1
+  readonly property real aspectFix: (pixelSize <= minPixelSize || rawShrink < 1) ? rawFix : 1
 
   Item {
     id: canvasHost
@@ -289,8 +297,12 @@ Item {
     height: root.artH
     x: root.snap((root.width - root.artW) / 2 + root.driftX)
     y: root.snap((root.height - root.artH) / 2 + root.driftY)
-    scale: root.shrink
-    transformOrigin: Item.Center
+    transform: Scale {
+      origin.x: canvasHost.width / 2
+      origin.y: canvasHost.height / 2
+      xScale: root.shrink * root.aspectFix
+      yScale: root.shrink
+    }
 
     Canvas {
       id: fgCanvas

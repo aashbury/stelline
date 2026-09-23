@@ -606,36 +606,41 @@ function terminalArgv(terminalId, omarchyPath, loopPath) {
 // matrix the figures use and packed into braille — by awk, one byte at a
 // time, so it needs nothing the Add card does not already. Used whenever a
 // wordmark's text changes; Stelline's own name is drawn by hand instead.
+// Dots to braille, in awk, one byte at a time: a plain PGM on stdin, each
+// dot lit where its grey beats the matrix the figures are dithered with,
+// two across and four down to a cell. Needs nothing beyond awk.
+var BRAILLE_PACK = [
+  "function byte(n) { printf \"%c\", n }",
+  "{ for (i = 1; i <= NF; i++) v[n++] = $i }",
+  "END {",
+  "  W = v[1]; H = v[2]; M = v[3]",
+  "  split(\"0 8 2 10 12 4 14 6 3 11 1 9 15 7 13 5\", B, \" \")",
+  "  split(\"1 2 4 64 8 16 32 128\", BIT, \" \")",
+  "  for (r = 0; r < H; r += 4) {",
+  "    for (c = 0; c < W; c += 2) {",
+  "      code = 0",
+  "      for (dx = 0; dx < 2; dx++) for (dy = 0; dy < 4; dy++) {",
+  "        x = c + dx; y = r + dy",
+  "        if (x >= W || y >= H) continue",
+  "        g = v[4 + y * W + x] / M",
+  "        if (g > 0 && B[(y % 4) * 4 + (x % 4) + 1] / 16 < g) code += BIT[dx * 4 + dy + 1]",
+  "      }",
+  "      cells[c / 2] = code",
+  "    }",
+  "    last = -1; for (k = 0; k < W / 2; k++) if (cells[k]) last = k",
+  "    for (k = 0; k <= last; k++) {",
+  "      if (!cells[k]) { printf \" \"; continue }",
+  "      byte(226); byte(160 + int(cells[k] / 64)); byte(128 + cells[k] % 64)",
+  "    }",
+  "    printf \"\\n\"",
+  "  }",
+  "}"
+].join("\n")
+
 var WORDMARK_DEPTH = 9, WORDMARK_INK = 9
 function wordmarkScript(text, outPath) {
   var q = shellQuote
-  var awkPack = [
-    "function byte(n) { printf \"%c\", n }",
-    "{ for (i = 1; i <= NF; i++) v[n++] = $i }",
-    "END {",
-    "  W = v[1]; H = v[2]; M = v[3]",
-    "  split(\"0 8 2 10 12 4 14 6 3 11 1 9 15 7 13 5\", B, \" \")",
-    "  split(\"1 2 4 64 8 16 32 128\", BIT, \" \")",
-    "  for (r = 0; r < H; r += 4) {",
-    "    for (c = 0; c < W; c += 2) {",
-    "      code = 0",
-    "      for (dx = 0; dx < 2; dx++) for (dy = 0; dy < 4; dy++) {",
-    "        x = c + dx; y = r + dy",
-    "        if (x >= W || y >= H) continue",
-    "        g = v[4 + y * W + x] / M",
-    "        if (g > 0 && B[(y % 4) * 4 + (x % 4) + 1] / 16 < g) code += BIT[dx * 4 + dy + 1]",
-    "      }",
-    "      cells[c / 2] = code",
-    "    }",
-    "    last = -1; for (k = 0; k < W / 2; k++) if (cells[k]) last = k",
-    "    for (k = 0; k <= last; k++) {",
-    "      if (!cells[k]) { printf \" \"; continue }",
-    "      byte(226); byte(160 + int(cells[k] / 64)); byte(128 + cells[k] % 64)",
-    "    }",
-    "    printf \"\\n\"",
-    "  }",
-    "}"
-  ].join("\n")
+  var awkPack = BRAILLE_PACK
   return [
     "set -u",
     "text=" + q(String(text || "").trim()),
@@ -1317,13 +1322,41 @@ function scanScript(rootDir) {
   ].join("\n")
 }
 
+// ---- the colours of a state --------------------------------------------------------
+//
+// The theme's colors.toml names its colours (`red = "#a77467"`); the shell
+// only passes on a few of them. These are the ones a state is shown in.
+function parseThemeColors(text) {
+  var out = {}
+  String(text || "").split("\n").forEach(function(line) {
+    var m = /^\s*([a-z_]+)\s*=\s*"(#[0-9a-fA-F]{6,8})"/.exec(line)
+    if (m) out[m[1]] = m[2]
+  })
+  return out
+}
+
+// What an agent's state is shown in. Working is the theme's accent; wanting
+// you is yellow — it is stopped until you look; finished and waiting is
+// green — ready; an error is red; standby is muted. A theme without a named
+// colour falls back to a plain one of that hue.
+var STATE_HUES = { needs: ["yellow", "#e0af68"], waiting: ["green", "#9ece6a"], error: ["red", ""] }
+function stateColor(state, colors, fallbacks) {
+  var c = isPlainObject(colors) ? colors : {}
+  var f = isPlainObject(fallbacks) ? fallbacks : {}
+  if (state === "working") return f.accent || "#7aa2f7"
+  if (state === "idle") return f.muted || "#707880"
+  var hue = STATE_HUES[state]
+  if (!hue) return f.foreground || "#cacccc"
+  return c[hue[0]] || (state === "error" && f.urgent ? f.urgent : hue[1] || "#f7768e")
+}
+
 // ---- import -----------------------------------------------------------------------
 
 // What the panel collects before Create. `source`: images | folder | video |
 // text | prompt | clock | empty (the last two have nothing to convert).
 // `style`: ascii (theme-coloured text art) | image (the pictures as they are).
 function importDefaults() {
-  return { id: "", name: "", source: "", paths: [], words: "", text: "", prompt: "", style: "ascii", fps: 10, seconds: 20, animated: true, letters: false, frames: 12, order: "shuffle" }
+  return { id: "", name: "", source: "", paths: [], words: "", text: "", prompt: "", style: "ascii", fps: 10, seconds: 20, animated: true, letters: false, frames: 12, order: "shuffle", detail: DEFAULT_DETAIL }
 }
 
 // ---- the composer ----------------------------------------------------------
@@ -1499,6 +1532,8 @@ function composeSpec(draft, ai, stageDir) {
   // Pictures move or sit still, and several come round shuffled or in turn;
   // the service turns both into the saver's own settings.
   if (canMove(draft, mode)) spec.animated = draft.animated !== false
+  if (spec.style === "ascii") spec.detail = detailLevel(draft.detail)
+  else delete spec.detail
   if (canOrder(draft, mode)) spec.order = draft.order === "sequence" ? "sequence" : "shuffle"
   else delete spec.order
   var pasted = stageDir && paths.length === 1 && paths[0].indexOf(stageDir) === 0
@@ -1734,6 +1769,39 @@ function dotStretch(cellAspect) {
   return 1 / (2 * a)
 }
 
+// How much of a picture's shading the dots keep, from 0 to 4. At 0 it is
+// the transcoder's one cut, lit or not, which makes bold shapes and loses
+// what is in the shadows; above that the picture is dithered the way the
+// figures are, keeping more tones at each step, and the top two lift the
+// local contrast so faces and texture survive.
+var DETAIL_NAMES = ["bold", "simple", "balanced", "fine", "finest"]
+var DEFAULT_DETAIL = 2
+function detailLevel(v) {
+  var n = Math.round(Number(v))
+  return isFinite(n) && n >= 0 && n <= 4 ? n : DEFAULT_DETAIL
+}
+function detailName(v) { return DETAIL_NAMES[detailLevel(v)] }
+
+// `dots_art src out cols rows flags detail`: a prepared picture into
+// braille. `flags` is prep's: --invert when the light parts are the subject.
+function dotsArtBash() {
+  return [
+    "dots_art() {",
+    "  local src=$1 out=$2 cols=$3 rows=$4 flags=$5 detail=$6 tones neg=-negate look=''",
+    "  if (( detail <= 0 )); then",
+    "    omarchy-transcode-ascii \"$src\" \"$out\" --width \"$cols\" --height \"$rows\" --mode braille $flags >/dev/null 2>&1; return",
+    "  fi",
+    "  [[ $flags == *--invert* ]] && neg=''",
+    "  case $detail in 1) tones=3 ;; 2) tones=5 ;; 3) tones=9 ;; *) tones=17 ;; esac",
+    "  (( detail >= 3 )) && look='-clahe 25x25%+128+' && look+=$(( detail == 3 ? 2 : 3 ))",
+    "  magick \"$src\" -background black -alpha remove -alpha off -colorspace Gray $neg $look -trim +repage " +
+      "-filter Box -resize \"$((cols * 2))x$((rows * 4))\" -posterize \"$tones\" -depth 8 -compress none pgm:- 2>/dev/null | " +
+      "LC_ALL=C awk " + shellQuote(BRAILLE_PACK) + " > \"$out\"",
+    "  [[ -s $out ]]",
+    "}"
+  ].join("\n")
+}
+
 function prepBash(stretch) {
   var k = (Math.round(dotStretch(stretch) * 10000) / 100).toFixed(2)
   return [
@@ -1752,8 +1820,8 @@ function prepBash(stretch) {
   ].join("\n")
 }
 
-function previewScript(stageDir, cellAspect) {
-  return ["set -u", "shopt -s nocasematch", prepBash(cellAspect),
+function previewScript(stageDir, cellAspect, detail) {
+  return ["set -u", "shopt -s nocasematch", prepBash(cellAspect), dotsArtBash(),
     "stage=" + shellQuote(stageDir),
     "mkdir -p \"$stage\" || exit 1",
     "rm -f \"$stage\"/frame-*.png",
@@ -1766,7 +1834,7 @@ function previewScript(stageDir, cellAspect) {
     "  *.gif) magick \"$src[0]\" \"$frame\" 2>/dev/null && img=$frame ;;",
     "esac",
     "prep \"$img\" \"$stage/prep.png\"",
-    "omarchy-transcode-ascii \"$prep_path\" \"$stage/preview.txt\" --width " + ASCII_COLUMNS + " --height " + ASCII_ROWS + " --mode braille $prep_flags >/dev/null 2>&1 || exit 1",
+    "dots_art \"$prep_path\" \"$stage/preview.txt\" " + ASCII_COLUMNS + " " + ASCII_ROWS + " \"$prep_flags\" " + detailLevel(detail) + " || exit 1",
     "printf 'image\\t%s\\n' \"$img\"",
     "cat \"$stage/preview.txt\""
   ].join("\n")
@@ -1850,12 +1918,13 @@ function importScript(spec, rootDir, stageDir) {
       else lines.push(finish("--argjson srcs \"$srcjson\" '.pieces=$srcs | .source.paths=$srcs'"))
     } else {
       lines.push(
+        dotsArtBash(),
         "i=0",
         "for f in \"${srcs[@]}\"; do",
         "  i=$((i+1)); n=$(printf %03d \"$i\")",
         "  if [[ ${f,,} == *.gif ]]; then magick \"$f[0]\" \"$tmp/$n.png\" 2>/dev/null && f=\"$tmp/$n.png\"; fi",
         "  prep \"$f\" \"$tmp/prep.png\"",
-        "  omarchy-transcode-ascii \"$prep_path\" \"$dir/$n.txt\" --width \"$cols\" --height \"$rows\" --mode braille $prep_flags >/dev/null 2>&1 || echo \"skipped $f\" >&2",
+        "  dots_art \"$prep_path\" \"$dir/$n.txt\" \"$cols\" \"$rows\" \"$prep_flags\" " + detailLevel(spec.detail) + " || echo \"skipped $f\" >&2",
         "done",
         listTxt,
         finish("--argjson pieces \"$pieces\" --argjson srcs \"$srcjson\" '.pieces=$pieces | .play=\"slideshow\" | .source.paths=$srcs'")
@@ -2276,6 +2345,12 @@ if (typeof module !== "undefined") {
     seesPictures: seesPictures,
     composeMode: composeMode,
     canMove: canMove,
+    parseThemeColors: parseThemeColors,
+    stateColor: stateColor,
+    DETAIL_NAMES: DETAIL_NAMES,
+    DEFAULT_DETAIL: DEFAULT_DETAIL,
+    detailLevel: detailLevel,
+    detailName: detailName,
     ADD_KINDS: ADD_KINDS,
     canOrder: canOrder,
     removePicture: removePicture,

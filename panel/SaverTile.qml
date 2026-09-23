@@ -18,6 +18,8 @@ CursorSurface {
   property bool open: false
   property bool live: false
   property bool addTile: false
+  // Deleted, and on its way out.
+  property bool deleting: false
 
   // The tail of a grid that got long: "+7 / Show all". Rendered as the plain
   // box the Add tile uses, so the row of tiles keeps its rhythm.
@@ -32,6 +34,8 @@ CursorSurface {
   property string fontFamily: Style.font.family
   readonly property color dim: Qt.darker(foreground, 1.4)
   readonly property bool importing: !!(saver && saver.series && saver.series.importing)
+  // Work going on: a spinner in the thumbnail, and the tile says what.
+  readonly property bool busy: importing || deleting
   readonly property bool failed: !!(saver && saver.series && saver.series.error)
   readonly property bool hot: hasCursor || mouse.containsMouse
   // With no rule to report, the line under the name says what the saver is.
@@ -45,6 +49,7 @@ CursorSurface {
 
   current: selected && !shuffleMode && !plainTile
   outline: open
+  opacity: deleting ? 0.5 : 1
   implicitHeight: column.implicitHeight + padding * 2
   padding: Style.space(6)
 
@@ -87,7 +92,7 @@ CursorSurface {
         // The same composition the screen gets — base and widgets — small.
         Scene {
           anchors.fill: parent
-          visible: !root.plainTile && !root.importing && !root.failed
+          visible: !root.plainTile && !root.busy && !root.failed
           service: root.svc
           saver: root.saver
           thumbnail: true
@@ -98,10 +103,14 @@ CursorSurface {
       // Savers with no surface of their own (the stock terminal), the add
       // tile, and anything still on its way.
       Text {
+        id: mark
         anchors.centerIn: parent
-        visible: root.plainTile || !(root.saver && (root.saver.file || root.saver.thumb)) || root.importing || root.failed
+        visible: root.plainTile || !(root.saver && (root.saver.file || root.saver.thumb)) || root.busy || root.failed
         textFormat: Text.PlainText
-        text: root.moreTile ? "+" + root.moreCount : (root.fewerTile ? "–" : (root.addTile ? "+" : (root.importing ? "󰔟" : (root.failed ? "󰀦" : (root.saver && root.saver.glyph ? root.saver.glyph : "")))))
+        text: root.moreTile ? "+" + root.moreCount : (root.fewerTile ? "–" : (root.addTile ? "+" : (root.busy ? "󰑓" : (root.failed ? "󰀦" : (root.saver && root.saver.glyph ? root.saver.glyph : "")))))
+        // Turning while there is work going on, so it plainly is.
+        RotationAnimation on rotation { running: root.busy && mark.visible; from: 0; to: 360; duration: 1100; loops: Animation.Infinite }
+        onVisibleChanged: if (!root.busy) rotation = 0
         color: root.failed ? Color.urgent : (root.plainTile ? root.dim : root.foreground)
         font.family: root.fontFamily
         font.pixelSize: Style.font.display
@@ -180,8 +189,8 @@ CursorSurface {
     Text {
       width: parent.width
       textFormat: Text.PlainText
-      text: root.moreTile ? root.moreCount + " more" : (root.fewerTile ? "" : (root.addTile ? root.addHint : (root.importing || root.failed ? (root.saver && root.saver.meta ? root.saver.meta : "importing…") : (root.caption !== "" ? root.caption : root.metaLine))))
-      color: root.failed && !(root.saver && root.saver.meta === "stopped") ? Color.urgent : (root.caption !== "" && !root.importing ? Color.accent : root.dim)
+      text: root.moreTile ? root.moreCount + " more" : (root.fewerTile ? "" : (root.addTile ? root.addHint : (root.deleting ? "deleting…" : (root.importing || root.failed ? (root.saver && root.saver.meta ? root.saver.meta : "making it…") : (root.caption !== "" ? root.caption : root.metaLine)))))
+      color: root.failed && !(root.saver && root.saver.meta === "stopped") ? Color.urgent : (root.caption !== "" && !root.busy ? Color.accent : root.dim)
       font.family: root.fontFamily
       font.pixelSize: Style.font.caption
       elide: Text.ElideRight
