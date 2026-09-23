@@ -116,7 +116,8 @@ Item {
     // An empty's defaults are its settings, written up front: a clock is an
     // empty screen with the clock in the middle, the same as the shipped one.
     if (next.source === "clock") writeSaverSetting(next.id, { background: "theme", widgets: { clock: { on: true, place: "centre" } } })
-    else if (next.source === "empty") writeSaverSetting(next.id, { background: "theme" })
+    // Blank is black, the way the shipped one is: it saves power.
+    else if (next.source === "empty") writeSaverSetting(next.id, { background: "black" })
     // Pictures carry the card's two choices into the saver's own settings.
     // Still, a dot matrix shows every dot at once and breathes its colour;
     // moving, it cycles through the effects as usual. A picture as it is
@@ -418,6 +419,36 @@ Item {
     }
   }
 
+
+  // A word drawn the way it will be, for the Add card's Words: the same
+  // script the wordmark uses, into the preview folder. It takes a few
+  // seconds, so the card asks once the typing stops, and only the latest
+  // word is kept.
+  property var wordPreview: ({ text: "", art: "" })
+  property string wordPending: ""
+  function previewWord(text) {
+    var t = String(text || "").trim()
+    if (t === "" || t === root.wordPreview.text) return
+    if (wordPreviewer.running) { root.wordPending = t; return }
+    wordPreviewer.forText = t
+    var out = root.previewStageDir + "/word.txt"
+    wordPreviewer.command = ["bash", "-c", M.wordmarkScript(t, out) + "\ncat " + M.shellQuote(out)]
+    wordPreviewer.running = true
+  }
+  Process {
+    id: wordPreviewer
+    property string forText: ""
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var art = String(text || "").replace(/\s+$/, "")
+        if (art !== "") root.wordPreview = { text: wordPreviewer.forText, art: art }
+      }
+    }
+    onExited: function(exitCode) {
+      if (exitCode !== 0) root.logEvent("word-preview-exit", "exitCode=" + exitCode)
+      if (root.wordPending !== "") { var t = root.wordPending; root.wordPending = ""; root.previewWord(t) }
+    }
+  }
 
   // What the attachment would look like converted, made the moment it is
   // attached: the first picture (a folder's first, a clip's first second)

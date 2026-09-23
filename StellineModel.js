@@ -1362,6 +1362,10 @@ function classifyPaths(paths) {
 function attach(draft, found) {
   var d = isPlainObject(draft) ? cloneJson(draft) : importDefaults()
   if (!found || !found.source) return d
+  // What was attached decides the kind, unless it is pictures for a
+  // description to draw from.
+  if (found.source === "video") d.kind = "clip"
+  else if (!(d.kind === "describe" && found.source === "images")) d.kind = "pictures"
   if (found.source === "images" && d.source === "images") {
     var have = Array.isArray(d.paths) ? d.paths.slice() : []
     for (var i = 0; i < found.paths.length; i++) if (have.indexOf(found.paths[i]) === -1) have.push(found.paths[i])
@@ -1408,9 +1412,23 @@ function removePicture(draft, path) {
   return d
 }
 
-// What the card would make of what it holds: "" when nothing yet.
+// What can be made, one card each at the top of Add: every kind a shipped
+// saver is, and a couple more. `kind` on the draft is the one picked.
+var ADD_KINDS = [
+  { id: "describe", name: "Describe it", glyph: "󰏫", hint: "your agent draws it" },
+  { id: "words", name: "Words", glyph: "󰊄", hint: "big, styled letters" },
+  { id: "pictures", name: "Pictures", glyph: "󰋩", hint: "one, or several" },
+  { id: "clip", name: "A clip", glyph: "󰕧", hint: "a video or a GIF" },
+  { id: "clock", name: "Clock", glyph: "󰥔", hint: "the time, large" },
+  { id: "blank", name: "Blank", glyph: "󰝤", hint: "for widgets on top" }
+]
+
+// What the card would make of what it holds: "" when nothing yet. With a
+// kind picked, that decides it; without one (a draft from the IPC, say) it
+// is worked out from what is there.
 function composeMode(draft, ai) {
   if (!isPlainObject(draft)) return ""
+  if (draft.kind) return kindMode(draft, ai)
   var words = String(draft.words || "").trim()
   var has = !!draft.source && Array.isArray(draft.paths) && draft.paths.length > 0
   if (!words && !has) return ""
@@ -1420,6 +1438,23 @@ function composeMode(draft, ai) {
   // the words name the saver and the pictures are converted as they are.
   if (words && draft.source === "images" && seesPictures(ai)) return "describe-pictures"
   return draft.source === "folder" ? "folder" : (draft.source === "video" ? "clip" : "pictures")
+}
+
+function kindMode(draft, ai) {
+  var words = String(draft.words || "").trim()
+  var paths = Array.isArray(draft.paths) ? draft.paths : []
+  var pictures = paths.length > 0 && (draft.source === "images" || draft.source === "folder")
+  switch (draft.kind) {
+  case "describe":
+    if (!ai || !words) return ""
+    return pictures && draft.source === "images" && seesPictures(ai) ? "describe-pictures" : "describe"
+  case "words": return words ? "letters" : ""
+  case "pictures": return pictures ? (draft.source === "folder" ? "folder" : "pictures") : ""
+  case "clip": return paths.length > 0 && draft.source === "video" ? "clip" : ""
+  case "clock": return "clock"
+  case "blank": return "blank"
+  }
+  return ""
 }
 
 // A tile's name from a description: the first clause, cut at a word before
@@ -1451,6 +1486,11 @@ function composeSpec(draft, ai, stageDir) {
     spec.source = "text"
     spec.text = words
     spec.name = words
+    return spec
+  }
+  if (mode === "clock" || mode === "blank") {
+    spec.source = mode === "clock" ? "clock" : "empty"
+    spec.name = shortName(words)
     return spec
   }
   spec.source = draft.source
@@ -1845,13 +1885,10 @@ function importScript(spec, rootDir, stageDir) {
       )
     }
   } else if (spec.source === "text") {
+    // Drawn the same way a wordmark's text is, so a word made here looks
+    // like one typed into the wordmark's own settings.
     lines.push(
-      "text=" + q(String(spec.text || "").trim()),
-      "[[ -n $text ]] || fail 'no text given'",
-      // Black on white: the transcoder treats dark pixels as the subject.
-      "font=$(magick -list font 2>/dev/null | awk '/^ *Font: /{print $2}' | grep -m1 -iE 'ExtraBold|Black|Heavy|Bold' || true)",
-      "magick -background white -fill black ${font:+-font \"$font\"} -pointsize 220 label:\"$text\" \"$tmp/text.png\" 2>/dev/null || fail 'could not draw the text'",
-      "omarchy-transcode-ascii \"$tmp/text.png\" \"$dir/001.txt\" --width \"$cols\" --height 40 --mode block >/dev/null 2>&1 || fail 'could not convert the text'",
+      "( " + wordmarkScript(String(spec.text || ""), dir + "/001.txt").split("\n").join("\n  ") + "\n) || fail 'could not draw the text'",
       finish("'.pieces=[\"001.txt\"] | .play=\"slideshow\"'")
     )
   } else if (spec.source === "prompt") {
@@ -2239,6 +2276,7 @@ if (typeof module !== "undefined") {
     seesPictures: seesPictures,
     composeMode: composeMode,
     canMove: canMove,
+    ADD_KINDS: ADD_KINDS,
     canOrder: canOrder,
     removePicture: removePicture,
     composeSpec: composeSpec,

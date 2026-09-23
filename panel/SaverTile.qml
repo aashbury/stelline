@@ -28,7 +28,7 @@ CursorSurface {
   readonly property bool plainTile: addTile || moreTile || fewerTile
   property string caption: ""
   // What the Add tile invites, in the order that is quickest.
-  property string addHint: "describe, paste, pick"
+  property string addHint: "words, pictures, a clip, more"
   property string fontFamily: Style.font.family
   readonly property color dim: Qt.darker(foreground, 1.4)
   readonly property bool importing: !!(saver && saver.series && saver.series.importing)

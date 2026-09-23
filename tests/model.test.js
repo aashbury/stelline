@@ -258,7 +258,9 @@ test("import scripts: each source produces a self-contained bash pipeline", () =
   assert.match(gif, /\.pieces=\["clip\.gif"\]/)
   const txt = M.importScript({ ...base, source: "text", text: "Acme Co." }, root)
   assert.match(txt, /label:"\$text"/)
-  assert.match(txt, /--mode block/)
+  // drawn like a wordmark: in tones, packed to braille, not transcoded
+  assert.match(txt, /LC_ALL=C awk/)
+  assert.doesNotMatch(txt, /--mode block/)
   const ai = M.importScript({ ...base, source: "prompt", prompt: "a robot waving", animated: true, frames: 8 }, root)
   assert.match(ai, /agent=\$\(omarchy-default-agent/)
   assert.match(ai, /reason\(\) \{ local r; r=\$\(grep -m1 -iE 'unauthori/)
@@ -1014,4 +1016,28 @@ test("words with pictures ask the agent to draw from them", () => {
   assert.deepEqual(spec.paths, ["/p/a.png", "/p/b.png"])
   assert.equal(spec.animated, false)
   assert.equal(spec.name, "the dog")
+})
+
+test("the kind picked on Add decides what is made", () => {
+  const d = M.importDefaults()
+  assert.equal(M.ADD_KINDS.map(k => k.id).join(","), "describe,words,pictures,clip,clock,blank")
+  // describing needs an agent and words
+  assert.equal(M.composeMode({ ...d, kind: "describe", words: "a cat" }, ""), "")
+  assert.equal(M.composeMode({ ...d, kind: "describe", words: "a cat" }, "agent:claude"), "describe")
+  assert.equal(M.composeMode({ ...d, kind: "describe", words: "a cat", source: "images", paths: ["/p/a.png"] }, "agent:claude"), "describe-pictures")
+  // words need words; pictures need pictures; a clip needs a clip
+  assert.equal(M.composeMode({ ...d, kind: "words" }, ""), "")
+  assert.equal(M.composeMode({ ...d, kind: "words", words: "Acme" }, "agent:claude"), "letters")
+  assert.equal(M.composeMode({ ...d, kind: "pictures", words: "Holiday" }, ""), "")
+  assert.equal(M.composeMode({ ...d, kind: "pictures", source: "folder", paths: ["/p/h"] }, ""), "folder")
+  assert.equal(M.composeMode({ ...d, kind: "clip", source: "video", paths: ["/p/c.mp4"] }, ""), "clip")
+  // a clock and a blank screen are ready at once, and take a name
+  assert.equal(M.composeMode({ ...d, kind: "clock" }, ""), "clock")
+  const blank = M.composeSpec({ ...d, kind: "blank", words: "Desk" }, "", "")
+  assert.equal(blank.source, "empty")
+  assert.equal(blank.name, "Desk")
+  // what is attached picks the kind, except pictures for a description
+  assert.equal(M.attach({ ...d, kind: "words" }, { source: "images", paths: ["/p/a.png"] }).kind, "pictures")
+  assert.equal(M.attach({ ...d, kind: "describe" }, { source: "images", paths: ["/p/a.png"] }).kind, "describe")
+  assert.equal(M.attach({ ...d, kind: "describe" }, { source: "video", paths: ["/p/c.mp4"] }).kind, "clip")
 })

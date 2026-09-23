@@ -628,7 +628,7 @@ Column {
         svc: root.svc
         live: root.live
         addTile: isAdd
-        addHint: root.svc && String(root.svc.aiProvider || "") !== "" ? "describe, paste, pick" : "paste, pick, type"
+        addHint: "words, pictures, a clip, more"
         moreCount: isMore && root.gridCapped ? root.hiddenCount : 0
         fewerTile: isMore && !root.gridCapped
         selected: isTile && root.cfg.saver === entry.id
