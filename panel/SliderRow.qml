@@ -10,6 +10,7 @@ CursorSurface {
 
   property var bar: null
   property string glyph: ""
+  property real labelWidth: Style.space(92)
   property string label: ""
   property real value: 0
   property real minimum: 0
@@ -90,7 +91,7 @@ CursorSurface {
     id: labelText
     anchors.left: mark.right
     anchors.verticalCenter: parent.verticalCenter
-    width: Style.space(92)
+    width: root.labelWidth
     textFormat: Text.PlainText
     text: root.label
     color: root.foreground

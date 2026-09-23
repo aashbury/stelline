@@ -331,6 +331,7 @@ BorderSurface {
         foreground: root.foreground
         fontFamily: root.fontFamily
         focusable: false
+        fontSize: Style.font.caption
         onChanged: function(v) {
           root.letters = v === "letters"
           if (v === "animation" || v === "still") root.animated = v === "animation"
@@ -391,6 +392,7 @@ BorderSurface {
         foreground: root.foreground
         fontFamily: root.fontFamily
         focusable: false
+        fontSize: Style.font.caption
         onChanged: function(v) { root.animated = v === "animation" }
       }
     }
@@ -404,6 +406,7 @@ BorderSurface {
         foreground: root.foreground
         fontFamily: root.fontFamily
         focusable: false
+        fontSize: Style.font.caption
         onChanged: function(v) { root.order = v }
       }
     }

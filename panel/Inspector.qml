@@ -212,6 +212,7 @@ BorderSurface {
           foreground: root.foreground
           fontFamily: root.fontFamily
           focusable: false
+          fontSize: Style.font.caption
           onChanged: function(v) { root.describeAnimated = v === "animation" }
         }
         // Change it keeps the drawing there is as the starting point; Draw

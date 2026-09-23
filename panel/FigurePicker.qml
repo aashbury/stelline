@@ -17,6 +17,13 @@ Row {
 
   signal picked(string figure)
 
+  // How each figure shows the states, for its tooltip.
+  readonly property var hints: ({
+    deck: "types while an agent works, lifts off the keys when one needs you",
+    visor: "code runs across its visor while an agent works, it looks up when one needs you",
+    morty: "watches the screen while an agent works, grins when one is waiting on you"
+  })
+
   spacing: Style.space(6)
 
   Repeater {
@@ -75,6 +82,12 @@ Row {
         hoverEnabled: true
         cursorShape: Qt.PointingHandCursor
         onClicked: root.picked(card.modelData.id)
+      }
+
+      // What picking it gets you, in the terms you will see it in.
+      PanelToolTip {
+        visible: mouse.containsMouse
+        text: card.modelData.name + ": " + (root.hints[card.modelData.id] || "")
       }
     }
   }

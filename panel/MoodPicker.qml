@@ -29,50 +29,17 @@ Column {
   width: parent ? parent.width : implicitWidth
   spacing: Style.space(6)
 
-  Flow {
-    width: parent.width
-    spacing: Style.space(6)
-
-    Text {
-      // Flow lays its children out itself, so the label matches the chips'
-      // height rather than anchoring to them.
-      height: everything.height
-      verticalAlignment: Text.AlignVCenter
-      textFormat: Text.PlainText
-      text: "Animations"
-      color: root.dim
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.caption
-    }
-    Button {
-      id: everything
-      text: "Everything"
-      bordered: true
-      selected: root.mood === ""
-      foreground: root.foreground
-      fontFamily: root.fontFamily
-      fontSize: Style.font.caption
-      horizontalPadding: Style.space(9)
-      verticalPadding: Style.space(3)
-      tooltipText: "All " + root.effects.length + ", one after another at random"
-      onClicked: root.changed([])
-    }
-    Repeater {
-      model: root.moodKeys
-      Button {
-        required property var modelData
-        text: root.title(modelData)
-        bordered: true
-        selected: root.mood === modelData
-        foreground: root.foreground
-        fontFamily: root.fontFamily
-        fontSize: Style.font.caption
-        horizontalPadding: Style.space(9)
-        verticalPadding: Style.space(3)
-        tooltipText: (root.moods[modelData] || []).join(", ")
-        onClicked: root.changed((root.moods[modelData] || []).slice())
-      }
-    }
+  // The moods are one choice among four, so they are the same control as
+  // every other choice in the panel. The label is the row's, not ours.
+  ButtonGroup {
+    options: [{ value: "", label: "Everything", tooltip: "All " + root.effects.length + ", one after another at random" }]
+      .concat(root.moodKeys.map(function(k) { return { value: k, label: root.title(k), tooltip: (root.moods[k] || []).join(", ") } }))
+    value: root.mood
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    fontSize: Style.font.caption
+    focusable: false
+    onChanged: function(v) { root.changed(v === "" ? [] : (root.moods[v] || []).slice()) }
   }
 
   Button {
@@ -83,14 +50,14 @@ Column {
     foreground: root.foreground
     fontFamily: root.fontFamily
     fontSize: Style.font.caption
-    horizontalPadding: Style.space(4)
+    horizontalPadding: 0
     onClicked: root.expanded = !root.expanded
   }
 
   Flow {
     visible: root.showChips
     width: parent.width
-    spacing: Style.space(4)
+    spacing: Style.space(6)
     Repeater {
       model: root.effects
       Button {
@@ -101,8 +68,6 @@ Column {
         foreground: root.foreground
         fontFamily: root.fontFamily
         fontSize: Style.font.caption
-        horizontalPadding: Style.space(9)
-        verticalPadding: Style.space(3)
         onClicked: {
           var next = root.pinned.slice()
           var at = next.indexOf(modelData)

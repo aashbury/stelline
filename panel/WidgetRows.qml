@@ -137,32 +137,41 @@ Column {
   SwitchRow {
     width: parent.width
     glyph: "󰚩"
-    label: "Coding agent"
+    // Named for what it shows, so it does not read as a setting for the
+    // agents themselves.
+    label: "Agent status"
+    description: "Whether your coding agents are working or waiting on you"
     checked: root.widgets.agent.on === true
     foreground: root.foreground
     fontFamily: root.fontFamily
     onClicked: root.set("agent", { on: !checked })
   }
-  Row {
+  // Where it goes, the same picture of the screen as every other widget's,
+  // and under it which figure: the figures get a line of their own, so
+  // they are never squeezed to fit beside it.
+  Column {
     visible: root.widgets.agent.on === true
     x: root.indent
-    spacing: Style.space(12)
+    width: parent.width - root.indent - Style.space(8)
+    spacing: Style.space(8)
     bottomPadding: Style.space(8)
 
-    // As tall as the figure cards beside it, still the shape of a screen.
     PlacePicker {
-      anchors.verticalCenter: parent.verticalCenter
-      height: figures.height
-      width: Math.round(height * 1.6)
       place: root.widgets.agent.place
       foreground: root.foreground
       fontFamily: root.fontFamily
       onPicked: function(spot) { root.set("agent", { place: spot }) }
     }
 
+    Text {
+      textFormat: Text.PlainText
+      text: "How it looks — it acts out what they are doing"
+      color: root.dim
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
+    }
+
     FigurePicker {
-      id: figures
-      anchors.verticalCenter: parent.verticalCenter
       figure: root.widgets.agent.figure ? String(root.widgets.agent.figure) : ""
       foreground: root.foreground
       fontFamily: root.fontFamily
