@@ -149,8 +149,11 @@ Column {
     spacing: Style.space(12)
     bottomPadding: Style.space(8)
 
+    // As tall as the figure cards beside it, still the shape of a screen.
     PlacePicker {
       anchors.verticalCenter: parent.verticalCenter
+      height: figures.height
+      width: Math.round(height * 1.6)
       place: root.widgets.agent.place
       foreground: root.foreground
       fontFamily: root.fontFamily
@@ -158,6 +161,7 @@ Column {
     }
 
     FigurePicker {
+      id: figures
       anchors.verticalCenter: parent.verticalCenter
       figure: root.widgets.agent.figure ? String(root.widgets.agent.figure) : ""
       foreground: root.foreground

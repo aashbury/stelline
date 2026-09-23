@@ -55,8 +55,11 @@ Item {
         Rectangle {
           anchors.centerIn: parent
           visible: parent.spot !== ""
-          width: parent.spot === "centre" ? Math.round(parent.width * 0.62) : Style.space(7)
-          height: Style.space(7)
+          // The spots grow with the picture, so a taller picker is not a
+          // big empty box with pinpricks in it.
+          readonly property real dot: Math.max(Style.space(7), Math.round(root.height * 0.11))
+          width: parent.spot === "centre" ? Math.round(parent.width * 0.62) : dot
+          height: dot
           radius: height / 2
           color: parent.chosen ? Color.accent : root.dim
           opacity: parent.chosen ? 1 : (mouse.containsMouse ? 0.75 : 0.22)
