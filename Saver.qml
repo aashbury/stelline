@@ -17,42 +17,6 @@ Item {
   property var service: null
   readonly property bool shown: service ? service.overlayVisible === true : false
   readonly property string saverId: service ? String(service.overlaySaver || "") : ""
-  // Development aid: the same saver in a small corner surface that steals no
-  // focus and takes over nothing (`omarchy-shell stelline mini <saver>`).
-  readonly property bool miniShown: service ? service.miniVisible === true : false
-  readonly property string miniSaverId: service ? String(service.miniSaver || "") : ""
-
-  // One saver instance: the same Scene a tile draws, full size, loaded only
-  // while running. The cards show on the focused monitor only.
-  component SaverStage: Item {
-    id: stage
-    property string saverId: ""
-    property bool running: false
-    property bool showCard: true
-    Scene {
-      anchors.fill: parent
-      service: host.service
-      saver: M.saverById(stage.saverId, host.service ? host.service.userSavers : []) || ({})
-      active: stage.running && stage.saverId !== ""
-      showCards: stage.showCard
-    }
-  }
-
-  PanelWindow {
-    id: mini
-    visible: host.miniShown
-    anchors { bottom: true; right: true }
-    margins { bottom: Style.gapsOut * 2; right: Style.gapsOut * 2 }
-    implicitWidth: 480
-    implicitHeight: 270
-    color: "transparent"
-    exclusionMode: ExclusionMode.Ignore
-    WlrLayershell.namespace: "stelline-mini"
-    WlrLayershell.layer: WlrLayer.Top
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
-    SaverStage { anchors.fill: parent; saverId: host.miniSaverId; running: host.miniShown }
-  }
-
   // Input in the first moments after mapping is compositor noise (focus
   // handoff, a synthetic hover under a stationary pointer), not the user.
   property bool armed: false
@@ -123,7 +87,15 @@ Item {
         anchors.fill: parent
         opacity: 0
         Rectangle { anchors.fill: parent; color: Color.background }
-        SaverStage { anchors.fill: parent; saverId: host.saverId; running: host.shown; showCard: win.primary }
+        // The same Scene a tile draws, full size, loaded only while shown.
+        // The cards show on the focused monitor only.
+        Scene {
+          anchors.fill: parent
+          service: host.service
+          saver: M.saverById(host.saverId, host.service ? host.service.userSavers : []) || ({})
+          active: host.shown && host.saverId !== ""
+          showCards: win.primary
+        }
         NumberAnimation { id: fadeIn; target: face; property: "opacity"; from: 0; to: 1; duration: 220; easing.type: Easing.OutCubic }
       }
 

@@ -2,18 +2,14 @@ const test = require("node:test")
 const assert = require("node:assert/strict")
 const R = require("../savers/Robot.js")
 
+const STATES = ["working", "needs", "waiting", "error", "idle"]
 const lit = s => s.replace(/[\s\n]/g, "").length
 const chars = s => [...s.replace(/[\s\n]/g, "")]
 const isBraille = c => c.codePointAt(0) >= 0x2800 && c.codePointAt(0) <= 0x28ff
 
-test("the canvas is a grid of dots, two across and four down per cell", () => {
-  assert.equal(R.DOT_W, R.COLS * 2)
-  assert.equal(R.DOT_H, R.ROWS * 4)
-})
-
 test("every figure draws every state, on the grid and made of dots", () => {
   for (const figure of R.FIGURES) {
-    for (const state of R.STATES) {
+    for (const state of STATES) {
       const f = R.frame(figure.id, state, 0)
       const where = figure.id + "/" + state
       const body = f.body.split("\n")
@@ -42,7 +38,7 @@ test("every figure draws every state, on the grid and made of dots", () => {
 
 test("every state is a loop, and something moves in it", () => {
   for (const figure of R.FIGURES) {
-    for (const state of R.STATES) {
+    for (const state of STATES) {
       const all = R.frames(figure.id, state)
       const where = figure.id + "/" + state
       assert.ok(all.length >= 3, where + " needs enough frames to read as motion")
@@ -71,7 +67,7 @@ test("the states are told apart by what they do, not by a caption", () => {
     assert.ok(idle < needs && idle < error, id + " standby is as busy as it is when it wants you")
     // and no two states draw the same picture
     const seen = {}
-    for (const state of R.STATES) {
+    for (const state of STATES) {
       const key = R.frame(id, state, 0).body
       assert.ok(!seen[key], id + " draws " + state + " the same as " + seen[key])
       seen[key] = state
@@ -83,7 +79,6 @@ test("an unknown figure falls back to the one everybody gets", () => {
   assert.equal(R.figureId(""), R.DEFAULT_FIGURE)
   assert.equal(R.figureId("a-shape-from-next-year"), R.DEFAULT_FIGURE)
   assert.equal(R.figureId("morty"), "morty")
-  assert.equal(R.figureName("morty"), "Morty")
   // a state it does not know still draws something
   assert.ok(lit(R.frame("deck", "no-such-state", 0).body) > 0)
 })
@@ -103,5 +98,5 @@ test("Morty is a Boston terrier: ears up, and a face with markings in it", () =>
 test("the pace matches what it is doing", () => {
   assert.ok(R.cadence("working") < R.cadence("idle"))
   assert.equal(R.cadence("nonsense"), 900)
-  for (const s of R.STATES) assert.ok(R.cadence(s) > 0)
+  for (const s of STATES) assert.ok(R.cadence(s) > 0)
 })

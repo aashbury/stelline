@@ -16,7 +16,6 @@ Column {
   property var pinned: []
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
-  readonly property color dim: Qt.darker(foreground, 1.4)
 
   property bool expanded: false
   readonly property string mood: M.moodOf(root.pinned, root.moods)

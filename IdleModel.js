@@ -1,8 +1,5 @@
-function secondsFromConfig(value, fallback) {
-  var n = Number(value)
-  if (!isFinite(n) || n < 0) return fallback
-  return Math.floor(n)
-}
+// From the stock idle service (omarchy.idle), unchanged: Hyprland event
+// parsing and the screensaver-window bookkeeping.
 
 function eventParts(event, count) {
   try {
@@ -45,7 +42,6 @@ function screensaverWindowsAfter(windows, address, visible) {
 
 if (typeof module !== "undefined") {
   module.exports = {
-    secondsFromConfig: secondsFromConfig,
     eventParts: eventParts,
     screensaverWindowsAfter: screensaverWindowsAfter
   }

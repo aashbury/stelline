@@ -9,29 +9,11 @@
 // The canvas is 683 × 1000: the 120 × 160 dot grid at the braille cell's
 // real proportions, so what is drawn here is what the screen shows.
 
-var W = 683, H = 1000
-var TONE = { 3: "#ffffff", 2: "#aaaaaa", 1: "#555555", 0: "#000000", 4: "#ff0000" }
-// 4 is not a tone but the accent: the baker keeps it apart, and it is drawn
-// in the theme's accent colour — a fingertip lit where it meets a key.
-var ACCENT = 4
-var LINE = 9            // an ink line, a touch over one dot wide
+var D = require("./draw.js")
+var W = D.W, H = D.H, TONE = D.TONE, LINE = D.LINE, ACCENT = D.ACCENT
+var f = D.f, pts = D.pts, poly = D.poly, line = D.line, ellipse = D.ellipse, lerp = D.lerp, rotate = D.rotate
+// Tone 4 is the accent: a fingertip lit where it meets a key.
 
-function f(n) { return Math.round(n * 10) / 10 }
-function pts(list) { return list.map(function (p) { return f(p[0]) + "," + f(p[1]) }).join(" ") }
-function poly(list, tone, stroke) {
-  return '<polygon points="' + pts(list) + '" fill="' + TONE[tone] + '"' +
-    (stroke ? ' stroke="#000" stroke-width="' + stroke + '" stroke-linejoin="round"' : "") + "/>"
-}
-function line(a, b, tone, w, cap) {
-  return '<line x1="' + f(a[0]) + '" y1="' + f(a[1]) + '" x2="' + f(b[0]) + '" y2="' + f(b[1]) +
-    '" stroke="' + TONE[tone] + '" stroke-width="' + f(w) + '" stroke-linecap="' + (cap || "round") + '"/>'
-}
-function ellipse(c, rx, ry, tone, stroke, rot) {
-  return '<ellipse cx="' + f(c[0]) + '" cy="' + f(c[1]) + '" rx="' + f(rx) + '" ry="' + f(ry) + '" fill="' + TONE[tone] + '"' +
-    (stroke ? ' stroke="#000" stroke-width="' + stroke + '"' : "") +
-    (rot ? ' transform="rotate(' + f(rot) + " " + f(c[0]) + " " + f(c[1]) + ')"' : "") + "/>"
-}
-function lerp(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t] }
 // The whole scene is drawn a little small and then brought in close, so
 // the hands fill the frame and the keyboard runs off it on every side.
 var ZOOM = 1.28, ANCHOR = [W / 2, 640]
@@ -176,10 +158,6 @@ function finger(fg, lift, press) {
 }
 
 var TURN = 9, WRIST = [211, 650]
-function rotate(p, deg, c) {
-  var a = deg * Math.PI / 180, x = p[0] - c[0], y = p[1] - c[1]
-  return [c[0] + x * Math.cos(a) - y * Math.sin(a), c[1] + x * Math.sin(a) + y * Math.cos(a)]
-}
 
 function hand(lifts, dy) {
   var shadows = "", body = "", tips = []

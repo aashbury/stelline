@@ -26,7 +26,6 @@ BorderSurface {
   readonly property string state: summary.state
   readonly property real k: large ? 1.6 : 1
   readonly property color fg: Color.notifications.text
-  readonly property color dim: Qt.darker(fg, 1.4)
   readonly property color tone: state === "error" ? Color.urgent : fg
   // The figure's lights — the visor, the lit keys, the eyes, the beacon —
   // are in the state's colour too, so light and words agree.

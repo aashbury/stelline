@@ -11,20 +11,17 @@
 //
 // Everything is drawn on a grid of dots rather than of characters: a
 // braille cell holds two dots across and four down. The figures are drawn
-// as vector cels in art/ and baked to dots on a 120 × 160 grid by
-// tools/bake.js; this end lays the baked poses down, moves them, and does
-// the light.
+// as vector cels in art/ and baked to dots on a 120 × 160 grid (60 × 40
+// cells) by tools/bake.js; this end lays the baked poses down, moves them,
+// and does the light.
 //
 // Shapes are listed in FIGURES and picked per tile. Adding one is a
 // drawing, a draw function, a name, and how long each state's loop runs.
-var ROWS = 26
-var COLS = 52
-var DOT_W = COLS * 2
-var DOT_H = ROWS * 4
+var ROWS = 40
+var COLS = 60
 
-// The grid being drawn on right now. The state's light is worked out on the
-// old 52 × 26 grid and stretched to a figure's own, which frames() sets.
-var GR = ROWS, GC = COLS, GW = DOT_W, GH = DOT_H
+// The grid being drawn on right now, which frames() sets from the figure.
+var GR = ROWS, GC = COLS, GW = COLS * 2, GH = ROWS * 4
 function useGrid(rows, cols) { GR = rows; GC = cols; GW = cols * 2; GH = rows * 4 }
 
 // ---- the canvas ------------------------------------------------------------
@@ -154,7 +151,6 @@ function cycle(list, n) { return list[((n % list.length) + list.length) % list.l
 
 // Up and down and back, for a chest or a head.
 var BREATH = [0, 0, 1, 2, 2, 2, 1, 0]
-var BOB = [0, 1, 1, 0, -1, -1, 0, 0]
 // A blink is one frame in eight, which is about the rate a dog blinks at.
 function blinking(n, at) { return (n % 8) === (at === undefined ? 6 : at) }
 
@@ -168,11 +164,10 @@ function blinking(n, at) { return (n % 8) === (at === undefined ? 6 : at) }
 //   waiting  breathing, a little under full
 //   error    lurching between full and half, which reads as a fault
 //   standby  down to about half, breathing very slowly
+// Where the band is, as a share of the figure's height.
 function stateLight(fd, state, n) {
-  // worked out on the usual grid, and stretched to whatever this one is
-  var k = GH / DOT_H
-  if (state === "working") { sheen(fd, k * cycle([16, 32, 48, 64, 80, 96], n), 11 * k, 1.3); return }
-  if (state === "needs") { sheen(fd, k * cycle([96, 82, 68, 54, 40, 26, 12, 4], n), 14 * k, 1.45); return }
+  if (state === "working") { sheen(fd, GH * cycle([0.154, 0.308, 0.462, 0.615, 0.769, 0.923], n), GH * 0.106, 1.3); return }
+  if (state === "needs") { sheen(fd, GH * cycle([0.923, 0.788, 0.654, 0.519, 0.385, 0.25, 0.115, 0.038], n), GH * 0.135, 1.45); return }
   if (state === "waiting") { fade(fd, cycle([0.86, 0.89, 0.93, 0.97, 1, 0.97, 0.93, 0.89], n)); return }
   if (state === "error") { fade(fd, cycle([1, 0.66, 1, 0.7, 0.94, 0.72], n)); return }
   fade(fd, cycle([0.48, 0.5, 0.54, 0.58, 0.58, 0.54, 0.5, 0.48], n))
@@ -216,15 +211,12 @@ function cross(f, x, y, s) {
 // ---- the deck: a pair of hands over a keyboard ------------------------------
 //
 // Over the shoulder of whoever is typing: two plated hands on a keyboard
-// that runs off both sides of the frame. Unlike the other two this is not
-// drawn here. It is drawn as vector cels in art/hands.js — four tones, lit
-// plate, dense shade, sparse shade and black — and tools/bake.js turns each
-// pose into dots, so what arrives is a keyboard, a map of which dot belongs
-// to which key, and the hands in each pose. This end puts them together,
-// lights the keys under the fingers that are pressing, and does the light.
-//
-// Its grid is bigger than the others', 120 × 160 dots, because plated
-// fingers with joints in them do not survive being any smaller.
+// that runs off both sides of the frame, drawn as vector cels in
+// art/hands.js — four tones, lit plate, dense shade, sparse shade and
+// black. tools/bake.js turns each pose into dots, so what arrives is a
+// keyboard, a map of which dot belongs to which key, and the hands in each
+// pose. This end puts them together, lights the keys under the fingers
+// that are pressing, and does the light.
 
 // The four tones, as brightness for the dither: black, sparse, dense, lit.
 // Lit is solid: at this grid a lit plate a shade
@@ -425,7 +417,6 @@ var FIGURES = [
 var DEFAULT_FIGURE = "deck"
 // How long each state holds a frame: fast while it works, slow on standby.
 var CADENCE = { working: 240, needs: 300, waiting: 380, error: 300, idle: 700 }
-var STATES = ["working", "needs", "waiting", "error", "idle"]
 
 // Anything unknown — nothing stored, a shape from a later version — is the
 // usual one.
@@ -435,7 +426,6 @@ function shapeOf(id) {
   return FIGURES[0]
 }
 function figureId(id) { return shapeOf(id).id }
-function figureName(id) { return shapeOf(id).name }
 
 // How big a figure's grid is, in braille cells. Most are the usual size.
 function size(id) {
@@ -471,8 +461,8 @@ function cadence(state) { return CADENCE[state] || 900 }
 
 if (typeof module !== "undefined")
   module.exports = {
-    ROWS: ROWS, COLS: COLS, DOT_W: DOT_W, DOT_H: DOT_H, CADENCE: CADENCE, STATES: STATES,
+    BAYER: BAYER, BITS: BITS, TONES: TONES,
     FIGURES: FIGURES, DEFAULT_FIGURE: DEFAULT_FIGURE,
-    figureId: figureId, figureName: figureName, size: size,
+    figureId: figureId, size: size,
     frames: frames, frame: frame, cadence: cadence
   }

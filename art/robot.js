@@ -8,7 +8,7 @@
 // visor while it works — which is how the states read from across a room.
 
 var D = require("./draw.js")
-var poly = D.poly, line = D.line, ellipse = D.ellipse, LINE = D.LINE, ACCENT = D.ACCENT
+var poly = D.poly, line = D.line, ellipse = D.ellipse, LINE = D.LINE
 var CX = D.W / 2
 
 // ---- the head ------------------------------------------------------------------
@@ -136,7 +136,4 @@ function poses() {
   }
 }
 
-// Nothing to sit at: it is reading the screen, not typing.
-function blank() { return D.svg("", "#000") }
-
-module.exports = { W: D.W, H: D.H, board: blank, keymap: blank, poses: poses }
+module.exports = { W: D.W, H: D.H, poses: poses }

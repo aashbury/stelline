@@ -7,10 +7,10 @@ import "../StellineModel.js" as M
 // Adding a saver is one card. At the top, what kind of saver: one card for
 // each kind the shipped savers are, and a couple more. Under it, only what
 // that kind needs, laid out the way the rest of the panel is — a glyph, a
-// label and the control, every row starting in the same place. Pictures are
-// shown exactly as the preview shows them; words are drawn the way the
-// wordmark is, and the card shows that too. Pasting a picture or a clip
-// anywhere on the card picks the kind for you. The draft lives in the
+// label and the control, every row starting in the same place. Pictures and
+// clips are converted exactly as the preview shows them; words are drawn the
+// way the wordmark is, and the card shows that too. Pasting a picture or a
+// clip anywhere on the card picks the kind for you. The draft lives in the
 // service so it survives the panel closing for the file chooser.
 BorderSurface {
   id: root
@@ -48,11 +48,19 @@ BorderSurface {
   readonly property bool hasFolder: attached && source === "folder"
   readonly property bool hasClip: attached && source === "video"
   readonly property int count: attached ? draft.paths.length : 0
-  readonly property bool movable: M.canMove(live, mode)
+  readonly property bool movable: M.canMove(mode)
   readonly property bool orderable: M.canOrder(live, mode)
   // The conversion of what is attached, once it is of the current attachment.
+  // Either may instead carry the reason there is nothing to show.
   readonly property var preview: svc && svc.draftPreview && attached && String(svc.draftPreview.path) === String(draft.paths[0]) ? svc.draftPreview : null
+  readonly property string previewError: preview && preview.error ? String(preview.error) : ""
+  readonly property bool previewReady: !!preview && previewError === ""
   readonly property var wordArt: svc && svc.wordPreview && String(svc.wordPreview.text) === typed.trim() ? svc.wordPreview : null
+  readonly property bool wordReady: !!wordArt && String(wordArt.art || "") !== ""
+  // Only some agents can be handed a picture; with the others a description
+  // is words alone, and the card does not offer pictures.
+  readonly property bool seesPictures: M.seesPictures(ai)
+  readonly property bool picturesFull: count >= M.DESCRIBE_PICTURES
   readonly property string agentName: ai.indexOf("agent:") === 0 ? M.agentName(ai.substring(6)) : (ai === "api" ? "the Claude API" : "")
 
   // One label column for every row on the card.
@@ -62,11 +70,11 @@ BorderSurface {
 
   readonly property string caption: {
     if (kind === "describe") {
-      if (ai === "") return "Needs a coding agent — set one with omarchy default agent."
-      if (mode === "describe-pictures") return "Asks " + agentName + " to draw it from " + (count > 1 ? "the pictures" : "the picture") + ", the way you describe. It redraws rather than copies."
-      return "Asks " + agentName + ". Usually under a minute; the tile fills in when it is ready."
+      if (ai === "") return root.agentHint
+      if (mode === "describe-pictures") return "Asks " + agentName + " to draw it from " + (count > 1 ? "the pictures" : "the picture") + ", the way you describe. It redraws rather than copies; the tile fills in when it is ready."
+      return "Asks " + agentName + ". It takes a minute or two; the tile fills in when it is ready."
     }
-    if (kind === "words") return "In your theme's colours, with the wordmark's animations."
+    if (kind === "words") return "Drawn as a title card in your theme's colours, with the saver animations."
     if (kind === "clock") return "The time in the middle of an empty screen, in your theme's colours."
     if (kind === "blank") return "Black, and nothing else — for the widgets you put on top."
     if (kind === "clip") return mode === "clip" ? (style === "ascii" ? "The first 20 seconds, as dots; takes a minute or so." : "The first 20 seconds, as it is.") : ""
@@ -79,6 +87,8 @@ BorderSurface {
     }
     return ""
   }
+
+  readonly property string agentHint: "Needs a coding agent: set one with omarchy default agent, or install Claude Code, or set ANTHROPIC_API_KEY."
 
   // What the card holds is restored whenever it comes back: opened afresh,
   // or re-made with the panel while a chooser was up.
@@ -106,14 +116,25 @@ BorderSurface {
     for (var k in (extra || {})) patch[k] = extra[k]
     update(patch)
   }
+  // Another kind: what was typed carries over between the two kinds that
+  // take words (a description, a title), and between the ones it names; it
+  // does not turn a description into a clock's name. What is attached stays
+  // only where the new kind can use it.
   function choose(k) {
+    var wordy = function(x) { return x === "describe" || x === "words" }
+    if (root.kind !== "" && wordy(root.kind) !== wordy(k)) root.typed = ""
     root.kind = k
-    sync({})
+    if (svc) { var d = M.chooseKind(live, k, ai); d.step = "start"; svc.importDraft = d }
     Qt.callLater(function() { var f = root.fieldFor(k); if (f) f.forceActiveFocus() })
   }
   function fieldFor(k) { return k === "describe" ? describeField : (k === "words" ? wordsField : (k === "" ? null : nameField)) }
   function cancel() { if (svc) svc.importDraft = null }
-  function pick(what) { sync({ step: "picking" }); if (svc) svc.pickFiles(what) }
+  // A chooser that did not open leaves the card as it was.
+  function pick(what) {
+    if (!svc) return
+    sync({ step: "picking" })
+    if (svc.pickFiles(what) !== "ok") sync({ step: "start" })
+  }
   function paste() { if (!svc || pasteable === "") return; sync({}); svc.pasteClipboard() }
   function detach() { if (svc) { var d = M.detach(live); d.step = "start"; svc.importDraft = d } }
   function removePicture(path) { if (svc) { var d = M.removePicture(live, path); d.step = "start"; svc.importDraft = d } }
@@ -287,14 +308,25 @@ BorderSurface {
       onPicked: root.style = "ascii"
       AsciiArt {
         anchors.fill: parent
-        visible: !!root.preview
-        art: root.preview ? String(root.preview.art) : ""
+        visible: root.previewReady
+        art: root.previewReady ? String(root.preview.art) : ""
         fg: root.foreground
         fontFamily: root.fontFamily
         fitWidth: 0.98
         fitHeight: 0.98
       }
-      Text { anchors.centerIn: parent; visible: !root.preview; textFormat: Text.PlainText; text: "converting…"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
+      Text {
+        anchors.centerIn: parent
+        width: parent.width - Style.space(8)
+        visible: !root.previewReady
+        horizontalAlignment: Text.AlignHCenter
+        wrapMode: Text.WordWrap
+        textFormat: Text.PlainText
+        text: root.previewError !== "" ? "No preview: " + root.previewError : "converting…"
+        color: root.previewError !== "" ? Color.urgent : root.dim
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.caption
+      }
     }
     Thumb {
       width: parent.each
@@ -304,7 +336,7 @@ BorderSurface {
       onPicked: root.style = "image"
       Image {
         anchors.fill: parent
-        visible: !!root.preview && String(root.preview.image) !== ""
+        visible: root.previewReady && String(root.preview.image) !== ""
         source: visible ? "file://" + String(root.preview.image) : ""
         fillMode: Image.PreserveAspectFit
         asynchronous: true
@@ -312,8 +344,28 @@ BorderSurface {
         sourceSize.width: 480
         smooth: true
       }
-      Text { anchors.centerIn: parent; visible: !root.preview; textFormat: Text.PlainText; text: "…"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
+      Text { anchors.centerIn: parent; visible: !root.previewReady; textFormat: Text.PlainText; text: root.previewError !== "" ? "—" : "…"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
     }
+  }
+
+  // How much of the picture's shading the dots keep; the preview above
+  // redraws as it moves.
+  component DetailRow: SliderRow {
+    visible: root.attached && root.style === "ascii"
+    width: parent ? parent.width : 0
+    glyph: "󰈊"
+    label: "Detail"
+    labelWidth: root.labelWidth
+    value: root.detail
+    minimum: 0
+    maximum: 4
+    step: 1
+    format: function(v) { return M.detailName(v) }
+    readoutWidth: Style.space(72)
+    typeable: false
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    onReleased: function(v) { root.detail = Math.round(v); root.sync({}) }
   }
 
   Column {
@@ -389,7 +441,7 @@ BorderSurface {
             cursorShape: kindCard.usable ? Qt.PointingHandCursor : Qt.ArrowCursor
             onClicked: if (kindCard.usable) root.choose(kindCard.modelData.id)
           }
-          PanelToolTip { visible: kindMouse.containsMouse && !kindCard.usable; text: "Needs a coding agent: omarchy default agent" }
+          PanelToolTip { visible: kindMouse.containsMouse && !kindCard.usable; text: root.agentHint }
         }
       }
     }
@@ -404,6 +456,7 @@ BorderSurface {
         CardField { id: describeField; width: parent.width; placeholderText: "What should it show?" }
       }
       CardRow {
+        visible: root.seesPictures
         glyph: "󰋩"
         label: "From"
         Column {
@@ -412,11 +465,11 @@ BorderSurface {
           Flow {
             width: parent.width
             spacing: Style.space(6)
-            CardButton { text: root.hasPictures ? "Paste another" : "Paste a picture"; iconText: "󰆒"; enabled: root.pasteable === "image"; opacity: enabled ? 1 : 0.45; onClicked: root.paste() }
-            CardButton { text: root.hasPictures ? "Add more…" : "Pictures…"; iconText: "󰋩"; enabled: !root.picking; onClicked: root.pick("media") }
+            CardButton { text: root.hasPictures ? "Paste another" : "Paste a picture"; iconText: "󰆒"; enabled: root.pasteable !== "" && !root.picturesFull; opacity: enabled ? 1 : 0.45; onClicked: root.paste() }
+            CardButton { text: root.hasPictures ? "Add more…" : "Pictures…"; iconText: "󰋩"; enabled: !root.picking && !root.picturesFull; opacity: enabled ? 1 : 0.45; onClicked: root.pick("images") }
           }
           PictureStrip { width: parent.width }
-          Text { visible: !root.hasPictures; width: parent.width; wrapMode: Text.WordWrap; textFormat: Text.PlainText; text: "Optional: pictures to draw from."; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
+          Text { width: parent.width; wrapMode: Text.WordWrap; textFormat: Text.PlainText; text: root.hasPictures ? (root.picturesFull ? "That is as many as it can draw from." : "Up to " + M.DESCRIBE_PICTURES + ".") : "Optional: up to " + M.DESCRIBE_PICTURES + " pictures to draw from."; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
         }
       }
       CardRow {
@@ -456,14 +509,22 @@ BorderSurface {
           AsciiArt {
             anchors.fill: parent
             anchors.margins: Style.space(8)
-            visible: !!root.wordArt
-            art: root.wordArt ? String(root.wordArt.art) : ""
+            visible: root.wordReady
+            art: root.wordReady ? String(root.wordArt.art) : ""
             fg: root.foreground
             fontFamily: root.fontFamily
             fitWidth: 1
             fitHeight: 1
           }
-          Text { anchors.centerIn: parent; visible: !root.wordArt; textFormat: Text.PlainText; text: "drawing…"; color: root.dim; font.family: root.fontFamily; font.pixelSize: Style.font.caption }
+          Text {
+            anchors.centerIn: parent
+            visible: !root.wordReady
+            textFormat: Text.PlainText
+            text: root.wordArt && root.wordArt.error ? "No preview: " + String(root.wordArt.error) : "drawing…"
+            color: root.wordArt && root.wordArt.error ? Color.urgent : root.dim
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+          }
         }
       }
     }
@@ -482,7 +543,7 @@ BorderSurface {
             width: parent.width
             spacing: Style.space(6)
             CardButton { text: root.hasPictures ? "Paste another" : "Paste"; iconText: "󰆒"; enabled: root.pasteable !== ""; opacity: enabled ? 1 : 0.45; tooltipText: "What's on your clipboard — a picture, a file, or a folder. Ctrl+V does the same."; onClicked: root.paste() }
-            CardButton { text: root.hasPictures ? "Add more…" : "Choose…"; iconText: "󰋩"; enabled: !root.picking; onClicked: root.pick("media") }
+            CardButton { text: root.hasPictures ? "Add more…" : "Choose…"; iconText: "󰋩"; enabled: !root.picking; onClicked: root.pick("images") }
             CardButton { visible: !root.hasPictures; text: "A folder…"; iconText: "󰉋"; enabled: !root.picking; tooltipText: "Every picture in it"; onClicked: root.pick("folder") }
           }
           PictureStrip { width: parent.width }
@@ -495,25 +556,7 @@ BorderSurface {
         label: "Show as"
         ShowAs { width: parent.width }
       }
-      // How much of the picture's shading the dots keep; the preview above
-      // redraws as it moves.
-      SliderRow {
-        visible: root.attached && root.style === "ascii"
-        width: parent.width
-        glyph: "󰈊"
-        label: "Detail"
-        labelWidth: root.labelWidth
-        value: root.detail
-        minimum: 0
-        maximum: 4
-        step: 1
-        format: function(v) { return M.detailName(v) }
-        readoutWidth: Style.space(72)
-        typeable: false
-        foreground: root.foreground
-        fontFamily: root.fontFamily
-        onReleased: function(v) { root.detail = Math.round(v); root.sync({}) }
-      }
+      DetailRow {}
       CardRow {
         visible: root.movable
         glyph: "󰁌"
@@ -559,7 +602,7 @@ BorderSurface {
             width: parent.width
             spacing: Style.space(6)
             CardButton { text: "Paste"; iconText: "󰆒"; enabled: root.pasteable === "paths"; opacity: enabled ? 1 : 0.45; onClicked: root.paste() }
-            CardButton { text: "Choose…"; iconText: "󰕧"; enabled: !root.picking; onClicked: root.pick("media") }
+            CardButton { text: "Choose…"; iconText: "󰕧"; enabled: !root.picking; onClicked: root.pick("video") }
           }
           Chip { visible: root.hasClip }
         }
@@ -570,6 +613,7 @@ BorderSurface {
         label: "Show as"
         ShowAs { width: parent.width }
       }
+      DetailRow {}
     }
 
     // ---- a name, for everything that does not take its name from words ----

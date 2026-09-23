@@ -25,7 +25,6 @@ Column {
   property bool live: false
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
-  readonly property color dim: Qt.darker(foreground, 1.4)
 
   property var editingKeys: ({})
   readonly property bool editing: Object.keys(editingKeys).length > 0
@@ -51,8 +50,8 @@ Column {
   // The sliders show the settings; the hero shows what is in effect, rules
   // included. A rule that says "never lock" must not drag the Lock slider to
   // the end of its track.
-  readonly property int screensaverSeconds: svc && svc.idleConfig ? M.secondsFromConfig(svc.idleConfig.screensaver, 150) : 150
-  readonly property int lockSeconds: svc && svc.idleConfig ? M.secondsFromConfig(svc.idleConfig.lock, 300) : 300
+  readonly property int screensaverSeconds: M.secondsFromConfig(svc && svc.idleConfig ? svc.idleConfig.screensaver : undefined, M.DEFAULT_TIMEOUTS.screensaver)
+  readonly property int lockSeconds: M.secondsFromConfig(svc && svc.idleConfig ? svc.idleConfig.lock : undefined, M.DEFAULT_TIMEOUTS.lock)
   readonly property int screensaverNow: svc ? svc.screensaverTimeoutSeconds : screensaverSeconds
   readonly property int lockNow: svc ? svc.lockTimeoutSeconds : lockSeconds
   readonly property bool adding: !!(svc && svc.importDraft)
@@ -71,7 +70,7 @@ Column {
 
   // The two laptop rows under the sliders are rules underneath — one that
   // shortens the timings on battery, one that never locks at a monitor —
-  // matched by shape, so Rules lists them too.
+  // matched by shape.
   readonly property bool hasLaptopRows: svc ? svc.isLaptop === true : false
   readonly property var batteryRule: M.timingsRule(cfg.situations, "battery")
   readonly property bool batteryTimings: !!batteryRule && batteryRule.enabled === true
@@ -272,13 +271,15 @@ Column {
   function chooseSaver(id) {
     if (!svc) return
     var s = M.saverById(id, userSavers)
-    if (s && s.series && (s.series.importing || s.series.error)) { toggleSettings(id); return }
+    // A tile still being made has nothing to play yet.
+    if (!s) return
+    if (s.series && (s.series.importing || s.series.error)) { toggleSettings(id); return }
     // The panel below the grid is a detail view of a tile. Once it is open it
     // has to follow the tile you touch, or it sits there editing something
     // you stopped looking at.
     if (openSettings !== "") openSettings = id
     if (cfg.shuffle) {
-      if (s && s.kind === "external") return
+      if (s.kind === "external") return
       var set = (cfg.shuffleFrom || []).slice()
       var at = set.indexOf(id)
       if (at === -1) set.push(id); else set.splice(at, 1)
@@ -304,18 +305,9 @@ Column {
   }
   function toggleShuffle() { if (svc) svc.writeSettings({ shuffle: !cfg.shuffle }) }
   function setStage(key, on) { if (svc) { var p = {}; p[key] = !!on; svc.writeSettings(p) } }
-  function setScreensaver(on) { if (svc) { svc.setScreensaverOff(!on); if (on) setStage("screensaverEnabled", true); else setStage("screensaverEnabled", false) } }
+  function setScreensaver(on) { if (svc) svc.setScreensaverOn(!!on) }
   function toggleStayAwake() { if (svc) svc.setIdleEnabled(stayAwake) }
   function setSeconds(stage, v) { if (svc) svc.writeIdleSeconds(stage, v) }
-
-  function writeSaverSettings(id, patch) {
-    if (!svc) return
-    var savers = M.cloneJson(cfg.savers)
-    var current = savers[id] || {}
-    for (var k in patch) current[k] = patch[k]
-    savers[id] = current
-    svc.writeSettings({ savers: savers })
-  }
 
   function writeSituations(list) { if (svc) svc.writeSettings({ situations: list }) }
 
@@ -332,12 +324,6 @@ Column {
 
   function setBatteryTimings(on) { writeSituations(M.setTimingsRule(cfg.situations, "battery", !!on, svc ? svc.situationContext : null)) }
   function patchBatteryTimings(patch) { var at = M.timingsRuleIndex(cfg.situations, "battery"); if (at >= 0) updateSituation(at, patch) }
-
-  function minutes(seconds) {
-    var s = Math.max(0, Math.round(Number(seconds) || 0))
-    var m = Math.floor(s / 60), r = s % 60
-    return m + ":" + (r < 10 ? "0" : "") + r
-  }
 
   // The other way: what someone typed into a readout, back into seconds.
   // "2:30" is two and a half minutes, and a bare number is minutes, because
@@ -359,9 +345,9 @@ Column {
     title: "Stelline"
     meta: root.serviceOk
       ? (root.stayAwake ? "staying awake"
-        : (!root.screensaverOn ? "screensaver off" + (root.svc.lockStageEnabled ? ", still locks at " + root.minutes(root.lockNow) : ", no lock")
-        : root.playingName.toLowerCase() + " after " + root.minutes(root.screensaverNow)
-          + (root.svc.lockStageEnabled ? ", lock at " + root.minutes(root.lockNow) : ", no lock")
+        : (!root.screensaverOn ? "screensaver off" + (root.svc.lockStageEnabled ? ", still locks at " + M.mmss(root.lockNow) : ", no lock")
+        : root.playingName.toLowerCase() + " after " + M.mmss(root.screensaverNow)
+          + (root.svc.lockStageEnabled ? ", lock at " + M.mmss(root.lockNow) : ", no lock")
           + (root.svc.situation ? " · " + M.situationLabel(root.svc.situation).toLowerCase() : "")))
       : "not running yet — restart the shell"
     foreground: root.foreground
@@ -444,7 +430,7 @@ Column {
     minimum: 30
     maximum: 1800
     step: 30
-    format: function(v) { return root.minutes(v) }
+    format: function(v) { return M.mmss(v) }
     parse: function(t) { return root.fromMinutes(t) }
     foreground: root.foreground
     fontFamily: root.fontFamily
@@ -467,7 +453,7 @@ Column {
     minimum: 60
     maximum: 3600
     step: 60
-    format: function(v) { return root.minutes(v) }
+    format: function(v) { return M.mmss(v) }
     parse: function(t) { return root.fromMinutes(t) }
     showSwitch: true
     switchChecked: root.cfg.lockEnabled
@@ -482,7 +468,7 @@ Column {
   }
 
   // A laptop's two exceptions, where you look when the timings bother you.
-  // Each is an ordinary rule underneath — Rules lists them too.
+  // Each is an ordinary rule underneath.
   SwitchRow {
     id: batteryRow
     visible: root.hasLaptopRows
@@ -516,7 +502,7 @@ Column {
       minimum: 30
       maximum: 1800
       step: 30
-      format: function(v) { return root.minutes(v) }
+      format: function(v) { return M.mmss(v) }
       parse: function(t) { return root.fromMinutes(t) }
       foreground: root.foreground
       fontFamily: root.fontFamily
@@ -536,7 +522,7 @@ Column {
       minimum: 60
       maximum: 3600
       step: 60
-      format: function(v) { return root.minutes(v) }
+      format: function(v) { return M.mmss(v) }
       parse: function(t) { return root.fromMinutes(t) }
       showSwitch: true
       switchChecked: root.batteryLocks
@@ -623,7 +609,8 @@ Column {
         readonly property bool isMore: root.gridToggle && index === root.shownSavers.length
         readonly property bool isAdd: !isMore && index >= root.shownSavers.length
         readonly property bool isTile: !isMore && !isAdd
-        readonly property var entry: isTile ? root.shownSavers[index] : ({})
+        // Briefly past the end while the list shrinks under the repeater.
+        readonly property var entry: isTile ? (root.shownSavers[index] || ({})) : ({})
         width: root.tileWidth
         saver: entry
         svc: root.svc

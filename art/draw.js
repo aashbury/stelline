@@ -1,6 +1,5 @@
 // What the figures in art/ are drawn with: a few SVG shapes in the four
-// tones, and the keyboard the robot and Morty sit behind. The hands keep
-// their own copy of these; they came first.
+// tones.
 //
 // The canvas is 683 × 1000: the 120 × 160 dot grid at the braille cell's
 // real proportions, so what is drawn here is what the screen shows. A dot
@@ -45,71 +44,8 @@ function svg(body, background) {
     body + "</svg>"
 }
 
-// ---- the keyboard, from the screen's side ------------------------------------
-//
-// Across the bottom of the frame, seen from where the monitor is: its far
-// edge from the typist is the near edge to us, so it widens toward the
-// bottom and runs off both sides. Whoever is typing sits behind it, and
-// everything of theirs but their hands stops at its top edge.
-
-var BOARD_TOP = 815, BOARD_BOTTOM = 1000
-function boardEdge(y) {
-  var t = (y - BOARD_TOP) / (BOARD_BOTTOM - BOARD_TOP)
-  return [70 + (-40 - 70) * t, 613 + (723 - 613) * t]
-}
-var ROWS = [
-  { top: 832, bottom: 872, keys: [1.2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1.2] },
-  { top: 880, bottom: 924, keys: [1.5, 1, 1, 1, 1, 1, 1, 1, 1, 1.5] },
-  { top: 932, bottom: 980, keys: [1.4, 1.3, 5.6, 1.3, 1.4] }
-]
-var KEY_GAP = 12
-
-function keys() {
-  var out = []
-  for (var r = 0; r < ROWS.length; r++) {
-    var row = ROWS[r]
-    var et = boardEdge(row.top), eb = boardEdge(row.bottom)
-    var inset = 20
-    var total = row.keys.reduce(function (a, b) { return a + b }, 0)
-    var at = 0
-    for (var k = 0; k < row.keys.length; k++) {
-      var t0 = at / total, t1 = (at + row.keys[k]) / total
-      at += row.keys[k]
-      var x = function (e, t) { return e[0] + inset + (e[1] - e[0] - inset * 2) * t }
-      var g = KEY_GAP / 2
-      out.push({ row: r, quad: [[x(et, t0) + g, row.top], [x(et, t1) - g, row.top], [x(eb, t1) - g, row.bottom], [x(eb, t0) + g, row.bottom]] })
-    }
-  }
-  return out
-}
-
-function board() {
-  var s = ""
-  var a = boardEdge(BOARD_TOP), b = boardEdge(BOARD_BOTTOM)
-  s += poly([[a[0], BOARD_TOP], [a[1], BOARD_TOP], [b[1], BOARD_BOTTOM], [b[0], BOARD_BOTTOM]], 0)
-  // its back edge, catching the light
-  s += line([a[0], BOARD_TOP + 4], [a[1], BOARD_TOP + 4], 1, 9, "butt")
-  var all = keys()
-  for (var i = 0; i < all.length; i++) {
-    var q = all[i].quad
-    // a lit rim round a dark cap, the near face a thin grey lip
-    var mid = [lerp(q[0], q[3], 0.72), lerp(q[1], q[2], 0.72)]
-    s += '<polygon points="' + pts([q[0], q[1], mid[1], mid[0]]) + '" fill="#000" stroke="' + TONE[2] + '" stroke-width="7" stroke-linejoin="round"/>'
-  }
-  return svg(s, "#000")
-}
-function keymap() {
-  var s = ""
-  var all = keys()
-  for (var i = 0; i < all.length; i++) {
-    var v = (i + 1) * 3
-    s += '<polygon points="' + pts(all[i].quad) + '" fill="rgb(' + v + ',0,0)" stroke="rgb(' + v + ',0,0)" stroke-width="10" stroke-linejoin="round"/>'
-  }
-  return svg(s, "#000")
-}
-
 module.exports = {
-  W: W, H: H, TONE: TONE, ACCENT: ACCENT, LINE: LINE, BOARD_TOP: BOARD_TOP,
+  W: W, H: H, TONE: TONE, ACCENT: ACCENT, LINE: LINE,
   f: f, pts: pts, poly: poly, line: line, ellipse: ellipse, path: path, lerp: lerp, rotate: rotate,
-  group: group, svg: svg, board: board, keymap: keymap, keys: keys
+  group: group, svg: svg
 }

@@ -14,6 +14,8 @@ const path = require("path")
 const { execFileSync } = require("child_process")
 
 const ROOT = path.join(__dirname, "..")
+// The same dither and packing the figures are drawn with at run time.
+const { BAYER, BITS, TONES } = require(path.join(ROOT, "savers", "Robot.js"))
 const OVER = 8
 const CLEAR = 63
 const ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
@@ -72,8 +74,9 @@ function toDots(v, art, w, h) {
 function bake(name) {
   const art = require(path.join(ROOT, "art", name + ".js"))
   const w = 120, h = 160
-  const board = sample(raster(art.board(), w, h), w, h, tone)
-  const keymap = sample(raster(art.keymap(), w, h), w, h, r => Math.round(r / 3))
+  // Only the hands have a keyboard, and a map of which dot is which key.
+  const board = art.board ? sample(raster(art.board(), w, h), w, h, tone) : null
+  const keymap = art.keymap ? sample(raster(art.keymap(), w, h), w, h, r => Math.round(r / 3)) : null
   const poses = {}
   const all = art.poses()
   process.stdout.write(name + ": ")
@@ -90,7 +93,7 @@ function bake(name) {
       const count = {}
       let k = 0
       for (let yy = y - 3; yy <= y + 3; yy++) for (let xx = x - 3; xx <= x + 3; xx++) {
-        const v = xx >= 0 && xx < w && yy >= 0 && yy < h ? keymap[yy * w + xx] : 0
+        const v = keymap && xx >= 0 && xx < w && yy >= 0 && yy < h ? keymap[yy * w + xx] : 0
         if (v > 0 && (count[v] = (count[v] || 0) + 1) > (count[k] || 0)) k = v
       }
       if (k > 0 && pressed.indexOf(k) === -1) pressed.push(k)
@@ -100,7 +103,9 @@ function bake(name) {
     process.stdout.write(pname + " ")
   }
   process.stdout.write("\n")
-  return { cols: w / 2, rows: h / 4, board: rle(board), keymap: rle(keymap), poses }
+  const out = { cols: w / 2, rows: h / 4, poses }
+  if (board) { out.board = rle(board); out.keymap = rle(keymap) }
+  return out
 }
 
 // The wordmark is not a figure: it is one picture, dithered here and packed
@@ -109,10 +114,7 @@ function bakeWordmark() {
   const art = require(path.join(ROOT, "art", "wordmark.js"))
   const w = art.DOTS_W, h = art.DOTS_H
   const tones = sample(raster(art.svg(), w, h), w, h, tone)
-  const LEVEL = [0, 0.25, 0.56, 1]
-  const BAYER = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]]
-  const on = (x, y) => { const v = tones[y * w + x]; return v !== CLEAR && v > 0 && BAYER[y & 3][x & 3] / 16 < LEVEL[Math.min(3, v)] }
-  const BITS = [[1, 2, 4, 64], [8, 16, 32, 128]]
+  const on = (x, y) => { const v = tones[y * w + x]; return v !== CLEAR && v > 0 && BAYER[y & 3][x & 3] / 16 < TONES[Math.min(3, v)] }
   const lines = []
   for (let r = 0; r < h / 4; r++) {
     let line = ""

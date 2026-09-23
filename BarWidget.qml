@@ -59,7 +59,7 @@ Panel {
         // Same call the stock coffee cup makes on omarchy.idle.
         if (root.svc) root.svc.setIdleEnabled(root.stayAwake)
       } else if (buttonCode === Qt.MiddleButton) {
-        if (root.svc && typeof root.svc.preview === "function") root.svc.preview("")
+        if (root.svc) root.svc.previewSaver("", "preview")
       } else {
         root.toggle()
       }

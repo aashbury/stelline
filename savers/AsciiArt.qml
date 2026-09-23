@@ -50,12 +50,6 @@ Item {
     return m
   }
   readonly property int rows: Math.max(gridRows, lines.length)
-  readonly property int totalChars: {
-    var n = 0
-    for (var i = 0; i < lines.length; i++) n += lines[i].length + 1
-    return n
-  }
-
   // Fit: the widest line at fitWidth of the width, all lines at fitHeight of
   // the height, whichever binds; then whole-pixel cells from the font's aspect.
   TextMetrics {

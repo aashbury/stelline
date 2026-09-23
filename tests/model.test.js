@@ -4,7 +4,8 @@ const M = require("../StellineModel.js")
 
 test("defaults pick the wordmark with no rules at all", () => {
   const d = M.defaults()
-  assert.equal(d.saver, "terminal")
+  assert.equal(d.saver, "wordmark")
+  assert.equal(d.saver, M.DEFAULT_SAVER)
   assert.deepEqual(d.situations, [])
 })
 
@@ -35,7 +36,9 @@ test("mergeSettings coerces strings from `omarchy bar set` and merges per-saver 
 })
 
 test("mergeSettings falls back to wordmark for an unknown saver", () => {
-  assert.equal(M.mergeSettings({ saver: "nope" }).saver, "terminal")
+  assert.equal(M.mergeSettings({ saver: "nope" }).saver, "wordmark")
+  // with the Wordmark deleted, the Original, which cannot be
+  assert.equal(M.mergeSettings({ saver: "nope", hidden: ["wordmark"] }).saver, "terminal")
 })
 
 test("fullSettings applies a patch and always carries the id", () => {
@@ -50,8 +53,6 @@ test("rotation is every native saver, or the shuffle set when shuffle is on", ()
   assert.deepEqual(M.rotation(M.mergeSettings({ shuffle: true, shuffleFrom: ["clock", "terminal", "nope"] })), ["clock"])
   assert.equal(M.nextSaver(M.defaults(), "blank"), "wordmark")
   assert.equal(M.nextSaver(M.defaults(), "unknown"), "wordmark")
-  assert.equal(M.saverFile("clock"), "savers/Blank.qml")
-  assert.equal(M.saverFile("terminal"), "")
 })
 
 test("effectiveTimeouts reads shell.json, honours the lock switch and situation overrides", () => {
@@ -74,7 +75,7 @@ test("effectiveTimeouts reads shell.json, honours the lock switch and situation 
 test("pickSaver: situation wins, then the chosen saver, then a shuffle that avoids repeats", () => {
   const d = M.defaults()
   assert.equal(M.pickSaver(d, { saver: "blank" }, "wordmark", 0), "blank")
-  assert.equal(M.pickSaver(d, null, "terminal", 0), "terminal")
+  assert.equal(M.pickSaver(d, null, "terminal", 0), "wordmark")
   const sh = M.mergeSettings({ shuffle: true, shuffleFrom: ["clock", "blank"] })
   assert.equal(M.pickSaver(sh, null, "clock", 0.99), "blank")
   assert.equal(M.pickSaver(sh, null, "blank", 0.0), "clock")
@@ -103,8 +104,6 @@ test("situations: battery, night (wrapping midnight) and theme; every fit applie
   assert.equal(M.hhmm("25:00"), -1)
   assert.equal(M.situationLabel(list[1]), "Battery below 30%")
   assert.equal(M.situationLabel(list[2]), "Night 22:00–07:00")
-  assert.equal(M.situationEffect({ saver: "blank", screensaver: 90, lock: 180 }), "Blank · screensaver 1:30 · lock 3:00")
-  assert.equal(M.situationEffect({ saver: "clock" }), "Clock")
   assert.equal(M.TTFX_EFFECTS.length, 37)
 })
 
@@ -141,7 +140,7 @@ test("finish setup removes StayAwake from the indicators, remembers the list, an
   assert.ok(M.stayAwakeIndicatorShown(c1))
   assert.ok(M.applyFinishSetup(c1, M.PLUGIN_ID))
   assert.deepEqual(c1.bar.layout.center[0].items, ["ScreenRecording", "Reminder", "NightLight", "Dnd"])
-  assert.deepEqual(M.findEntry(c1, M.PLUGIN_ID).setup, { done: true, version: 1, indicatorsItemsBefore: ["ScreenRecording", "Reminder", "NightLight", "Dnd", "StayAwake"] })
+  assert.deepEqual(M.findEntry(c1, M.PLUGIN_ID).setup, { done: true, indicatorsItemsBefore: ["ScreenRecording", "Reminder", "NightLight", "Dnd", "StayAwake"] })
   assert.ok(!M.stayAwakeIndicatorShown(c1))
   assert.ok(M.applyUndoSetup(c1, M.PLUGIN_ID))
   assert.deepEqual(c1.bar.layout.center[0].items, ["ScreenRecording", "Reminder", "NightLight", "Dnd", "StayAwake"])
@@ -209,15 +208,15 @@ test("parseScan turns saver folders into picker entries and rejects bad ids", ()
   assert.ok(list.find((s) => s.id === "half").series.importing)
   // the registry sees them
   assert.equal(M.saverById("acme-co", list).name, "Acme Co.")
-  assert.equal(M.saverFile("acme-co", list), "savers/Series.qml")
+  assert.equal(M.saverById("acme-co", list).file, "savers/Series.qml")
   assert.equal(M.saverById("acme-co"), null)
   assert.deepEqual(M.rotation(M.defaults(), list), ["wordmark", "clock", "blank", "acme-co", "clip", "dance", "photos"])
   assert.equal(M.mergeSettings({ saver: "acme-co" }, list).saver, "acme-co")
-  assert.equal(M.mergeSettings({ saver: "acme-co" }).saver, "terminal")
+  assert.equal(M.mergeSettings({ saver: "acme-co" }).saver, "wordmark")
   assert.equal(M.mergeSettings({ savers: { "acme-co": { dwellSec: 5 } } }).savers["acme-co"].dwellSec, 5)
   // an importing saver is never picked
-  assert.equal(M.pickSaver(M.mergeSettings({ saver: "half" }, list), null, "", 0, list), "terminal")
-  assert.equal(M.pickSaver(M.defaults(), { saver: "half" }, "", 0, list), "terminal")
+  assert.equal(M.pickSaver(M.mergeSettings({ saver: "half" }, list), null, "", 0, list), "wordmark")
+  assert.equal(M.pickSaver(M.defaults(), { saver: "half" }, "", 0, list), "wordmark")
   assert.equal(M.pickSaver(M.defaults(), { saver: "dance" }, "", 0, list), "dance")
 })
 
@@ -261,7 +260,7 @@ test("import scripts: each source produces a self-contained bash pipeline", () =
   // drawn like a wordmark: in tones, packed to braille, not transcoded
   assert.match(txt, /LC_ALL=C awk/)
   assert.doesNotMatch(txt, /--mode block/)
-  const ai = M.importScript({ ...base, source: "prompt", prompt: "a robot waving", animated: true, frames: 8 }, root)
+  const ai = M.importScript({ ...base, source: "prompt", prompt: "a robot waving", animated: true }, root)
   assert.match(ai, /agent=\$\(omarchy-default-agent/)
   assert.match(ai, /reason\(\) \{ local r; r=\$\(grep -m1 -iE 'unauthori/)
   assert.match(ai, /claude\) out=\$\(\{ timeout 600 env -u CLAUDECODE claude -p "\$prompt" --output-format text --tools "\$tools" --no-session-persistence --effort "\$effort" \$\{model:\+--model "\$model"\} --system-prompt "\$system"; \} 2>"\$tmp\/err" <\/dev\/null\)/)
@@ -299,7 +298,7 @@ test("rules: one per saver, conditions AND together, last one off removes it, la
   assert.deepEqual(Object.keys(list[0].when), ["battery"])
   list = M.setRuleCondition(list, "dance", "battery", false, ctx)
   assert.deepEqual(list, [])
-  // a disabled rule left over from Advanced reads as no conditions; enabling one starts clean
+  // a disabled rule reads as no conditions; enabling one starts clean
   const stale = [{ id: "x", enabled: false, when: { theme: { name: "hackerman" }, battery: {} }, saver: "clock" }]
   assert.ok(!M.ruleHas(stale[0], "theme"))
   const on = M.setRuleCondition(stale, "clock", "night", true, ctx)
@@ -321,7 +320,7 @@ test("rules: one per saver, conditions AND together, last one off removes it, la
   // forgetting a saver clears every reference
   const fake = [{ id: "dance", name: "Dance", kind: "series", file: "savers/Series.qml", series: {} }]
   const patch = M.forgetSaver(M.mergeSettings({ saver: "dance", shuffleFrom: ["dance", "clock"], situations: [{ id: "r", enabled: true, when: { night: {} }, saver: "dance" }, { id: "t", enabled: true, when: { battery: {} }, saver: "dance", screensaver: 60 }], savers: { dance: { fps: 3 } } }, fake), "dance")
-  assert.equal(patch.saver, "terminal")
+  assert.equal(patch.saver, "wordmark")
   assert.deepEqual(patch.shuffleFrom, ["clock"])
   assert.deepEqual(patch.situations, [{ id: "t", enabled: true, when: { battery: {} }, screensaver: 60 }])
   assert.equal(patch.savers.dance, undefined)
@@ -434,33 +433,11 @@ test("never-lock-while-docked is a switch over an ordinary rule", () => {
   // a per-saver docked rule, or a docked rule that also changes the screensaver, is not the switch
   assert.equal(M.dockedNoLock([{ id: "x", enabled: true, when: { docked: {} }, saver: "clock", lock: "never" }]), false)
   assert.equal(M.dockedNoLock([{ id: "y", enabled: true, when: { docked: {} }, lock: "never", screensaver: 90 }]), false)
-  // it reads as a sentence everywhere it is shown
-  assert.equal(M.situationEffect(off[0]), "never locks")
-  assert.equal(M.situationEffect({ screensaver: 90, lock: 180 }), "screensaver 1:30 · lock 3:00")
-  assert.equal(M.situationEffect({ screensaver: 90 }), "screensaver 1:30")
   // and the effective timeline drops the lock while it applies
   const cfg = M.mergeSettings({ situations: off })
   const eff = M.effectiveTimeouts({ screensaver: 30, lock: 300 }, cfg, M.activeSituation(cfg.situations, { docked: true }))
   assert.equal(eff.lockEnabled, false)
   assert.equal(eff.screensaver, 30)
-})
-
-test("a rule's subject is the saver it belongs to; a timings-only rule has none", () => {
-  const list = [{ id: "dance", name: "Dancing", glyph: "󰊄", kind: "series", series: {} }]
-  const saverRule = { id: "a", enabled: true, when: { night: { from: "22:00", to: "07:00" } }, saver: "dance" }
-  const timingsRule = { id: "b", enabled: true, when: { docked: {} }, lock: "never" }
-  assert.equal(M.ruleSaver(saverRule, list).name, "Dancing")
-  assert.equal(M.ruleSaver(timingsRule, list), null)
-  assert.equal(M.ruleSaver({ saver: "gone" }, list), null)      // a deleted saver has no subject
-  assert.equal(M.ruleSaver(null, list), null)
-  // the row's second line: the condition, plus only what it changes
-  assert.equal(M.situationTimings(saverRule), "")
-  assert.equal(M.situationTimings(timingsRule), "never locks")
-  assert.equal(M.situationTimings({ screensaver: 90, lock: 180 }), "screensaver 1:30 · lock 3:00")
-  assert.equal(M.situationTimings({}), "")
-  // and the older one-line form still names the saver, for the hero and TIMINGS
-  assert.equal(M.situationEffect(saverRule, list), "Dancing")
-  assert.equal(M.situationEffect({ saver: "dance", lock: "never" }, list), "Dancing · never locks")
 })
 
 test("every rule that fits applies: the saver from the first that names one, each timing from the first that sets it, never-lock wins", () => {
@@ -538,7 +515,9 @@ test("a shipped tile is deleted by hiding it, and hidden tiles leave every list"
   const cfg = M.mergeSettings({ saver: "clock", shuffleFrom: ["clock", "blank"], savers: { clock: { background: "black" } } })
   const patch = M.hideSaver(cfg, "clock")
   assert.deepEqual(patch.hidden, ["clock"])
-  assert.equal(patch.saver, "terminal")
+  assert.equal(patch.saver, "wordmark")
+  // deleting the default itself falls back to the Original
+  assert.equal(M.hideSaver(M.defaults(), "wordmark").saver, "terminal")
   assert.deepEqual(patch.shuffleFrom, ["blank"])
   assert.equal(patch.savers.clock, undefined)
   const hidden = M.mergeSettings({ hidden: ["clock", "wordmark"] })
@@ -683,7 +662,7 @@ test("classifyPaths sorts what was picked or pasted into a folder, a clip or pic
   assert.equal(M.classifyPaths([]), null)
   assert.equal(M.classifyPaths(["/p/notes.txt"]), null)
   assert.deepEqual(M.parsePicked("folder", ["/p/holiday/"]), { source: "folder", paths: ["/p/holiday"] })
-  assert.deepEqual(M.parsePicked("media", ["/p/a.png", "/p/b.jpg"]), { source: "images", paths: ["/p/a.png", "/p/b.jpg"] })
+  assert.deepEqual(M.parsePicked("images", ["/p/a.png", "/p/b.jpg"]), { source: "images", paths: ["/p/a.png", "/p/b.jpg"] })
   assert.equal(M.parsePicked("folder", []), null)
 })
 
@@ -706,55 +685,81 @@ test("attach joins pictures to pictures, and a folder or a clip stands alone; de
   assert.equal(M.attachmentLabel({ source: "images", paths: ["/run/u/stelline-paste/pasted-1.png"] }, "/run/u/stelline-paste"), "pasted picture")
 })
 
-test("composeMode: what the card makes follows from what it holds", () => {
+test("composeMode: what the card makes follows from the kind picked and what it holds", () => {
   const empty = M.importDefaults()
-  assert.equal(M.composeMode(empty, "agent:claude"), "")
-  assert.equal(M.composeMode({ ...empty, words: "a robot" }, "agent:claude"), "describe")
-  assert.equal(M.composeMode({ ...empty, words: "a robot" }, ""), "letters")
-  assert.equal(M.composeMode({ ...empty, words: "a robot", letters: true }, "agent:claude"), "letters")
+  // nothing is made until a kind is picked
+  assert.equal(M.composeMode({ ...empty, words: "a robot" }, "agent:claude"), "")
+  assert.equal(M.composeMode({ ...empty, kind: "describe" }, "agent:claude"), "")
+  assert.equal(M.composeMode({ ...empty, kind: "describe", words: "a robot" }, "agent:claude"), "describe")
+  // a description needs someone to ask
+  assert.equal(M.composeMode({ ...empty, kind: "describe", words: "a robot" }, ""), "")
+  assert.equal(M.composeMode({ ...empty, kind: "words", words: "a robot" }, ""), "letters")
   const pics = { ...empty, source: "images", paths: ["/p/a.png"] }
-  assert.equal(M.composeMode(pics, "agent:claude"), "pictures")
+  assert.equal(M.composeMode({ ...pics, kind: "pictures" }, "agent:claude"), "pictures")
   // words with a picture are a prompt, for an agent that can look at one
-  assert.equal(M.composeMode({ ...pics, words: "make it snow" }, "agent:claude"), "describe-pictures")
-  // with no agent, or one that cannot be handed a picture, the words name it
-  assert.equal(M.composeMode({ ...pics, words: "make it snow" }, ""), "pictures")
-  assert.equal(M.composeMode({ ...pics, words: "make it snow" }, "agent:pi"), "pictures")
-  // no words: the picture is converted as it is
-  assert.equal(M.composeMode({ ...pics, drawn: true }, "agent:claude"), "pictures")
+  assert.equal(M.composeMode({ ...pics, kind: "describe", words: "make it snow" }, "agent:claude"), "describe-pictures")
+  assert.equal(M.composeMode({ ...pics, kind: "describe", words: "make it snow" }, "agent:pi"), "describe")
   // pictures, one or many, either style, can move or sit still; a clip is not asked
-  assert.equal(M.canMove(pics, "pictures"), true)
-  assert.equal(M.canMove({ ...pics, paths: ["/p/a.png", "/p/b.png"] }, "pictures"), true)
-  assert.equal(M.canMove({ ...pics, style: "image" }, "pictures"), true)
-  assert.equal(M.canMove(pics, "folder"), true)
-  assert.equal(M.canMove(pics, "clip"), false)
+  assert.equal(M.canMove("pictures"), true)
+  assert.equal(M.canMove("folder"), true)
+  assert.equal(M.canMove("clip"), false)
   // only more than one picture has an order to choose
   assert.equal(M.canOrder(pics, "pictures"), false)
   assert.equal(M.canOrder({ ...pics, paths: ["/p/a.png", "/p/b.png"] }, "pictures"), true)
   assert.equal(M.canOrder(pics, "folder"), true)
-  assert.equal(M.composeMode({ ...empty, source: "folder", paths: ["/p/h"], words: "x" }, "agent:claude"), "folder")
-  assert.equal(M.composeMode({ ...empty, source: "video", paths: ["/p/c.mp4"] }, "agent:claude"), "clip")
+  assert.equal(M.composeMode({ ...empty, kind: "pictures", source: "folder", paths: ["/p/h"] }, "agent:claude"), "folder")
+  assert.equal(M.composeMode({ ...empty, kind: "clip", source: "video", paths: ["/p/c.mp4"] }, "agent:claude"), "clip")
+  assert.equal(M.composeMode({ ...empty, kind: "clip" }, "agent:claude"), "")
+  assert.equal(M.composeMode({ ...empty, kind: "clock" }, ""), "clock")
+  assert.equal(M.composeMode({ ...empty, kind: "blank" }, ""), "blank")
   assert.equal(M.seesPictures("agent:codex"), true)
   assert.equal(M.seesPictures("agent:pi"), false)
 })
 
 test("composeSpec builds the import from the card", () => {
   const empty = M.importDefaults()
-  const d = M.composeSpec({ ...empty, words: "a lighthouse in a storm, at night", animated: false }, "agent:claude")
+  const d = M.composeSpec({ ...empty, kind: "describe", words: "a lighthouse in a storm, at night", animated: false }, "agent:claude")
   assert.equal(d.source, "prompt")
   assert.equal(d.prompt, "a lighthouse in a storm, at night")
   assert.equal(d.animated, false)
   assert.equal(d.name, "a lighthouse in a storm")
-  const l = M.composeSpec({ ...empty, words: "Acme Co." }, "")
+  const l = M.composeSpec({ ...empty, kind: "words", words: "Acme Co." }, "")
   assert.equal(l.source, "text")
   assert.equal(l.text, "Acme Co.")
   assert.equal(l.name, "Acme Co.")
-  const p = M.composeSpec({ ...empty, source: "images", paths: ["/p/holiday/a.png", "/p/holiday/b.png"], style: "image" }, "")
+  const p = M.composeSpec({ ...empty, kind: "pictures", source: "images", paths: ["/p/holiday/a.png", "/p/holiday/b.png"], style: "image" }, "")
   assert.equal(p.source, "images")
   assert.equal(p.style, "image")
   assert.equal(p.name, "Holiday")
-  assert.equal(M.composeSpec({ ...empty, source: "images", paths: ["/p/a.png"], words: "The cat" }, "agent:crush").name, "The cat")
-  assert.equal(M.composeSpec({ ...empty, source: "images", paths: ["/run/u/stelline-paste/pasted-1.png"] }, "", "/run/u/stelline-paste").name, "Pasted picture")
+  assert.equal(M.composeSpec({ ...empty, kind: "pictures", source: "images", paths: ["/p/a.png"], words: "The cat" }, "agent:crush").name, "The cat")
+  assert.equal(M.composeSpec({ ...empty, kind: "pictures", source: "images", paths: ["/run/u/stelline-paste/pasted-1.png"] }, "", "/run/u/stelline-paste").name, "Pasted picture")
+  // a clip as dots keeps its detail; as it is, there is none
+  assert.equal(M.composeSpec({ ...empty, kind: "clip", source: "video", paths: ["/p/c.mp4"], detail: 3 }, "").detail, 3)
+  assert.equal(M.composeSpec({ ...empty, kind: "clip", source: "video", paths: ["/p/c.mp4"], style: "image" }, "").detail, undefined)
   assert.equal(M.composeSpec(empty, "agent:claude"), null)
+})
+
+test("a kind picked keeps only what it can use; a description takes a few pictures and nothing else", () => {
+  const empty = M.importDefaults()
+  const six = { ...empty, kind: "pictures", source: "images", paths: ["1", "2", "3", "4", "5", "6"].map((n) => "/p/" + n + ".png") }
+  const d = M.chooseKind(six, "describe", "agent:claude")
+  assert.equal(d.kind, "describe")
+  assert.equal(d.paths.length, M.DESCRIBE_PICTURES)
+  // an agent that cannot look at a picture is not handed one
+  assert.deepEqual(M.chooseKind(six, "describe", "agent:pi").paths, [])
+  // a clip only suits Clip; pictures do not
+  const clip = { ...empty, kind: "clip", source: "video", paths: ["/p/c.mp4"] }
+  assert.deepEqual(M.chooseKind(clip, "pictures", "").paths, [])
+  assert.deepEqual(M.chooseKind(six, "clip", "").paths, [])
+  assert.equal(M.chooseKind(six, "clock", "").paths.length, 0)
+  // attaching: a GIF on a pictures card is a picture, elsewhere a clip
+  assert.equal(M.attach({ ...empty, kind: "pictures" }, { source: "video", paths: ["/p/a.gif"] }).kind, "pictures")
+  assert.equal(M.attach({ ...empty, kind: "" }, { source: "video", paths: ["/p/a.gif"] }).kind, "clip")
+  // a description ignores a clip or a folder, and stops at its limit
+  const desc = { ...empty, kind: "describe" }
+  assert.deepEqual(M.attach(desc, { source: "video", paths: ["/p/c.mp4"] }).paths, [])
+  assert.deepEqual(M.attach(desc, { source: "folder", paths: ["/p/h"] }).paths, [])
+  assert.equal(M.attach(desc, { source: "images", paths: six.paths }).paths.length, M.DESCRIBE_PICTURES)
 })
 
 test("shortName is the first clause, cut at a word before it runs long", () => {
@@ -811,11 +816,14 @@ test("a described saver remembers its pictures, and the script hands them to the
 
 test("the preview script converts the first picture the way the import would", () => {
   const s = M.previewScript("/run/u/stelline-preview")
-  assert.ok(s.includes("omarchy-transcode-ascii"))
+  assert.ok(!s.includes("omarchy-transcode-ascii"))
   assert.ok(s.includes(" " + M.ASCII_COLUMNS + " " + M.ASCII_ROWS + " "))
+  // when it cannot, it says why in a few words, instead of leaving the card waiting
+  assert.match(s, /die 'no pictures in that folder'/)
+  assert.match(s, /die 'needs ffmpeg for clips'/)
   assert.ok(s.includes("ffmpeg"))
   assert.ok(s.includes("printf 'image\\t%s\\n'"))
-  // a screenshot is flattened and a dark picture inverted before the transcoder sees it
+  // a screenshot is flattened and a dark picture inverted before it is sampled
   assert.ok(s.includes("prep() {"))
   assert.ok(s.includes('dots_art "$prep_path"'))
   // several pictures still go through prep one by one
@@ -924,18 +932,27 @@ test("wantsDetail reads the subject's own words", () => {
     assert.equal(M.wantsDetail(no), false, no)
 })
 
-
-test("several pictures and folders are left alone", () => {
+test("several pictures and folders become a slideshow, each picture its own piece", () => {
   const two = M.importScript({ ...M.importDefaults(), id: "t", name: "T", source: "images", paths: ["/p/a.png", "/p/b.png"], style: "ascii" }, "/home/u/savers")
-  assert.ok(!two.includes("ask_subject"))
-  assert.ok(!two.includes("subject_art"))
   assert.ok(two.includes('.play="slideshow"'))
+  assert.match(two, /n=\$\(printf %03d/)
   const folder = M.importScript({ ...M.importDefaults(), id: "f", name: "F", source: "folder", paths: ["/p/h"], style: "ascii" }, "/home/u/savers")
-  assert.ok(!folder.includes("ask_subject"))
+  assert.ok(folder.includes("find '/p/h' -maxdepth 1"))
+})
+
+test("a retry asks again for what was asked, and leaves the saver's settings alone", () => {
+  const failed = { id: "p", name: "P", series: { error: "x", kind: "ascii", source: { type: "images", paths: ["/p/a.png", "/p/b.png"], detail: 3 } } }
+  const spec = M.retrySpec(failed)
+  assert.equal(spec.retryOf, "p")
+  assert.equal(spec.detail, 3)
+  assert.equal(spec.keepSettings, true)
+  assert.equal(spec.order, undefined)
+  // one that did not fail has nothing to retry
+  assert.equal(M.retrySpec({ ...failed, series: { ...failed.series, error: "" } }), null)
 })
 
 test("moving or a still is the saver's own effect setting, not a different saver", () => {
-  const draft = { ...M.importDefaults(), source: "images", paths: ["/p/a.png"], style: "ascii" }
+  const draft = { ...M.importDefaults(), kind: "pictures", source: "images", paths: ["/p/a.png"], style: "ascii" }
   assert.equal(M.composeSpec({ ...draft, animated: true }, "").animated, true)
   assert.equal(M.composeSpec({ ...draft, animated: false }, "").animated, false)
   // both are the same import; only the setting written afterwards differs
@@ -989,7 +1006,7 @@ test("block characters become the braille cell holding the same dots", () => {
 })
 
 test("pictures carry motion and order into the spec, and come off one at a time", () => {
-  const two = { ...M.importDefaults(), source: "images", paths: ["/p/a.png", "/p/b.png"], style: "image", animated: false }
+  const two = { ...M.importDefaults(), kind: "pictures", source: "images", paths: ["/p/a.png", "/p/b.png"], style: "image", animated: false }
   const spec = M.composeSpec(two, "", "")
   assert.equal(spec.animated, false)
   assert.equal(spec.order, "shuffle")
@@ -1002,32 +1019,41 @@ test("pictures carry motion and order into the spec, and come off one at a time"
   assert.equal(M.removePicture(one, "/p/b.png").source, "")
 })
 
-test("a picture is converted as it is: no agent is asked, nothing is cropped", () => {
+test("a picture is converted whole, by the same prep and dots as the preview", () => {
   const sh = M.importScript({ id: "x", source: "images", paths: ["/p/a.png"], style: "ascii", name: "A" }, "/r", "/s")
-  assert.doesNotMatch(sh, /subject|crop/)
+  assert.doesNotMatch(sh, /-crop|-gravity/)
   assert.match(sh, /dots_art "\$prep_path"/)
 })
 
-test("detail: bold is the transcoder's one cut, the rest are dithered", () => {
+test("detail: bold is one cut, the rest are dithered, all packed here", () => {
   assert.equal(M.detailLevel(undefined), M.DEFAULT_DETAIL)
   assert.equal(M.detailLevel(9), M.DEFAULT_DETAIL)
   assert.equal(M.detailName(0), "bold")
   assert.equal(M.detailName(4), "finest")
   // the preview and the import convert at the same level
   const pv = M.previewScript("/run/u/p", 1, 0)
-  assert.match(pv, /dots_art "\$prep_path" "\$stage\/preview\.txt" 160 64 "\$prep_flags" 0/)
-  const d = { ...M.importDefaults(), source: "images", paths: ["/p/a.png"], detail: 4 }
+  assert.match(pv, /dots_art "\$prep_path" "\$stage\/preview\.txt" 160 64 "\$prep_flags \$extra" 0/)
+  const d = { ...M.importDefaults(), kind: "pictures", source: "images", paths: ["/p/a.png"], detail: 4 }
   assert.equal(M.composeSpec(d, "", "").detail, 4)
   assert.equal(M.composeSpec({ ...d, style: "image" }, "", "").detail, undefined)
   const sh = M.importScript({ ...M.composeSpec(d, "", ""), id: "x" }, "/r", "/s")
   assert.match(sh, /"\$prep_flags" 4 \|\| echo/)
-  // above bold it is dithered and packed here, not transcoded
-  assert.match(sh, /-posterize "\$tones"/)
+  assert.match(sh, /0\) tones='-threshold 50%'/)
   assert.match(sh, /LC_ALL=C awk/)
+  // nothing in the Add flow needs the transcoder any more
+  assert.ok(!sh.includes("omarchy-transcode-ascii"))
+  // a clip's frames go the same way, at its detail, untrimmed so the framing holds
+  const clip = M.importScript({ ...M.importDefaults(), id: "c", name: "C", source: "video", paths: ["/p/c.mp4"], detail: 3 }, "/r", "/s")
+  assert.ok(!clip.includes("omarchy-transcode-ascii"))
+  assert.match(clip, /flags="\$prep_flags --no-trim"/)
+  assert.match(clip, /dots_art "\$f" "\$tmp\/frame\.txt" "\$cols" "\$rows" "\$flags" 3/)
+  // and says what is missing rather than blaming the file
+  assert.match(clip, /need ffmpeg ffmpeg/)
+  assert.match(sh, /need magick 'ImageMagick \(magick\)'/)
 })
 
 test("words with pictures ask the agent to draw from them", () => {
-  const d = { ...M.importDefaults(), source: "images", paths: ["/p/a.png", "/p/b.png"], words: "the dog, snowing", animated: false }
+  const d = { ...M.importDefaults(), kind: "describe", source: "images", paths: ["/p/a.png", "/p/b.png"], words: "the dog, snowing", animated: false }
   const spec = M.composeSpec(d, "agent:claude", "")
   assert.equal(spec.source, "prompt")
   assert.equal(spec.prompt, "the dog, snowing")
@@ -1054,10 +1080,11 @@ test("the kind picked on Add decides what is made", () => {
   const blank = M.composeSpec({ ...d, kind: "blank", words: "Desk" }, "", "")
   assert.equal(blank.source, "empty")
   assert.equal(blank.name, "Desk")
-  // what is attached picks the kind, except pictures for a description
+  // what is attached picks the kind, except pictures for a description,
+  // which takes pictures and nothing else
   assert.equal(M.attach({ ...d, kind: "words" }, { source: "images", paths: ["/p/a.png"] }).kind, "pictures")
   assert.equal(M.attach({ ...d, kind: "describe" }, { source: "images", paths: ["/p/a.png"] }).kind, "describe")
-  assert.equal(M.attach({ ...d, kind: "describe" }, { source: "video", paths: ["/p/c.mp4"] }).kind, "clip")
+  assert.equal(M.attach({ ...d, kind: "describe" }, { source: "video", paths: ["/p/c.mp4"] }).kind, "describe")
 })
 
 test("each state has its own colour, from the theme where it names one", () => {
@@ -1082,6 +1109,8 @@ test("a dot-matrix picture saver keeps its detail and can be drawn again at anot
   // nothing else has the choice
   assert.equal(M.savedDetail(made({ type: "images", paths: ["/p/a.png"] }, "image")), -1)
   assert.equal(M.savedDetail(made({ type: "text", text: "x" })), -1)
+  // a clip as dots has it too
+  assert.equal(M.savedDetail(made({ type: "video", paths: ["/p/c.mp4"], detail: 1 })), 1)
   const spec = M.redetailSpec(made({ type: "images", paths: ["/p/a.png", "/p/b.png"], detail: 1 }), 4)
   assert.equal(spec.retryOf, "p")
   assert.equal(spec.detail, 4)

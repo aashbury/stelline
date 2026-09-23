@@ -231,6 +231,4 @@ function poses() {
   }
 }
 
-function blank() { return D.svg("", "#000") }
-
-module.exports = { W: D.W, H: D.H, board: blank, keymap: blank, poses: poses }
+module.exports = { W: D.W, H: D.H, poses: poses }

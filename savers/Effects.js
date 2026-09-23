@@ -46,7 +46,7 @@ function onlyCheap(list) {
   return pool.length ? pool : ["reveal"]
 }
 
-// Nobody wants to audit fourteen names to set a mood. Each of these is a set
+// Nobody wants to audit every name to set a mood. Each of these is a set
 // the panel can offer as one chip; picking one writes the same `effects`
 // array the individual chips do, so there is no second setting to keep in
 // step and an old config still means what it meant.

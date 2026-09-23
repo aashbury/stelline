@@ -1,8 +1,8 @@
 import QtQuick
-import Quickshell
 import Quickshell.Io
 import qs.Commons
 import "Effects.js" as E
+import "../StellineModel.js" as M
 
 // A wordmark: a word, drawn big in the theme's colours with a reveal effect.
 // The word is a setting — type another one in the saver's gear — and the
@@ -26,10 +26,11 @@ Item {
   // Empty (the Original's tile borrows this renderer) means: just the branding.
   property string wordmarkId: ""
   property string fallbackArt: ""
-  readonly property string word: wordmarkId === "" ? "" : String(settings && settings.text !== undefined ? settings.text : "stelline")
+  readonly property string word: wordmarkId === "" ? "" : String(settings && settings.text !== undefined ? settings.text : M.DEFAULT_WORDMARK)
   readonly property bool usesText: word.trim() !== ""
-  readonly property string brandingPath: Quickshell.env("HOME") + "/.config/omarchy/branding/screensaver.txt"
-  readonly property string textArtPath: usesText ? Quickshell.env("HOME") + "/.config/omarchy/stelline/wordmarks/" + wordmarkId + ".txt" : ""
+  // Where the service keeps both; a saver is always drawn with one.
+  readonly property string brandingPath: service ? String(service.brandingPath) : ""
+  readonly property string textArtPath: usesText && service ? String(service.wordmarkDir) + "/" + wordmarkId + ".txt" : ""
   property string branding: ""
   property string textArt: ""
   property string ownArt: ""
@@ -37,7 +38,7 @@ Item {
   // that rather than the typed-word treatment. Any other word shows once it
   // has been drawn, and Stelline's own art until then, so a fresh install
   // shows its name without waiting on anything.
-  readonly property bool isOwnName: word.trim().toLowerCase() === "stelline"
+  readonly property bool isOwnName: word.trim().toLowerCase() === M.DEFAULT_WORDMARK
   readonly property string art: usesText ? ((isOwnName || textArt.trim() === "") ? ownArt : textArt) : branding
 
   // `cycle` (the default) draws a different effect at random from `effects`

@@ -1,18 +1,26 @@
 // Pure JavaScript for the Stelline plugin: settings shape, the saver
 // registry, and the rules ("situations") evaluator. No QML types in here, so
-// every function runs under `node --test tests/` as well as inside the shell.
+// every function runs under `node --test tests/*.test.js` as well as inside
+// the shell.
 
 var PLUGIN_ID = "io.github.aashbury.stelline"
 
 // Static saver metadata. The picker reads this list; savers are only
 // instantiated by the overlay when they are actually shown.
-// The stock saver first and as the default: installing Stelline changes
-// nothing until you choose. `meta` is the line under the name on a tile with
-// no rule to report, so it has to fit a tile: about twenty characters. The
-// Wordmark draws Stelline's own art (`fallbackArt`) until the branding file
-// has been changed from the stock logo, on its tile and full screen alike;
-// the Original always shows the branding file, since that is what it plays.
-var DEFAULT_SAVER = "terminal"
+// The stock saver first; the Wordmark is what a fresh install plays.
+// `meta` is the line under the name on a tile with no rule to report, so it
+// has to fit a tile: about twenty characters. The Wordmark draws its text:
+// the word "stelline" is Stelline's own hand-drawn art (`fallbackArt`), any
+// other word is drawn by the wordmark script. The Original always shows the
+// branding file, since that is what it plays.
+var DEFAULT_SAVER = "wordmark"
+
+// What plays when the chosen saver cannot: the default, or the Original if
+// the default has been deleted — the Original is the one tile that stays.
+function fallbackSaver(cfg) {
+  var hidden = cfg && Array.isArray(cfg.hidden) ? cfg.hidden : []
+  return hidden.indexOf(DEFAULT_SAVER) === -1 ? DEFAULT_SAVER : "terminal"
+}
 var SAVERS = [
   // Nothing here is special: each is an instance of a type anyone can add
   // (text, empty), with its defaults in defaults().savers, and each can be
@@ -22,7 +30,7 @@ var SAVERS = [
   { id: "terminal", name: "Original", type: "original", glyph: "󰆍", meta: "Omarchy's own", file: "", thumb: "savers/Wordmark.qml", kind: "external",
     about: "Omarchy's own screensaver, untouched: your text with Omarchy's 37 animations, in a terminal. The full stock experience; it uses several CPU cores while it runs." },
   { id: "wordmark", name: "Wordmark", type: "text", glyph: "󰊄", meta: "drawn by Stelline", file: "savers/Wordmark.qml", fallbackArt: "savers/stelline.txt", kind: "native",
-    about: "The same text, drawn by Stelline: theme colours, eight animations of its own, almost no CPU. Omarchy's animations only play in the Original." },
+    about: "The same text, drawn by Stelline: theme colours, animations of its own, almost no CPU. Omarchy's animations only play in the Original." },
   { id: "clock",    name: "Clock",    type: "empty", glyph: "󰥔", meta: "time and date", file: "savers/Blank.qml",  kind: "native",
     about: "An empty screen with the clock in the middle: seven-segment digits, the date beneath." },
   { id: "blank",    name: "Blank",    type: "empty", glyph: "󰹏", meta: "black, saves power", file: "savers/Blank.qml",  kind: "native",
@@ -47,10 +55,6 @@ function saverById(id, userSavers) {
   return null
 }
 
-function saverFile(id, userSavers) {
-  var s = saverById(id, userSavers)
-  return s ? s.file : ""
-}
 
 // What kind of thing a saver is, which is what decides how it is configured:
 // two savers of the same type get the same settings, whether they shipped
@@ -128,7 +132,7 @@ function defaults() {
     // this effort. Low answers in half a minute; high may take minutes.
     describe: { model: "", effort: "medium" },
     integration: { menuEntry: false },
-    setup: { done: false, version: 0, indicatorsItemsBefore: null }
+    setup: { done: false, indicatorsItemsBefore: null }
   }
 }
 
@@ -223,8 +227,8 @@ function mergeSettings(entry, userSavers) {
     }
   }
   // An unknown default saver (typo, or a user saver deleted from disk) falls
-  // back to the wordmark — but only once the user savers are known.
-  if (!saverById(out.saver, userSavers)) out.saver = DEFAULT_SAVER
+  // back to the default — but only once the user savers are known.
+  if (!saverById(out.saver, userSavers)) out.saver = fallbackSaver(out)
   return out
 }
 
@@ -389,41 +393,10 @@ function situationLabel(s) {
   return keys.map(function(k) { return conditionLabel(k, s.when[k]) }).join(" · ")
 }
 
-// A rule belongs to a saver: that is its subject, and the condition is what
-// it says about it. A rule with no saver changes the timings for whatever is
-// playing.
-function ruleSaver(s, userSavers) {
-  if (!isPlainObject(s) || !s.saver) return null
-  return saverById(s.saver, userSavers)
-}
-
-// Only what a rule does to the timings. Where the saver is already the
-// subject, naming it again in the same breath reads as a stutter.
-function situationTimings(s) {
-  if (!isPlainObject(s)) return ""
-  var parts = []
-  var hasScr = s.screensaver !== undefined && s.screensaver !== null && s.screensaver !== ""
-  var hasLock = s.lock !== undefined && s.lock !== null && s.lock !== ""
-  if (hasScr) parts.push("screensaver " + mmss(s.screensaver))
-  if (hasLock) parts.push(s.lock === "never" ? "never locks" : "lock " + mmss(s.lock))
-  return parts.join(" · ")
-}
-
-function situationEffect(s, userSavers) {
-  if (!isPlainObject(s)) return ""
-  var parts = []
-  var saver = ruleSaver(s, userSavers)
-  if (saver) parts.push(saver.name)
-  var timings = situationTimings(s)
-  if (timings !== "") parts.push(timings)
-  return parts.join(" · ")
-}
-
 // The one docked rule most people want — "at the desk, never lock" — as a
 // switch rather than a rule to compose: a timings-only rule whose only
 // condition is docked and whose only effect is never locking. It lives in
-// the same list as every other rule, so Rules shows it and per-saver docked
-// rules stay possible.
+// the same list as every other rule, so per-saver docked rules stay possible.
 function dockedNoLockIndex(situations) {
   if (!Array.isArray(situations)) return -1
   for (var i = 0; i < situations.length; i++) {
@@ -433,7 +406,7 @@ function dockedNoLockIndex(situations) {
     if (keys.length !== 1 || keys[0] !== "docked") continue
     if (s.saver) continue
     if (s.lock !== "never") continue
-    if (s.screensaver !== undefined && s.screensaver !== null && s.screensaver !== "") continue
+    if (hasTiming(s.screensaver)) continue
     return i
   }
   return -1
@@ -597,15 +570,6 @@ function terminalArgv(terminalId, omarchyPath, loopPath) {
   return null
 }
 
-// A word into a wordmark, drawn the way Stelline's own name is
-// (art/wordmark.js) but from whatever font is there: the letters slanted
-// forward, their tops lit and their fronts in the dense tone, an extrusion
-// falling down and to the right in the sparse tone, an ink line round every
-// letter, scanlines across the faces. The picture is brought down to the dot
-// grid, each dot made one of the four tones, then dithered through the same
-// matrix the figures use and packed into braille — by awk, one byte at a
-// time, so it needs nothing the Add card does not already. Used whenever a
-// wordmark's text changes; Stelline's own name is drawn by hand instead.
 // Dots to braille, in awk, one byte at a time: a plain PGM on stdin, each
 // dot lit where its grey beats the matrix the figures are dithered with,
 // two across and four down to a cell. Needs nothing beyond awk.
@@ -637,10 +601,18 @@ var BRAILLE_PACK = [
   "}"
 ].join("\n")
 
+// A word into a wordmark, drawn the way Stelline's own name is
+// (art/wordmark.js) but from whatever font is there: the letters slanted
+// forward, their tops lit and their fronts in the dense tone, an extrusion
+// falling down and to the right in the sparse tone, an ink line round every
+// letter, scanlines across the faces. The picture is brought down to the dot
+// grid, each dot made one of the four tones, then dithered through the same
+// matrix the figures use and packed into braille — by awk, one byte at a
+// time, so it needs nothing the Add card does not already. Used whenever a
+// wordmark's text changes; Stelline's own name is drawn by hand instead.
 var WORDMARK_DEPTH = 9, WORDMARK_INK = 9
 function wordmarkScript(text, outPath) {
   var q = shellQuote
-  var awkPack = BRAILLE_PACK
   return [
     "set -u",
     "text=" + q(String(text || "").trim()),
@@ -670,7 +642,7 @@ function wordmarkScript(text, outPath) {
     // down to the dot grid, four tones, dithered and packed into braille
     "magick \"$tmp/all.png\" -filter Box -resize " + (ASCII_COLUMNS * 2) + "x" + (40 * 4) + " " +
       "-fx 'u < 0.125 ? 0 : (u < 0.4 ? 0.25 : (u < 0.78 ? 0.56 : 1))' -depth 8 -compress none pgm:- | " +
-      "LC_ALL=C awk " + q(awkPack) + " > \"$tmp/art.txt\" || exit 1",
+      "LC_ALL=C awk " + q(BRAILLE_PACK) + " > \"$tmp/art.txt\" || exit 1",
     "[[ -s $tmp/art.txt ]] || exit 1",
     "mv \"$tmp/art.txt\" \"$out\""
   ].join("\n")
@@ -730,7 +702,7 @@ function applyFinishSetup(config, pluginId) {
   var ours = findEntry(config, pluginId)
   if (ours && ours !== null) {
     var prev = isPlainObject(ours.setup) ? ours.setup : {}
-    ours.setup = { done: true, version: 1, indicatorsItemsBefore: prev.done === true ? prev.indicatorsItemsBefore : before }
+    ours.setup = { done: true, indicatorsItemsBefore: prev.done === true ? prev.indicatorsItemsBefore : before }
     changed = true
   }
   return changed
@@ -751,7 +723,7 @@ function applyUndoSetup(config, pluginId) {
       else delete entry.items
     }
   }
-  ours.setup = { done: false, version: 0, indicatorsItemsBefore: null }
+  ours.setup = { done: false, indicatorsItemsBefore: null }
   return true
 }
 
@@ -806,6 +778,10 @@ function secondsFromConfig(value, fallback) {
   return Math.floor(n)
 }
 
+// Stock's timeouts when shell.json names none: the screensaver at 2:30, the
+// lock at 5:00.
+var DEFAULT_TIMEOUTS = { screensaver: 150, lock: 300 }
+
 // A lock that never fires still needs a number for the timer maths; this is
 // under Timer's 32-bit millisecond ceiling and is never actually scheduled.
 var NEVER_SECONDS = 2147483
@@ -817,13 +793,13 @@ function effectiveTimeouts(idle, cfg, situation) {
   var idleBlock = isPlainObject(idle) ? idle : {}
   var c = cfg || defaults()
   var s = isPlainObject(situation) ? situation : null
-  var screensaver = s && isFinite(Number(s.screensaver)) && s.screensaver !== null && s.screensaver !== ""
+  var screensaver = s && isFinite(Number(s.screensaver)) && hasTiming(s.screensaver)
     ? Math.max(0, Math.floor(Number(s.screensaver)))
-    : secondsFromConfig(idleBlock.screensaver, 150)
-  var lockRaw = s && s.lock !== undefined && s.lock !== null && s.lock !== "" ? s.lock : secondsFromConfig(idleBlock.lock, 300)
+    : secondsFromConfig(idleBlock.screensaver, DEFAULT_TIMEOUTS.screensaver)
+  var lockRaw = s && hasTiming(s.lock) ? s.lock : secondsFromConfig(idleBlock.lock, DEFAULT_TIMEOUTS.lock)
   var never = lockRaw === "never" || c.lockEnabled === false
   var lock = never ? NEVER_SECONDS : Math.max(0, Math.floor(Number(lockRaw)))
-  if (!isFinite(lock)) lock = secondsFromConfig(idleBlock.lock, 300)
+  if (!isFinite(lock)) lock = secondsFromConfig(idleBlock.lock, DEFAULT_TIMEOUTS.lock)
   return {
     screensaver: screensaver,
     lock: lock,
@@ -847,9 +823,9 @@ function pickSaver(cfg, situation, last, random, userSavers) {
   var c = cfg || defaults()
   var ready = function(id) { var s = saverById(id, userSavers); return !!s && !(s.series && s.series.importing) }
   if (isPlainObject(situation) && situation.saver && ready(situation.saver)) return situation.saver
-  if (!c.shuffle) return ready(c.saver) ? c.saver : DEFAULT_SAVER
+  if (!c.shuffle) return ready(c.saver) ? c.saver : fallbackSaver(c)
   var ids = rotation(c, userSavers)
-  if (ids.length === 0) return DEFAULT_SAVER
+  if (ids.length === 0) return fallbackSaver(c)
   var pool = ids.filter(function(id) { return id !== last })
   if (pool.length === 0) pool = ids
   var r = typeof random === "number" ? random : Math.random()
@@ -864,6 +840,8 @@ function pickSaver(cfg, situation, last, random, userSavers) {
 // is one choice per tile. Defaults come from the old global card settings,
 // so nothing anyone had set is lost.
 var WIDGETS = ["clock", "notifications", "agent"]
+// The one corner an older config set for the whole card, still read so it
+// keeps meaning what it meant.
 var CORNERS = ["bottom-right", "bottom-left", "top-right", "top-left"]
 // Where a widget sits: one of the four corners, or the middle of the screen,
 // where it is drawn large. Every widget picks its own spot; two in the same
@@ -1088,6 +1066,13 @@ var USER_SAVERS_SUBDIR = ".config/omarchy/stelline/savers"
 var IMAGE_EXTENSIONS = ["png", "jpg", "jpeg", "webp", "gif", "svg", "bmp", "avif"]
 var VIDEO_EXTENSIONS = ["mp4", "mov", "mkv", "webm", "avi", "m4v", "gif"]
 
+// The bash that lists a folder's pictures, sorted, one path a line. `dir`
+// is shell text, quoted or a variable.
+function findPicturesBash(dir) {
+  var names = IMAGE_EXTENSIONS.map(function(e) { return "-iname '*." + e + "'" }).join(" -o ")
+  return "find " + dir + " -maxdepth 1 -type f \\( " + names + " \\) 2>/dev/null | sort"
+}
+
 function extensionOf(path) {
   var m = /\.([A-Za-z0-9]+)$/.exec(String(path || ""))
   return m ? m[1].toLowerCase() : ""
@@ -1308,7 +1293,7 @@ function scanScript(rootDir) {
     "  files=$(ls -1 \"$d\" 2>/dev/null | jq -R . | jq -sc .)",
     "  folder=$(jq -r '.folder // empty' \"$f\" 2>/dev/null)",
     "  folderFiles='[]'",
-    "  if [[ -n $folder && -d $folder ]]; then folderFiles=$(find \"$folder\" -maxdepth 1 -type f \\( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' -o -iname '*.gif' -o -iname '*.svg' -o -iname '*.bmp' -o -iname '*.avif' \\) 2>/dev/null | sort | jq -R . | jq -sc .); fi",
+    "  if [[ -n $folder && -d $folder ]]; then folderFiles=$(" + findPicturesBash("\"$folder\"") + " | jq -R . | jq -sc .); fi",
     "  thumb=''; frameCount=0",
     "  if [[ $(jq -r '.kind // \"ascii\"' \"$f\") != image ]]; then",
     "    first=$(jq -r '.pieces[0] // empty' \"$f\" 2>/dev/null); [[ -n $first ]] || first=$(ls -1 \"$d\"/*.txt 2>/dev/null | head -n1)",
@@ -1356,16 +1341,14 @@ function stateColor(state, colors, fallbacks) {
 // text | prompt | clock | empty (the last two have nothing to convert).
 // `style`: ascii (theme-coloured text art) | image (the pictures as they are).
 function importDefaults() {
-  return { id: "", name: "", source: "", paths: [], words: "", text: "", prompt: "", style: "ascii", fps: 10, seconds: 20, animated: true, letters: false, frames: 12, order: "shuffle", detail: DEFAULT_DETAIL }
+  return { id: "", name: "", source: "", paths: [], words: "", text: "", prompt: "", style: "ascii", fps: 10, seconds: 20, animated: true, order: "shuffle", detail: DEFAULT_DETAIL }
 }
 
 // ---- the composer ----------------------------------------------------------
 //
-// One card, one field, whatever is attached: what gets made follows from
-// what is there. Words alone are drawn by the agent (or set in big letters);
-// pictures alone are converted; words with a picture, where the agent can
-// look at one, are drawn from it. The card only asks the one question that
-// is left open.
+// One card: pick a kind, and it asks only for what that kind needs. Words
+// are drawn as a title card; pictures and clips are converted; a description
+// goes to the agent, with pictures to draw from where it can look at them.
 
 // Where "Describe it" goes, as the service probes it: "agent:<id>" or "api".
 // Which of those can be handed a picture along with the words.
@@ -1390,15 +1373,21 @@ function classifyPaths(paths) {
   return { source: "images", paths: pictures }
 }
 
+// How many pictures a description can be drawn from.
+var DESCRIBE_PICTURES = 4
+
 // Something new attached to the draft. A folder or a clip stands alone;
-// pictures join pictures already there.
+// pictures join pictures already there. What was attached decides the kind,
+// except on a card already for pictures or a description: there a lone GIF
+// is a picture, and a description takes pictures and nothing else.
 function attach(draft, found) {
   var d = isPlainObject(draft) ? cloneJson(draft) : importDefaults()
   if (!found || !found.source) return d
-  // What was attached decides the kind, unless it is pictures for a
-  // description to draw from.
-  if (found.source === "video") d.kind = "clip"
-  else if (!(d.kind === "describe" && found.source === "images")) d.kind = "pictures"
+  if (found.source === "video" && (d.kind === "pictures" || d.kind === "describe") && extensionOf(found.paths[0]) === "gif")
+    found = { source: "images", paths: found.paths }
+  if (d.kind === "describe") {
+    if (found.source !== "images") return d
+  } else d.kind = found.source === "video" ? "clip" : "pictures"
   if (found.source === "images" && d.source === "images") {
     var have = Array.isArray(d.paths) ? d.paths.slice() : []
     for (var i = 0; i < found.paths.length; i++) if (have.indexOf(found.paths[i]) === -1) have.push(found.paths[i])
@@ -1407,6 +1396,23 @@ function attach(draft, found) {
     d.source = found.source
     d.paths = found.paths.slice()
   }
+  if (d.kind === "describe") d.paths = d.paths.slice(0, DESCRIBE_PICTURES)
+  return d
+}
+
+// Another kind picked on the card: what is attached stays only if the new
+// kind can use it — pictures carry over between Pictures and Describe (as
+// many as a description takes, and only for an agent that can look at
+// them); a clip only suits Clip.
+function chooseKind(draft, kind, ai) {
+  var d = isPlainObject(draft) ? cloneJson(draft) : importDefaults()
+  d.kind = kind
+  var keep = d.source === "" || !Array.isArray(d.paths) || d.paths.length === 0
+    || (kind === "pictures" && (d.source === "images" || d.source === "folder"))
+    || (kind === "describe" && d.source === "images" && seesPictures(ai))
+    || (kind === "clip" && d.source === "video")
+  if (!keep) { d.source = ""; d.paths = [] }
+  else if (kind === "describe" && Array.isArray(d.paths)) d.paths = d.paths.slice(0, DESCRIBE_PICTURES)
   return d
 }
 
@@ -1429,7 +1435,7 @@ function attachmentLabel(draft, stageDir) {
 // Pictures, one or many, from a pick or a folder, can move or sit still in
 // either style: a dot matrix lights up or breathes, a picture pushes in
 // slowly or holds. A clip already moves, so it is not asked.
-function canMove(draft, mode) {
+function canMove(mode) {
   return mode === "pictures" || mode === "folder"
 }
 // More than one picture can come round in turn or shuffled.
@@ -1456,24 +1462,10 @@ var ADD_KINDS = [
   { id: "blank", name: "Blank", glyph: "󰝤", hint: "for widgets on top" }
 ]
 
-// What the card would make of what it holds: "" when nothing yet. With a
-// kind picked, that decides it; without one (a draft from the IPC, say) it
-// is worked out from what is there.
+// What the card would make of what it holds, for the kind picked: "" while
+// something that kind needs is still missing.
 function composeMode(draft, ai) {
-  if (!isPlainObject(draft)) return ""
-  if (draft.kind) return kindMode(draft, ai)
-  var words = String(draft.words || "").trim()
-  var has = !!draft.source && Array.isArray(draft.paths) && draft.paths.length > 0
-  if (!words && !has) return ""
-  if (!has) return ai && !draft.letters ? "describe" : "letters"
-  // Words with pictures are a prompt: the agent draws from the pictures the
-  // way the words ask, where it can be handed a picture at all. Otherwise
-  // the words name the saver and the pictures are converted as they are.
-  if (words && draft.source === "images" && seesPictures(ai)) return "describe-pictures"
-  return draft.source === "folder" ? "folder" : (draft.source === "video" ? "clip" : "pictures")
-}
-
-function kindMode(draft, ai) {
+  if (!isPlainObject(draft) || !draft.kind) return ""
   var words = String(draft.words || "").trim()
   var paths = Array.isArray(draft.paths) ? draft.paths : []
   var pictures = paths.length > 0 && (draft.source === "images" || draft.source === "folder")
@@ -1531,7 +1523,7 @@ function composeSpec(draft, ai, stageDir) {
   spec.style = draft.style === "image" ? "image" : "ascii"
   // Pictures move or sit still, and several come round shuffled or in turn;
   // the service turns both into the saver's own settings.
-  if (canMove(draft, mode)) spec.animated = draft.animated !== false
+  if (canMove(mode)) spec.animated = draft.animated !== false
   if (spec.style === "ascii") spec.detail = detailLevel(draft.detail)
   else delete spec.detail
   if (canOrder(draft, mode)) spec.order = draft.order === "sequence" ? "sequence" : "shuffle"
@@ -1550,10 +1542,10 @@ function isEmptySource(source) { return source === "clock" || source === "empty"
 
 function metaJson(spec, extra) {
   var j = { name: spec.name, kind: isEmptySource(spec.source) ? "empty" : (spec.style === "image" ? "image" : "ascii"), source: { type: spec.source }, created: Math.floor(Date.now() / 1000) }
-  if (spec.source === "images" || spec.source === "video") j.source.paths = spec.paths
-  if (spec.source === "folder") j.source.paths = spec.paths
+  var converted = spec.source === "images" || spec.source === "folder" || spec.source === "video"
+  if (converted) j.source.paths = spec.paths
   // How much detail the dots were drawn with, so it can be changed later.
-  if ((spec.source === "images" || spec.source === "folder") && spec.style !== "image") j.source.detail = detailLevel(spec.detail)
+  if (converted && spec.style !== "image") j.source.detail = detailLevel(spec.detail)
   if (spec.source === "text") j.source.text = spec.text
   if (spec.source === "prompt") { j.source.prompt = spec.prompt; j.source.animated = spec.animated !== false; if (Array.isArray(spec.paths) && spec.paths.length) j.source.paths = spec.paths }
   for (var k in (extra || {})) j[k] = extra[k]
@@ -1631,11 +1623,21 @@ function aiPrompt(description, plan, pictures, previous) {
 }
 
 // Which agent answers, the same way the described savers pick one.
-var AGENT_PICK = [
-  "agent=$(omarchy-default-agent 2>/dev/null || true)",
-  "[[ -n $agent ]] && command -v \"$agent\" >/dev/null 2>&1 || agent=''",
-  "[[ -z $agent ]] && command -v claude >/dev/null 2>&1 && agent=claude"
-].join("\n")
+// One Stelline knows how to ask (AGENTS) and that is installed; Claude
+// Code if the default is neither. The service's probe runs the same lines.
+function agentPickBash() {
+  return [
+    "agent=$(omarchy-default-agent 2>/dev/null || true)",
+    "case $agent in " + Object.keys(AGENTS).join("|") + ") command -v \"$agent\" >/dev/null 2>&1 || agent='' ;; *) agent='' ;; esac",
+    "[[ -z $agent ]] && command -v claude >/dev/null 2>&1 && agent=claude"
+  ].join("\n")
+}
+
+// Who answers "Describe it", for the card: "agent:<id>", "api" with only an
+// API key, or "none".
+function aiProbeScript() {
+  return agentPickBash() + "\nif [[ -n $agent ]]; then echo \"agent:$agent\"; elif [[ -n ${ANTHROPIC_API_KEY:-} ]]; then echo api; else echo none; fi"
+}
 
 // What a described saver is drawn with, from the settings: the agent's own
 // model unless one is named, at a known effort.
@@ -1647,8 +1649,9 @@ function describeSettings(cfg) {
 
 // Omarchy's default coding agent (`omarchy default agent <name>`), each in
 // its one-shot mode with tools off or read-only where the CLI has a switch
-// for it. Low effort where it can be asked for: at the default the model
-// deliberates over the grid spec for minutes. The answer goes to stdout —
+// for it. The effort is the settings' (medium unless changed) where it can
+// be asked for: left to itself the model deliberates over the grid spec for
+// minutes. The answer goes to stdout —
 // or to a file for codex, which is quieter that way.
 // With pictures attached: Claude Code may Read (only that), Codex takes
 // them as -i, Gemini's plan mode may read inside the picture's folder.
@@ -1707,7 +1710,7 @@ var CLIPBOARD_BASH = [
   "  local p; p=$(unesc \"$1\")",
   "  [[ -d $p ]] && { printf 'dir\\t%s\\n' \"$p\"; return 0; }",
   "  [[ -f $p ]] || return 1",
-  "  [[ $p == *.@(png|jpg|jpeg|webp|gif|svg|bmp|avif|mp4|mov|mkv|webm|avi|m4v) ]] || return 1",
+  "  [[ $p == *.@(" + IMAGE_EXTENSIONS.concat(VIDEO_EXTENSIONS.filter(function(e) { return IMAGE_EXTENSIONS.indexOf(e) === -1 })).join("|") + ") ]] || return 1",
   "  printf 'file\\t%s\\n' \"$p\"",
   "}"
 ]
@@ -1741,28 +1744,12 @@ function clipboardPasteScript(stageDir) {
   ]).join("\n")
 }
 
-// The first picture of what is attached, converted the way the import would
-// convert it, for the card to show before Create. A folder gives its first
-// picture, a clip its first second. Prints `image<TAB>path` (the picture as
-// it is, or the clip's frame) and then the art. Frames get a name of their
-// own each time: an image cache keyed on the path would show the last clip.
-// The transcoder is made for logos: a picture with transparency is read by
-// its alpha (every opaque pixel is subject — a screenshot with rounded
-// corners comes out solid), and otherwise dark pixels are the subject (a
-// dark wallpaper comes out solid). So a picture is prepared first: one that
-// is nearly all opaque is flattened, and, flattened, a dark one is inverted
-// by its mean. A true logo on transparency goes through as it is. Sets
-// `prep_path` and `prep_flags` for the transcoder call.
-// Everything is judged and converted on a copy no wider than 800 pixels:
-// the transcoder wants 320 across, and a wallpaper is several thousand.
-// An SVG is left to the transcoder, which rasterises it itself.
 // A braille dot is not square. Two dots span a cell's width and four its
 // height, and a monospace cell is far taller than it is wide, so a dot is
 // about a tenth taller than it is wide. Convert a picture straight onto that
 // grid and it comes out stretched upward by the same tenth. The fix is to
-// widen the picture by that much before the transcoder samples it, so the
-// dots it chooses map back to the right shape on screen. Block art needs
-// exactly the same correction, since its cells halve the same way.
+// widen the picture by that much before it is sampled, so the dots map back
+// to the right shape on screen.
 var DOT_STRETCH = 1.0977
 
 function dotStretch(cellAspect) {
@@ -1772,10 +1759,10 @@ function dotStretch(cellAspect) {
 }
 
 // How much of a picture's shading the dots keep, from 0 to 4. At 0 it is
-// the transcoder's one cut, lit or not, which makes bold shapes and loses
-// what is in the shadows; above that the picture is dithered the way the
-// figures are, keeping more tones at each step, and the top two lift the
-// local contrast so faces and texture survive.
+// one cut, lit or not, which makes bold shapes and loses what is in the
+// shadows; above that the picture is dithered the way the figures are,
+// keeping more tones at each step, and the top two lift the local contrast
+// so faces and texture survive.
 var DETAIL_NAMES = ["bold", "simple", "balanced", "fine", "finest"]
 var DEFAULT_DETAIL = 2
 function detailLevel(v) {
@@ -1785,31 +1772,37 @@ function detailLevel(v) {
 function detailName(v) { return DETAIL_NAMES[detailLevel(v)] }
 
 // `dots_art src out cols rows flags detail`: a prepared picture into
-// braille. `flags` is prep's: --invert when the light parts are the subject.
+// braille, fitted inside cols × rows cells. `flags` are prep's — --invert
+// when the light parts are the subject, --alpha when its shape is — plus
+// --no-trim for a clip's frames, which must all keep the same framing.
 function dotsArtBash() {
   return [
     "dots_art() {",
-    "  local src=$1 out=$2 cols=$3 rows=$4 flags=$5 detail=$6 tones neg=-negate look=''",
-    "  if (( detail <= 0 )); then",
-    "    omarchy-transcode-ascii \"$src\" \"$out\" --width \"$cols\" --height \"$rows\" --mode braille $flags >/dev/null 2>&1; return",
-    "  fi",
-    "  [[ $flags == *--invert* ]] && neg=''",
-    "  case $detail in 1) tones=3 ;; 2) tones=5 ;; 3) tones=9 ;; *) tones=17 ;; esac",
+    "  local src=$1 out=$2 cols=$3 rows=$4 flags=$5 detail=$6 tones gray='-colorspace Gray -negate' look='' trim='-trim +repage'",
+    "  [[ $flags == *--invert* ]] && gray='-colorspace Gray'",
+    "  [[ $flags == *--alpha* ]] && gray='-alpha extract'",
+    "  [[ $flags == *--no-trim* ]] && trim=''",
+    "  case $detail in 0) tones='-threshold 50%' ;; 1) tones='-posterize 3' ;; 2) tones='-posterize 5' ;; 3) tones='-posterize 9' ;; *) tones='-posterize 17' ;; esac",
     "  (( detail >= 3 )) && look='-clahe 25x25%+128+' && look+=$(( detail == 3 ? 2 : 3 ))",
-    "  magick \"$src\" -background black -alpha remove -alpha off -colorspace Gray $neg $look -trim +repage " +
-      "-filter Box -resize \"$((cols * 2))x$((rows * 4))\" -posterize \"$tones\" -depth 8 -compress none pgm:- 2>/dev/null | " +
+    "  [[ $flags == *--alpha* ]] || gray=\"-background black -alpha remove -alpha off $gray\"",
+    "  magick \"$src\" $gray $look $trim -filter Box -resize \"$((cols * 2))x$((rows * 4))\" $tones -depth 8 -compress none pgm:- 2>/dev/null | " +
       "LC_ALL=C awk " + shellQuote(BRAILLE_PACK) + " > \"$out\"",
     "  [[ -s $out ]]",
     "}"
   ].join("\n")
 }
 
+// A picture made ready for the dots, on a copy no wider than 800 pixels (a
+// wallpaper is several thousand), widened by the dot's stretch. What the
+// subject is has to be guessed: a picture that is nearly all opaque is
+// flattened and, if it is mostly dark, its light parts are the subject
+// (--invert); one with real transparency is a logo, and its shape is the
+// subject (--alpha). Sets `prep_path` and `prep_flags` for dots_art.
 function prepBash(stretch) {
   var k = (Math.round(dotStretch(stretch) * 10000) / 100).toFixed(2)
   return [
   "prep() {",
   "  prep_path=$1; prep_flags=''; local a m",
-  "  case ${1,,} in *.svg) return 0 ;; esac",
   "  magick \"$1[0]\" -auto-orient -resize '800x800>' -resize '" + k + "%x100%' \"$2\" 2>/dev/null || return 0",
   "  prep_path=$2",
   "  a=$(magick \"$2\" -alpha extract -format '%[fx:mean]' info: 2>/dev/null || echo 1)",
@@ -1817,26 +1810,38 @@ function prepBash(stretch) {
   "    magick \"$2\" -background black -alpha remove -alpha off \"$2\" 2>/dev/null",
   "    m=$(magick \"$2\" -colorspace Gray -format '%[fx:mean]' info: 2>/dev/null || echo 1)",
   "    prep_flags=$(awk -v m=\"$m\" 'BEGIN { print (m < 0.45) ? \"--invert\" : \"\" }')",
+  "  else prep_flags=--alpha",
   "  fi",
   "}"
   ].join("\n")
 }
 
+// The first picture of what is attached, converted the way the import will
+// convert it, for the card to show before Create: a folder's first picture,
+// a clip's frame at one second. Prints `image<TAB>path` (the picture as it
+// is, or the clip's frame) and then the art; when it cannot, says why on
+// stderr in a few words the card shows. Frames get a name of their own each
+// time: an image cache keyed on the path would show the last clip.
 function previewScript(stageDir, cellAspect, detail) {
   return ["set -u", "shopt -s nocasematch", prepBash(cellAspect), dotsArtBash(),
+    "die() { printf '%s\\n' \"$1\" >&2; exit 1; }",
+    "command -v magick >/dev/null 2>&1 || die 'needs ImageMagick (magick)'",
     "stage=" + shellQuote(stageDir),
-    "mkdir -p \"$stage\" || exit 1",
+    "mkdir -p \"$stage\" || die 'no room to make a preview'",
     "rm -f \"$stage\"/frame-*.png",
-    "src=$1",
-    "if [[ -d $src ]]; then src=$(find \"$src\" -maxdepth 1 -type f \\( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' -o -iname '*.gif' -o -iname '*.svg' -o -iname '*.bmp' -o -iname '*.avif' \\) 2>/dev/null | sort | head -n1); [[ -n $src ]] || exit 1; fi",
-    "[[ -f $src ]] || exit 1",
+    "src=$1; extra=''",
+    "if [[ -d $src ]]; then src=$(" + findPicturesBash("\"$src\"") + " | head -n1); [[ -n $src ]] || die 'no pictures in that folder'; fi",
+    "[[ -f $src ]] || die 'it is not there any more'",
     "img=$src; frame=$stage/frame-$(date +%s%N).png",
     "case $src in",
-    "  *.mp4|*.mov|*.mkv|*.webm|*.avi|*.m4v) ffmpeg -v error -y -ss 1 -i \"$src\" -frames:v 1 \"$frame\" 2>/dev/null || ffmpeg -v error -y -i \"$src\" -frames:v 1 \"$frame\" 2>/dev/null || exit 1; img=$frame ;;",
+    "  *.mp4|*.mov|*.mkv|*.webm|*.avi|*.m4v)",
+    "    command -v ffmpeg >/dev/null 2>&1 || die 'needs ffmpeg for clips'",
+    "    ffmpeg -v error -y -ss 1 -i \"$src\" -frames:v 1 \"$frame\" 2>/dev/null || ffmpeg -v error -y -i \"$src\" -frames:v 1 \"$frame\" 2>/dev/null || die 'the clip could not be read'",
+    "    img=$frame; extra=--no-trim ;;",
     "  *.gif) magick \"$src[0]\" \"$frame\" 2>/dev/null && img=$frame ;;",
     "esac",
     "prep \"$img\" \"$stage/prep.png\"",
-    "dots_art \"$prep_path\" \"$stage/preview.txt\" " + ASCII_COLUMNS + " " + ASCII_ROWS + " \"$prep_flags\" " + detailLevel(detail) + " || exit 1",
+    "dots_art \"$prep_path\" \"$stage/preview.txt\" " + ASCII_COLUMNS + " " + ASCII_ROWS + " \"$prep_flags $extra\" " + detailLevel(detail) + " || die 'it could not be converted'",
     "printf 'image\\t%s\\n' \"$img\"",
     "cat \"$stage/preview.txt\""
   ].join("\n")
@@ -1887,6 +1892,9 @@ function importScript(spec, rootDir, stageDir) {
     // A tile deleted while this ran has nowhere to write and nothing to say.
     "fail() { [[ -d $dir ]] || { rm -rf \"$tmp\"; exit 1; }; printf %s " + q(metaJson(spec, { error: "__MSG__" })).replace("__MSG__", "'\"$1\"'") + " > \"$dir/saver.json\"; touch \"$root/.stamp\"; " + notify("󰀦", "__MSG__").replace("__MSG__", "'\"$1\"'") + "; rm -rf \"$tmp\"; exit 1; }",
     "trap 'rm -rf \"$tmp\"' EXIT",
+    // What this kind needs, said plainly rather than blamed on the file.
+    "need() { command -v \"$1\" >/dev/null 2>&1 || fail \"needs $2\"; }",
+    "need jq jq",
     prepBash(spec.cellAspect),
     "printf %s " + q(metaJson(spec, { importing: true })) + " > \"$dir/saver.json\"",
     "touch \"$root/.stamp\"",
@@ -1908,7 +1916,7 @@ function importScript(spec, rootDir, stageDir) {
   if (spec.source === "images" || spec.source === "folder") {
     lines.push("srcs=()")
     if (spec.source === "folder") {
-      lines.push("while IFS= read -r f; do srcs+=(\"$f\"); done < <(find " + paths + " -maxdepth 1 -type f \\( -iname '*.png' -o -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.webp' -o -iname '*.gif' -o -iname '*.svg' -o -iname '*.bmp' -o -iname '*.avif' \\) 2>/dev/null | sort)")
+      lines.push("while IFS= read -r f; do srcs+=(\"$f\"); done < <(" + findPicturesBash(paths) + ")")
     } else {
       lines.push("for f in " + paths + "; do [[ -f $f ]] && srcs+=(\"$f\"); done")
     }
@@ -1920,6 +1928,7 @@ function importScript(spec, rootDir, stageDir) {
       else lines.push(finish("--argjson srcs \"$srcjson\" '.pieces=$srcs | .source.paths=$srcs'"))
     } else {
       lines.push(
+        "need magick 'ImageMagick (magick)'",
         dotsArtBash(),
         // drawn again: the old pieces go first, or a folder that has lost a
         // picture keeps showing it
@@ -1927,7 +1936,6 @@ function importScript(spec, rootDir, stageDir) {
         "i=0",
         "for f in \"${srcs[@]}\"; do",
         "  i=$((i+1)); n=$(printf %03d \"$i\")",
-        "  if [[ ${f,,} == *.gif ]]; then magick \"$f[0]\" \"$tmp/$n.png\" 2>/dev/null && f=\"$tmp/$n.png\"; fi",
         "  prep \"$f\" \"$tmp/prep.png\"",
         "  dots_art \"$prep_path\" \"$dir/$n.txt\" \"$cols\" \"$rows\" \"$prep_flags\" " + detailLevel(spec.detail) + " || echo \"skipped $f\" >&2",
         "done",
@@ -1938,7 +1946,7 @@ function importScript(spec, rootDir, stageDir) {
   } else if (spec.source === "video") {
     var fps = Math.max(2, Math.min(24, Math.round(Number(spec.fps) || 10)))
     var secs = Math.max(1, Math.min(120, Math.round(Number(spec.seconds) || 20)))
-    lines.push("src=" + paths, "[[ -f $src ]] || fail 'clip not found'")
+    lines.push("src=" + paths, "[[ -f $src ]] || fail 'clip not found'", "need ffmpeg ffmpeg")
     if (style === "image") {
       lines.push(
         "ffmpeg -v error -y -i \"$src\" -t " + secs + " -vf \"fps=" + Math.min(fps, 15) + ",scale=960:-2:flags=lanczos,split[a][b];[a]palettegen=max_colors=128[p];[b][p]paletteuse=dither=bayer:bayer_scale=3\" \"$dir/clip.gif\" || fail 'ffmpeg could not read the clip'",
@@ -1946,12 +1954,17 @@ function importScript(spec, rootDir, stageDir) {
       )
     } else {
       lines.push(
-        "ffmpeg -v error -y -i \"$src\" -t " + secs + " -vf \"fps=" + fps + ",scale=$((cols*2)):-2:flags=area\" \"$tmp/f%05d.png\" || fail 'ffmpeg could not read the clip'",
+        // Every frame the way the preview drew the first: widened by the
+        // dot's stretch, the subject judged once from the first frame, the
+        // same detail, and no trimming, so the framing holds still.
+        "need magick 'ImageMagick (magick)'",
+        dotsArtBash(),
+        "ffmpeg -v error -y -i \"$src\" -t " + secs + " -vf \"fps=" + fps + ",scale=$((cols*2)):-2:flags=area,scale=trunc(iw*" + dotStretch(spec.cellAspect).toFixed(4) + "/2)*2:ih\" \"$tmp/f%05d.png\" || fail 'ffmpeg could not read the clip'",
         "shopt -s nullglob; frames=(\"$tmp\"/f*.png); (( ${#frames[@]} > 0 )) || fail 'no frames in that clip'",
-        "prep \"${frames[0]}\" \"$tmp/prep.png\"; inv=$prep_flags",
+        "prep \"${frames[0]}\" \"$tmp/prep.png\"; flags=\"$prep_flags --no-trim\"",
         ": > \"$dir/frames.txt\"",
         "for f in \"${frames[@]}\"; do",
-        "  omarchy-transcode-ascii \"$f\" \"$tmp/frame.txt\" --width \"$cols\" --height \"$rows\" --mode braille --no-trim $inv >/dev/null 2>&1 || continue",
+        "  dots_art \"$f\" \"$tmp/frame.txt\" \"$cols\" \"$rows\" \"$flags\" " + detailLevel(spec.detail) + " || continue",
         "  cat \"$tmp/frame.txt\" >> \"$dir/frames.txt\"; printf '\\f' >> \"$dir/frames.txt\"",
         "done",
         "[[ -s \"$dir/frames.txt\" ]] || fail 'the frames could not be converted'",
@@ -1962,6 +1975,7 @@ function importScript(spec, rootDir, stageDir) {
     // Drawn the same way a wordmark's text is, so a word made here looks
     // like one typed into the wordmark's own settings.
     lines.push(
+      "need magick 'ImageMagick (magick)'",
       "( " + wordmarkScript(String(spec.text || ""), dir + "/001.txt").split("\n").join("\n  ") + "\n) || fail 'could not draw the text'",
       finish("'.pieces=[\"001.txt\"] | .play=\"slideshow\"'")
     )
@@ -1971,10 +1985,8 @@ function importScript(spec, rootDir, stageDir) {
     var pics = (spec.paths || []).filter(function(p) { return typeof p === "string" && p !== "" }).slice(0, 4)
     var chosen = describeSettings({ describe: { model: spec.model, effort: spec.effort } })
     var change = spec.previous === true
-    // A picture is converted to the grid first and handed over as the
-    // starting point: the likeness comes from the transcoder, which is
-    // exact, and the model only has to take it where the words ask. Blocks
-    // rather than braille, because a model can actually work in ▀▄█.
+    // The pictures go to the agent as they are, numbered, in a folder of
+    // their own: the agents that can look at a picture are pointed at it.
     var picNames = pics.map(function(p, i) { return (i + 1) + "-" + baseName(p) })
     lines.push(
       "prompt=" + q(aiPrompt(spec.prompt, plan, picNames, change ? String(spec.previousPrompt || spec.prompt) : undefined)),
@@ -1999,8 +2011,10 @@ function importScript(spec, rootDir, stageDir) {
       "out=''; why=''",
       // The system's default agent first; Claude Code if none is set; the
       // API with a key as the last resort.
-      AGENT_PICK,
-      // An agent with no system prompt of its own reads the rules first.
+      agentPickBash(),
+      // An agent with no system prompt of its own reads the rules first; the
+      // API, if it comes to that, takes them apart again.
+      "ask=$prompt",
       "[[ -n $agent && $agent != claude ]] && prompt=\"$system\"$'\\n\\n'\"$prompt\""
     )
     lines = lines.concat(agentCase())
@@ -2008,7 +2022,7 @@ function importScript(spec, rootDir, stageDir) {
       // The API gets the pictures as image blocks: PNG, bounded, base64 from
       // files, since a picture is far bigger than an argument may be.
       "if [[ -z $out && -n ${ANTHROPIC_API_KEY:-} ]]; then",
-      "  jq -n --arg p \"$prompt\" '[{type:\"text\", text:$p}]' > \"$tmp/parts.json\"",
+      "  jq -n --arg p \"$ask\" '[{type:\"text\", text:$p}]' > \"$tmp/parts.json\"",
       "  i=0; for f in \"${imgs[@]}\"; do i=$((i+1)); magick \"$f[0]\" -resize '1568x1568>' \"$tmp/img$i.png\" 2>/dev/null || continue; base64 -w0 \"$tmp/img$i.png\" > \"$tmp/img$i.b64\"; jq --rawfile d \"$tmp/img$i.b64\" '[{type:\"image\", source:{type:\"base64\", media_type:\"image/png\", data:$d}}] + .' \"$tmp/parts.json\" > \"$tmp/parts2.json\" && mv \"$tmp/parts2.json\" \"$tmp/parts.json\"; done",
       "  jq -n --slurpfile c \"$tmp/parts.json\" --arg m \"${model:-claude-opus-5}\" --arg e \"$effort\" --arg s \"$system\" '{model:$m, max_tokens:64000, output_config:{effort:$e}, fallbacks:\"default\", system:$s, messages:[{role:\"user\", content:$c[0]}]}' > \"$tmp/body.json\"",
       "  resp=$(curl -s --max-time 600 https://api.anthropic.com/v1/messages -H 'content-type: application/json' -H \"x-api-key: $ANTHROPIC_API_KEY\" -H 'anthropic-version: 2023-06-01' -H 'anthropic-beta: server-side-fallback-2026-07-01' -d @\"$tmp/body.json\") || resp=''",
@@ -2142,7 +2156,8 @@ function playingName(cfg, situation, userSavers) {
 
 // A failed import keeps what it was asked for in its saver.json, so it can
 // be asked for again under the same id — the tile stays where it is and
-// the retry writes over it.
+// the retry writes over it. The saver's settings were written the first
+// time and stay as they are; the dots are drawn at the detail it recorded.
 function retrySpec(saver) {
   var src = saver && saver.series && isPlainObject(saver.series.source) ? saver.series.source : null
   if (!src || !saver.series.error || typeof src.type !== "string" || src.type === "") return null
@@ -2154,23 +2169,26 @@ function retrySpec(saver) {
   if (Array.isArray(src.paths)) spec.paths = src.paths.slice()
   if (typeof src.text === "string") spec.text = src.text
   if (typeof src.prompt === "string") { spec.prompt = src.prompt; spec.animated = src.animated !== false }
+  if (src.detail !== undefined) spec.detail = detailLevel(src.detail)
+  delete spec.order
+  spec.keepSettings = true
   if ((src.type === "images" || src.type === "folder" || src.type === "video") && spec.paths.length === 0) return null
   if (src.type === "text" && !spec.text) return null
   if (src.type === "prompt" && !spec.prompt) return null
   return spec
 }
 
-// The detail a dot-matrix picture saver was drawn with: what it recorded,
-// or bold for one made before detail was a choice — that is how it was
-// drawn. -1 for anything that has no such choice.
+// The detail a dot-matrix picture or clip saver was drawn with: what it
+// recorded, or bold for one made before detail was a choice — that is how
+// it was drawn. -1 for anything that has no such choice.
 function savedDetail(saver) {
   var series = saver && saver.series
   var src = series && isPlainObject(series.source) ? series.source : null
-  if (!src || series.kind !== "ascii" || (src.type !== "images" && src.type !== "folder")) return -1
+  if (!src || series.kind !== "ascii" || (src.type !== "images" && src.type !== "folder" && src.type !== "video")) return -1
   return src.detail === undefined ? 0 : detailLevel(src.detail)
 }
 
-// The same pictures converted again at another level of detail, under the
+// The same pictures or clip converted again at another level of detail, under the
 // same tile. Only the dots are redone; the saver's settings stay.
 function redetailSpec(saver, detail) {
   if (savedDetail(saver) < 0) return null
@@ -2237,7 +2255,7 @@ function hideSaver(cfg, saverId) {
 function forgetSaver(cfg, saverId) {
   var c = cloneJson(cfg)
   var patch = {}
-  if (c.saver === saverId) patch.saver = DEFAULT_SAVER
+  if (c.saver === saverId) patch.saver = saverId === DEFAULT_SAVER ? "terminal" : fallbackSaver(c)
   if (Array.isArray(c.shuffleFrom) && c.shuffleFrom.indexOf(saverId) !== -1) patch.shuffleFrom = c.shuffleFrom.filter(function(id) { return id !== saverId })
   if (Array.isArray(c.situations) && c.situations.some(function(s) { return isPlainObject(s) && s.saver === saverId })) {
     patch.situations = c.situations.map(function(s) {
@@ -2246,9 +2264,7 @@ function forgetSaver(cfg, saverId) {
       return t
     }).filter(function(s) {
       // A rule that only switched savers has nothing left to do.
-      var hasScr = s.screensaver !== undefined && s.screensaver !== null && s.screensaver !== ""
-      var hasLock = s.lock !== undefined && s.lock !== null && s.lock !== ""
-      return s.saver || hasScr || hasLock
+      return s.saver || hasTiming(s.screensaver) || hasTiming(s.lock)
     })
   }
   if (isPlainObject(c.savers) && saverId in c.savers) { patch.savers = cloneJson(c.savers); delete patch.savers[saverId] }
@@ -2260,18 +2276,17 @@ if (typeof module !== "undefined") {
     PLUGIN_ID: PLUGIN_ID,
     SAVERS: SAVERS,
     saverById: saverById,
-    saverFile: saverFile,
     rotation: rotation,
     nextSaver: nextSaver,
     defaults: defaults,
     isPlainObject: isPlainObject,
     cloneJson: cloneJson,
     findEntry: findEntry,
-    coerce: coerce,
     mergeSettings: mergeSettings,
     fullSettings: fullSettings,
     secondsFromConfig: secondsFromConfig,
     NEVER_SECONDS: NEVER_SECONDS,
+    DEFAULT_TIMEOUTS: DEFAULT_TIMEOUTS,
     effectiveTimeouts: effectiveTimeouts,
     firstTimeout: firstTimeout,
     pickSaver: pickSaver,
@@ -2284,40 +2299,29 @@ if (typeof module !== "undefined") {
     situationMatches: situationMatches,
     activeSituation: activeSituation,
     situationLabel: situationLabel,
-    situationEffect: situationEffect,
-    situationTimings: situationTimings,
     hasTiming: hasTiming,
     timingsRuleIndex: timingsRuleIndex,
     timingsRule: timingsRule,
     setTimingsRule: setTimingsRule,
-    ruleSaver: ruleSaver,
     GLYPHS: GLYPHS,
     hideSaver: hideSaver,
-    WIDGETS: WIDGETS,
     boolish: boolish,
-    CORNERS: CORNERS,
-    widgetDefaults: widgetDefaults,
     widgetsOf: widgetsOf,
     PLACES: PLACES,
     placeLabel: placeLabel,
     cornerOf: cornerOf,
     patchWidget: patchWidget,
-    isEmptySource: isEmptySource,
     metaJson: metaJson,
-    AGENT_STATES: AGENT_STATES,
     agentProbeScript: agentProbeScript,
     agentSessionState: agentSessionState,
-    agentUrgency: agentUrgency,
     agentStateLabel: agentStateLabel,
     parseAgentProbe: parseAgentProbe,
     agentSummary: agentSummary,
     mmss: mmss,
     digest: digest,
-    displayAppName: displayAppName,
     terminalLoop: terminalLoop,
     terminalArgv: terminalArgv,
     shellQuote: shellQuote,
-    DEFAULT_INDICATOR_ITEMS: DEFAULT_INDICATOR_ITEMS,
     stayAwakeIndicatorShown: stayAwakeIndicatorShown,
     applyFinishSetup: applyFinishSetup,
     applyUndoSetup: applyUndoSetup,
@@ -2333,14 +2337,12 @@ if (typeof module !== "undefined") {
     wordmarkText: wordmarkText,
     wordmarkScript: wordmarkScript,
     DEFAULT_WORDMARK: DEFAULT_WORDMARK,
-    conditionLabel: conditionLabel,
     USER_SAVERS_SUBDIR: USER_SAVERS_SUBDIR,
     IMAGE_EXTENSIONS: IMAGE_EXTENSIONS,
     VIDEO_EXTENSIONS: VIDEO_EXTENSIONS,
     extensionOf: extensionOf,
     isImagePath: isImagePath,
     isVideoPath: isVideoPath,
-    baseName: baseName,
     slugify: slugify,
     uniqueId: uniqueId,
     suggestName: suggestName,
@@ -2352,9 +2354,6 @@ if (typeof module !== "undefined") {
     importDefaults: importDefaults,
     ASCII_COLUMNS: ASCII_COLUMNS,
     ASCII_ROWS: ASCII_ROWS,
-    FRAME_MARKER: FRAME_MARKER,
-    ART_BEGIN: ART_BEGIN,
-    ART_END: ART_END,
     AGENTS: AGENTS,
     agentName: agentName,
     aiPrompt: aiPrompt,
@@ -2362,8 +2361,6 @@ if (typeof module !== "undefined") {
     artPlan: artPlan,
     wantsDetail: wantsDetail,
     describeSettings: describeSettings,
-    DESCRIBE_EFFORTS: DESCRIBE_EFFORTS,
-    STYLE_FILE_SUBPATH: STYLE_FILE_SUBPATH,
     clipboardProbeScript: clipboardProbeScript,
     clipboardPasteScript: clipboardPasteScript,
     parseClipboard: parseClipboard,
@@ -2376,13 +2373,16 @@ if (typeof module !== "undefined") {
     detach: detach,
     attachmentLabel: attachmentLabel,
     seesPictures: seesPictures,
+    DESCRIBE_PICTURES: DESCRIBE_PICTURES,
+    chooseKind: chooseKind,
+    findPicturesBash: findPicturesBash,
+    aiProbeScript: aiProbeScript,
     composeMode: composeMode,
     canMove: canMove,
     savedDetail: savedDetail,
     redetailSpec: redetailSpec,
     parseThemeColors: parseThemeColors,
     stateColor: stateColor,
-    DETAIL_NAMES: DETAIL_NAMES,
     DEFAULT_DETAIL: DEFAULT_DETAIL,
     detailLevel: detailLevel,
     detailName: detailName,
@@ -2397,10 +2397,8 @@ if (typeof module !== "undefined") {
     deleteScript: deleteScript,
     RULE_KEYS: RULE_KEYS,
     isDocked: isDocked,
-    dockedNoLockIndex: dockedNoLockIndex,
     dockedNoLock: dockedNoLock,
     setDockedNoLock: setDockedNoLock,
-    ruleIndexFor: ruleIndexFor,
     ruleFor: ruleFor,
     ruleHas: ruleHas,
     defaultCondition: defaultCondition,

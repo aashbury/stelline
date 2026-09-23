@@ -18,7 +18,6 @@ Column {
   property var bar: null
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
-  readonly property color dim: Qt.darker(foreground, 1.4)
 
   readonly property var series: saver && saver.series ? saver.series : null
   readonly property bool isSeries: !!series
@@ -40,12 +39,10 @@ Column {
 
   signal patched(var patch)
 
-  function pct(v) { return Math.round(v) + "%" }
   function fps(v) { return Math.round(v) + " fps" }
   function secs(v) { return Math.round(v) + " s" }
   // 0 is not "no time": it means the next animation starts the moment the last lands.
   function rest(v) { return Math.round(v) === 0 ? "never still" : Math.round(v) + " s" }
-  function label(t) { return t.charAt(0).toUpperCase() + t.slice(1) }
 
   // Every row is a glyph, a label and its control, with the label column
   // wide enough for the longest label here.

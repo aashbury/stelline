@@ -15,11 +15,7 @@ Item {
   property real labelWidth: Style.space(92)
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
-  readonly property color dim: Qt.darker(foreground, 1.4)
   default property alias content: slot.data
-  // Where the control starts, and how much room it has.
-  readonly property real controlX: slot.x
-  readonly property real controlWidth: slot.width
 
   // As tall as a switch row or a slider row when it is one line, with that
   // line centred the way theirs is; taller only when the control wraps.

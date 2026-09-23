@@ -411,7 +411,7 @@ BorderSurface {
       foreground: root.foreground
       fontFamily: root.fontFamily
       leftPadding: 0
-      onPatched: function(patch) { if (root.body) root.body.writeSaverSettings(root.saverId, patch) }
+      onPatched: function(patch) { if (root.svc) root.svc.writeSaverSetting(root.saverId, patch) }
     }
 
     // ---- on top: the widgets. The Original is Omarchy's own window and
@@ -423,7 +423,7 @@ BorderSurface {
       cfg: root.cfg
       foreground: root.foreground
       fontFamily: root.fontFamily
-      onPatched: function(patch) { if (root.body) root.body.writeSaverSettings(root.saverId, patch) }
+      onPatched: function(patch) { if (root.svc) root.svc.writeSaverSetting(root.saverId, patch) }
     }
   }
 }

@@ -5,7 +5,8 @@ import qs.Ui
 
 // The one-time banner: Omarchy's coffee cup binds to the stock idle service,
 // which Stelline replaces, so the cup's job moves to this icon. Finish setup
-// retires the dead indicator; Advanced > Undo setup puts it back exactly.
+// retires the dead indicator; Shortcuts › Put the old one back restores it
+// exactly.
 BorderSurface {
   id: root
 
@@ -15,7 +16,6 @@ BorderSurface {
   readonly property color dim: Qt.darker(foreground, 1.4)
   property bool detailsOpen: false
   readonly property bool stale: svc ? svc.staleIdleOwner === true : false
-  readonly property bool indicatorShown: svc ? svc.stayAwakeIndicatorShown === true : false
 
   implicitHeight: column.implicitHeight + padding * 2
   padding: Style.space(12)

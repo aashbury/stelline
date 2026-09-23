@@ -38,8 +38,6 @@ Item {
   property string overlaySaver: ""
   property string overlayReason: ""
   property string lastSaver: ""
-  property bool miniVisible: false
-  property string miniSaver: ""
 
   // ---- user savers ("series") ----
   // One folder each under ~/.config/omarchy/stelline/savers, scanned into the
@@ -55,10 +53,17 @@ Item {
   readonly property var pendingSavers: Object.keys(pendingNames)
     .filter(function(id) { return root.userSaverIds.indexOf(id) === -1 })
     .map(function(id) { return { id: id, name: root.pendingNames[id], kind: "series", glyph: "", meta: "making it…", series: { importing: true, pieces: [] } } })
-  onUserSaversChanged: {
+  // A pending tile goes once the scan has it, or once nothing is making it
+  // any more — stopped in the queue, or an import that died before its
+  // folder was written.
+  function prunePending() {
     var names = {}
-    for (var id in root.pendingNames) if (root.userSaverIds.indexOf(id) === -1) names[id] = root.pendingNames[id]
+    var queued = root.importQueue.map(function(q) { return q.id })
+    for (var id in root.pendingNames)
+      if (root.userSaverIds.indexOf(id) === -1 && (queued.indexOf(id) !== -1 || root.importingIds.indexOf(id) !== -1)) names[id] = root.pendingNames[id]
     if (Object.keys(names).length !== Object.keys(root.pendingNames).length) root.pendingNames = names
+  }
+  onUserSaversChanged: {
     var still = root.deletingIds.filter(function(i) { return root.userSaverIds.indexOf(i) !== -1 })
     if (still.length !== root.deletingIds.length) root.deletingIds = still
   }
@@ -76,6 +81,7 @@ Item {
       onStreamFinished: {
         var next = M.parseScan(String(text || ""))
         root.userSavers = next
+        root.prunePending()
         root.logEvent("savers-scanned", next.length + " user saver" + (next.length === 1 ? "" : "s"))
       }
     }
@@ -128,9 +134,12 @@ Item {
     var taken = M.SAVERS.map(function(b) { return b.id }).concat(root.userSaverIds).concat(root.importQueue.map(function(q) { return q.id })).concat(root.importingIds)
     // A retry keeps its id: the failed tile is the one that gets rewritten.
     next.id = next.retryOf && root.userSaverIds.indexOf(next.retryOf) !== -1 ? next.retryOf : M.uniqueId(M.slugify(name), taken)
+    // Drawn again (a retry, another level of detail): the saver's settings
+    // stay as they are.
+    if (next.keepSettings === true) {}
     // An empty's defaults are its settings, written up front: a clock is an
     // empty screen with the clock in the middle, the same as the shipped one.
-    if (next.source === "clock") writeSaverSetting(next.id, { background: "theme", widgets: { clock: { on: true, place: "centre" } } })
+    else if (next.source === "clock") writeSaverSetting(next.id, { background: "theme", widgets: { clock: { on: true, place: "centre" } } })
     // Blank is black, the way the shipped one is: it saves power.
     else if (next.source === "empty") writeSaverSetting(next.id, { background: "black" })
     // Pictures carry the card's two choices into the saver's own settings.
@@ -138,14 +147,12 @@ Item {
     // moving, it cycles through the effects as usual. A picture as it is
     // pushes in slowly when moving and holds when still. Several come round
     // shuffled unless asked to go in turn.
-    // Drawn again at another level of detail: the saver's settings stay as they are.
-    else if (next.keepSettings === true) {}
     else if (next.source === "images" || next.source === "folder") {
-      var how = {}
-      if (next.style === "image") { if (next.animated !== false) how.motion = "zoom" }
-      else if (next.animated === false) how.effects = ["pulse"]
-      if (next.order === "shuffle" || next.order === "sequence") how.order = next.order
-      if (Object.keys(how).length) writeSaverSetting(next.id, how)
+      var motion = {}
+      if (next.style === "image") { if (next.animated !== false) motion.motion = "zoom" }
+      else if (next.animated === false) motion.effects = ["pulse"]
+      if (next.order === "shuffle" || next.order === "sequence") motion.order = next.order
+      if (Object.keys(motion).length) writeSaverSetting(next.id, motion)
     }
     var names = M.cloneJson(root.pendingNames); names[next.id] = next.name; root.pendingNames = names
     root.importQueue = root.importQueue.concat([next])
@@ -179,6 +186,8 @@ Item {
       root.logEvent("import-exit", importer.currentId + " exitCode=" + exitCode)
       var done = importer.currentId
       root.importingIds = root.importingIds.filter(function(i) { return i !== done })
+      // The rescan prunes its pending tile: kept if its folder is there,
+      // gone if the import died before writing one.
       root.rescan()
       root.runNextImport()
     }
@@ -190,7 +199,7 @@ Item {
   // instead removes it outright.
   function stopImport(id) {
     var queued = root.importQueue.filter(function(q) { return q.id === id })
-    if (queued.length) { root.importQueue = root.importQueue.filter(function(q) { return q.id !== id }); return "ok" }
+    if (queued.length) { root.importQueue = root.importQueue.filter(function(q) { return q.id !== id }); prunePending(); return "ok" }
     if (!importer.running || importer.currentId !== id) return "not-importing"
     var spec = importer.currentSpec
     var stamp = spec ? "printf %s " + M.shellQuote(M.metaJson(spec, { error: "stopped" })) + " > " + M.shellQuote(root.userSaversDir + "/" + id + "/saver.json") + " 2>/dev/null; touch " + M.shellQuote(root.userSaversDir + "/.stamp") : ":"
@@ -201,9 +210,6 @@ Item {
   }
   Process { id: stopper; onExited: root.rescan() }
 
-  // Remove a saver: a shipped tile is hidden (nothing on disk, and Add can
-  // make another); one of your own loses its folder. Either way every
-  // setting that named it goes.
   // A failed import, asked for again from what its saver.json remembers.
   function retryImport(id) {
     var s = M.saverById(id, root.userSavers)
@@ -243,12 +249,14 @@ Item {
   }
   Process { id: renamer; onExited: root.rescan() }
 
+  // Remove a saver: a shipped tile is hidden (nothing on disk, and Add can
+  // make another); one of your own loses its folder. Either way every
+  // setting that named it goes.
   function deleteSaver(id) {
     var s = M.saverById(id, root.userSavers)
     if (!s || s.kind === "external") return "unknown-saver"
     if (s.series && s.series.importing) stopImport(id)
     if (root.overlayVisible && root.overlaySaver === id) hideScreensaver("deleted")
-    if (root.miniVisible && root.miniSaver === id) root.miniVisible = false
     if (s.kind !== "series") return writeSettings(M.hideSaver(root.cfg, id)) ? "ok" : "failed"
     var script = M.deleteScript(id, root.userSaversDir)
     if (!script) return "bad-id"
@@ -291,11 +299,12 @@ Item {
     if (picker.running) return "busy"
     // Scripted (`omarchy-shell stelline pick images`): open an Add for it.
     if (!M.isPlainObject(root.importDraft)) { var d = M.importDefaults(); d.step = "picking"; root.importDraft = d }
-    var argv = ["omarchy-file-select", "--title"]
+    // Without the chooser the card is not left waiting on a dialog that
+    // never opened: it exits at once and the card is back where it was.
+    var argv = ["bash", "-c", "command -v omarchy-file-select >/dev/null || exit 127; exec \"$@\"", "_", "omarchy-file-select", "--title"]
     if (kind === "folder") argv = argv.concat(["Pick a folder of pictures", "--directory"])
     else if (kind === "video") argv = argv.concat(["Pick a video or GIF", "--extensions", M.VIDEO_EXTENSIONS.join(" ")])
-    else if (kind === "images") argv = argv.concat(["Pick pictures", "--multiple", "--extensions", M.IMAGE_EXTENSIONS.join(" ")])
-    else argv = argv.concat(["Pick pictures or a clip", "--multiple", "--extensions", M.IMAGE_EXTENSIONS.concat(M.VIDEO_EXTENSIONS.filter(function(e) { return e !== "gif" })).join(" ")])
+    else argv = argv.concat(["Pick pictures", "--multiple", "--extensions", M.IMAGE_EXTENSIONS.join(" ")])
     root.pickKind = kind
     root.pickedPaths = []
     picker.command = argv
@@ -357,6 +366,8 @@ Item {
     var want = String(text === undefined || text === null ? "" : text)
     if (!writeSaverSetting(id, { text: want })) return "failed"
     if (want.trim() === "") return "ok"
+    // The Wordmark draws its own name by hand; there is nothing to cache.
+    if (saver.kind !== "series" && want.trim().toLowerCase() === M.DEFAULT_WORDMARK) return "ok"
     renderWordmark(id, want)
     return "ok"
   }
@@ -406,7 +417,7 @@ Item {
     clipProbe.running = true
   }
   // Copy something after the card is up and Paste appears on its own.
-  Timer { interval: 1500; repeat: true; running: M.isPlainObject(root.importDraft) && !paster.running; onTriggered: root.refreshClipboard() }
+  Timer { interval: 1500; repeat: true; running: M.isPlainObject(root.importDraft) && !paster.running && !picker.running; onTriggered: root.refreshClipboard() }
   Process {
     id: clipProbe
     stdout: SplitParser { onRead: function(line) { var t = String(line).trim(); root.clipboardHas = (t === "image" || t === "paths") ? t : "" } }
@@ -419,7 +430,7 @@ Item {
     var d = M.importDefaults()
     d.step = "start"
     root.importDraft = d
-    root.draftPreview = { path: "", detail: M.DEFAULT_DETAIL, image: "", art: "" }
+    root.draftPreview = { path: "", detail: M.DEFAULT_DETAIL, image: "", art: "", error: "" }
     Quickshell.execDetached(["rm", "-rf", "--", root.pasteStageDir])
     refreshClipboard()
     return "ok"
@@ -452,8 +463,8 @@ Item {
   // A word drawn the way it will be, for the Add card's Words: the same
   // script the wordmark uses, into the preview folder. It takes a few
   // seconds, so the card asks once the typing stops, and only the latest
-  // word is kept.
-  property var wordPreview: ({ text: "", art: "" })
+  // word is kept. `error` says why a word could not be drawn.
+  property var wordPreview: ({ text: "", art: "", error: "" })
   property string wordPending: ""
   function previewWord(text) {
     var t = String(text || "").trim()
@@ -461,7 +472,7 @@ Item {
     if (wordPreviewer.running) { root.wordPending = t; return }
     wordPreviewer.forText = t
     var out = root.previewStageDir + "/word.txt"
-    wordPreviewer.command = ["bash", "-c", M.wordmarkScript(t, out) + "\ncat " + M.shellQuote(out)]
+    wordPreviewer.command = ["bash", "-c", "command -v magick >/dev/null 2>&1 || { echo 'needs ImageMagick (magick)' >&2; exit 1; }\n" + M.wordmarkScript(t, out) + "\ncat " + M.shellQuote(out)]
     wordPreviewer.running = true
   }
   Process {
@@ -470,22 +481,26 @@ Item {
     stdout: StdioCollector {
       onStreamFinished: {
         var art = String(text || "").replace(/\s+$/, "")
-        if (art !== "") root.wordPreview = { text: wordPreviewer.forText, art: art }
+        if (art !== "") root.wordPreview = { text: wordPreviewer.forText, art: art, error: "" }
       }
     }
+    stderr: StdioCollector { id: wordPreviewErr }
     onExited: function(exitCode) {
-      if (exitCode !== 0) root.logEvent("word-preview-exit", "exitCode=" + exitCode)
+      if (exitCode !== 0) {
+        root.logEvent("word-preview-exit", "exitCode=" + exitCode)
+        root.wordPreview = { text: wordPreviewer.forText, art: "", error: String(wordPreviewErr.text || "").trim().split("\n")[0] || "it could not be drawn" }
+      }
       if (root.wordPending !== "") { var t = root.wordPending; root.wordPending = ""; root.previewWord(t) }
     }
   }
 
   // What the attachment would look like converted, made the moment it is
   // attached: the first picture (a folder's first, a clip's first second)
-  // through the same transcoder the import uses, and the picture itself.
+  // through the same conversion the import uses, and the picture itself.
   // `draftPreview.path` names what it was made from, so a stale one is
-  // never shown for a newer attachment.
+  // never shown for a newer attachment; `error` says why there is none.
   readonly property string previewStageDir: runtimeDir + "/stelline-preview"
-  property var draftPreview: ({ path: "", image: "", art: "" })
+  property var draftPreview: ({ path: "", image: "", art: "", error: "" })
   property string previewPending: ""
   readonly property string draftFirstPath: M.isPlainObject(importDraft) && Array.isArray(importDraft.paths) && importDraft.paths.length ? String(importDraft.paths[0]) : ""
   // The level of detail is part of what the preview is of: moving it redraws.
@@ -510,11 +525,15 @@ Item {
         var lines = String(text || "").split("\n")
         var image = lines.length && lines[0].indexOf("image\t") === 0 ? lines[0].substring(6) : ""
         var art = lines.slice(1).join("\n").replace(/\s+$/, "")
-        if (art !== "") root.draftPreview = { path: previewer.forPath, detail: previewer.forDetail, image: image, art: art }
+        if (art !== "") root.draftPreview = { path: previewer.forPath, detail: previewer.forDetail, image: image, art: art, error: "" }
       }
     }
+    stderr: StdioCollector { id: previewErr }
     onExited: function(exitCode) {
-      if (exitCode !== 0) root.logEvent("preview-exit", "exitCode=" + exitCode)
+      if (exitCode !== 0) {
+        root.logEvent("preview-exit", "exitCode=" + exitCode)
+        root.draftPreview = { path: previewer.forPath, detail: previewer.forDetail, image: "", art: "", error: String(previewErr.text || "").trim().split("\n")[0] || "it could not be converted" }
+      }
       if (root.previewPending !== "") { root.previewPending = ""; root.refreshDraftPreview() }
     }
   }
@@ -547,17 +566,17 @@ Item {
   function refreshAi() { if (!aiProbe.running) aiProbe.running = true }
   Process {
     id: aiProbe
-    command: ["bash", "-lc", "a=$(omarchy-default-agent 2>/dev/null || true); if [[ -n $a ]] && command -v \"$a\" >/dev/null 2>&1; then echo \"agent:$a\"; elif command -v claude >/dev/null 2>&1; then echo agent:claude; elif [[ -n ${ANTHROPIC_API_KEY:-} ]]; then echo api; else echo none; fi"]
+    command: ["bash", "-lc", M.aiProbeScript()]
     stdout: SplitParser { onRead: function(line) { var t = String(line).trim(); root.aiProvider = t === "none" ? "" : t } }
   }
 
   readonly property string home: Quickshell.env("HOME")
   // Injected by the shell when it knows better; the env is the fallback.
   property string omarchyPath: Quickshell.env("OMARCHY_PATH") || "/usr/share/omarchy"
-  readonly property string stayAwakeStateDir: home + "/.local/state/omarchy/indicators"
+  // Omarchy's own state: indicators, toggles, notifications, the theme.
+  readonly property string stateDir: home + "/.local/state/omarchy"
+  readonly property string stayAwakeStateDir: stateDir + "/indicators"
   readonly property string stayAwakeStatePath: stayAwakeStateDir + "/stay-awake"
-  readonly property int defaultScreensaverSeconds: 150
-  readonly property int defaultLockSeconds: 300
   readonly property var idleConfig: shell && shell.shellConfig && shell.shellConfig.idle ? shell.shellConfig.idle : ({})
   // Stelline: the effective timeline. Stock reads two numbers; here the
   // plugin's stage switches and the active situation are folded in. shell.json's
@@ -611,7 +630,7 @@ Item {
     onTriggered: root.tickMinute()
   }
   FileView {
-    path: root.home + "/.local/state/omarchy/current/theme.name"
+    path: root.stateDir + "/current/theme.name"
     watchChanges: true
     printErrors: false
     onLoaded: root.themeName = String(text()).trim()
@@ -646,7 +665,7 @@ Item {
   // The stock screensaver-off toggle (`omarchy toggle screensaver`): honoured
   // for the idle screensaver, ignored by previews. Same flag-file shape as
   // stay-awake.
-  readonly property string togglesDir: home + "/.local/state/omarchy/toggles"
+  readonly property string togglesDir: stateDir + "/toggles"
   property bool screensaverOff: false
 
   // Session lock: the stock lock service's reactive `locked` when it is loaded,
@@ -665,17 +684,15 @@ Item {
 
   // Status card inputs. DND and the agent file are watched always (tiny);
   // the notification files are digested only while a saver is up.
-  readonly property string notificationsDir: home + "/.local/state/omarchy/notifications"
+  readonly property string notificationsDir: stateDir + "/notifications"
   property bool dnd: false
   readonly property string agentState: M.agentSummary(agentSessions).state
   property var cardGroups: []
-  readonly property bool anySaverShown: overlayVisible || miniVisible
+  readonly property bool anySaverShown: overlayVisible
   // The widgets of the saver on screen decide what is digested and shown.
-  readonly property string shownSaver: overlayVisible ? overlaySaver : (miniVisible ? miniSaver : cfg.saver)
+  readonly property string shownSaver: overlayVisible ? overlaySaver : cfg.saver
   readonly property var shownWidgets: M.widgetsOf(cfg.savers && cfg.savers[shownSaver] ? cfg.savers[shownSaver] : ({}), cfg)
-  readonly property bool agentActive: agentSessions.length > 0
   readonly property bool cardEnabled: shownWidgets.notifications.on === true
-  readonly property bool cardVisible: !dnd && ((cardEnabled && cardGroups.length > 0) || (shownWidgets.agent.on === true && agentActive))
 
   function refreshCard() {
     if (!cardEnabled || dnd) { root.cardGroups = []; return }
@@ -685,7 +702,7 @@ Item {
   onDndChanged: refreshCard()
 
   FileView {
-    path: root.home + "/.local/state/omarchy/notifications.json"
+    path: root.stateDir + "/notifications.json"
     watchChanges: true
     printErrors: false
     onLoaded: {
@@ -750,7 +767,7 @@ Item {
   Process {
     id: cardProbe
     command: ["bash", "-c",
-      'd="$HOME/.local/state/omarchy/notifications"; shopt -s nullglob; ' +
+      'd=' + M.shellQuote(root.notificationsDir) + '; shopt -s nullglob; ' +
       'for f in "$d"/*.json; do cat "$f"; echo; done; ' +
       'for f in "$d"/history/*.json; do sed \'s/^{/{"__history":true,/\' "$f"; echo; done']
     stdout: StdioCollector {
@@ -832,9 +849,6 @@ Item {
   }
   Process { id: menuWriter; onExited: function(exitCode) { logEvent("process-exit", "menu-override exitCode=" + exitCode) } }
 
-  // Set from IPC for testing the timeline without locking yourself out.
-  property bool lockDryRun: false
-  property bool simulatedIdle: false
   property double idleStartedAtMs: 0
   readonly property string screensaverClass: "org.omarchy.screensaver"
 
@@ -848,10 +862,6 @@ Item {
   property string lastEventAt: ""
   property var screensaverWindows: ({})
   property int screensaverWindowCount: 0
-
-  function secondsFromConfig(value, fallback) {
-    return IdleModel.secondsFromConfig(value, fallback)
-  }
 
   function nowIso() {
     return new Date().toISOString()
@@ -869,7 +879,7 @@ Item {
       logEvent("process-skip", label + " already running")
       return false
     }
-    logEvent("process-start", label + " " + command)
+    logEvent("process-start", label)
     process.command = ["bash", "-lc", command]
     process.running = true
     return true
@@ -909,7 +919,7 @@ Item {
   // arguments, so the same terminal is started here running a generated copy
   // of omarchy-screensaver — same window class, so tracking, dismissal and
   // omarchy-system-lock's cleanup are unchanged.
-  readonly property string terminalLoopPath: (Quickshell.env("XDG_RUNTIME_DIR") || "/tmp") + "/stelline-terminal-saver.sh"
+  readonly property string terminalLoopPath: runtimeDir + "/stelline-terminal-saver.sh"
   property string terminalId: ""
   property var terminalPendingScreens: []
   property string terminalFocusedMonitor: ""
@@ -923,7 +933,7 @@ Item {
         : "[[ $(omarchy-shell lock isLocked 2>/dev/null) == \"true\" ]] || omarchy-launch-screensaver")
       return
     }
-    var argv = M.terminalArgv(root.terminalId, root.omarchyPath || "/usr/share/omarchy", root.terminalLoopPath)
+    var argv = M.terminalArgv(root.terminalId, root.omarchyPath, root.terminalLoopPath)
     if (!argv) {
       logEvent("terminal-skip", "unsupported terminal " + root.terminalId)
       runProcess(screensaverProcess, "screensaver", "omarchy-launch-screensaver")
@@ -996,6 +1006,9 @@ Item {
     root.lastSaver = id
     root.overlayReason = reason || "preview"
     root.overlayVisible = true
+    // A folder shown as it is plays whatever is in it now: look again, so a
+    // picture dropped in since the last scan joins.
+    if (saver.series && saver.series.kind === "image" && saver.series.source && saver.series.source.type === "folder") rescan()
     logEvent("overlay-show", id + " " + root.overlayReason)
     return "ok"
   }
@@ -1032,11 +1045,6 @@ Item {
     root.idledThisCycle = false
     root.screensaverStartedThisCycle = false
     resetScreensaverWindows()
-    if (root.lockDryRun) {
-      logEvent("lock-dry-run", "omarchy-system-lock would run now")
-      runProcess(lockProcess, "lock-dry-run", "omarchy-notification-send -g 󰌾 \"Stelline\" \"Lock would fire now (dry run)\"")
-      return
-    }
     runProcess(lockProcess, "lock", "omarchy-system-lock")
   }
 
@@ -1077,7 +1085,6 @@ Item {
 
     root.idledThisCycle = false
     root.screensaverStartedThisCycle = false
-    root.simulatedIdle = false
     resetScreensaverWindows()
   }
 
@@ -1159,9 +1166,8 @@ Item {
       screensaverOff: root.screensaverOff,
       locked: root.locked,
       lockSource: root.lockSource,
-      lockDryRun: root.lockDryRun,
       shuffle: root.cfg.shuffle,
-      card: { visible: root.cardVisible, dnd: root.dnd, agent: root.agentState, groups: root.cardGroups.length },
+      card: { dnd: root.dnd, agent: root.agentState, groups: root.cardGroups.length },
       setup: { done: root.setupDone, pending: root.setupPending, stayAwakeIndicatorShown: root.stayAwakeIndicatorShown, staleIdleOwner: root.staleIdleOwner, menuOverride: root.menuOverrideActive },
       terminal: root.terminalId,
       userSavers: root.userSaverIds,
@@ -1250,7 +1256,7 @@ Item {
   property var themeColors: ({})
   FileView {
     id: themeColorsFile
-    path: (Quickshell.env("XDG_STATE_HOME") || (root.home + "/.local/state")) + "/omarchy/current/theme/colors.toml"
+    path: root.stateDir + "/current/theme/colors.toml"
     watchChanges: true
     printErrors: false
     onLoaded: root.themeColors = M.parseThemeColors(text())
@@ -1259,7 +1265,7 @@ Item {
   }
   Process {
     id: themeProbe
-    command: ["bash", "-c", "ls -1 /usr/share/omarchy/themes \"$HOME/.config/omarchy/themes\" 2>/dev/null | grep -v ':$' | grep -v '^$' | sort -u"]
+    command: ["bash", "-c", "ls -1 " + M.shellQuote(root.omarchyPath + "/themes") + " \"$HOME/.config/omarchy/themes\" 2>/dev/null | grep -v ':$' | grep -v '^$' | sort -u"]
     stdout: SplitParser {
       onRead: function(line) { var t = String(line).trim(); if (t !== "") root.themeNamesPending = root.themeNamesPending.concat([t]) }
     }
@@ -1275,22 +1281,24 @@ Item {
   // Written the way omarchy-toggle writes it, without the notification the
   // menu entry sends — the switch in front of you is the feedback.
   function setScreensaverOff(off) {
-    var on = !off
     runProcess(screensaverOffWriter, "screensaver-off " + (off ? "on" : "off"),
       off ? "mkdir -p " + M.shellQuote(root.togglesDir) + " && touch " + M.shellQuote(root.togglesDir + "/screensaver-off")
           : "rm -f " + M.shellQuote(root.togglesDir + "/screensaver-off"))
     root.screensaverOff = !!off
-    // Turning it on also lifts the config-level stage switch, so nothing
-    // hidden keeps it off.
-    if (on && root.cfg.screensaverEnabled === false) writeSettings({ screensaverEnabled: true })
-    return "ok"
   }
   Process { id: screensaverOffWriter; onExited: root.refreshScreensaverOff() }
+  // The panel's switch and `setStage screensaver`: the stock toggle and the
+  // stage switch together, so neither keeps the screensaver off behind the
+  // other's back.
+  function setScreensaverOn(on) {
+    setScreensaverOff(!on)
+    return writeSettings({ screensaverEnabled: !!on }) ? "ok" : "failed"
+  }
 
   function persistStayAwake(value) {
     var command = value
-      ? "mkdir -p \"$HOME/.local/state/omarchy/indicators\" && touch \"$HOME/.local/state/omarchy/indicators/stay-awake\""
-      : "rm -f \"$HOME/.local/state/omarchy/indicators/stay-awake\""
+      ? "mkdir -p " + M.shellQuote(root.stayAwakeStateDir) + " && touch " + M.shellQuote(root.stayAwakeStatePath)
+      : "rm -f " + M.shellQuote(root.stayAwakeStatePath)
 
     if (stayAwakeStateWriter.running) {
       root.pendingStayAwakePersist = !!value
@@ -1381,7 +1389,7 @@ Item {
 
   Process {
     id: screensaverOffProbe
-    command: ["bash", "-c", "if [[ -f $HOME/.local/state/omarchy/toggles/screensaver-off ]]; then echo yes; else echo no; fi"]
+    command: ["bash", "-c", "if [[ -f " + M.shellQuote(root.togglesDir + "/screensaver-off") + " ]]; then echo yes; else echo no; fi"]
     stdout: SplitParser {
       onRead: function(line) {
         var off = String(line).trim() === "yes"
@@ -1418,7 +1426,7 @@ Item {
 
   Process {
     id: stayAwakeStateProbe
-    command: ["bash", "-c", "mkdir -p \"$HOME/.local/state/omarchy/indicators\"; if [[ -f $HOME/.local/state/omarchy/indicators/stay-awake ]]; then echo yes; else echo no; fi"]
+    command: ["bash", "-c", "mkdir -p " + M.shellQuote(root.stayAwakeStateDir) + "; if [[ -f " + M.shellQuote(root.stayAwakeStatePath) + " ]]; then echo yes; else echo no; fi"]
     stdout: SplitParser {
       onRead: function(line) { root.applyStayAwake(String(line).trim() === "yes", false, "state-file") }
     }
@@ -1500,14 +1508,11 @@ Item {
     }
 
     function setStage(stage: string, on: string): string {
-      var key = stage === "lock" ? "lockEnabled" : "screensaverEnabled"
-      var patch = {}
-      patch[key] = String(on) === "true" || String(on) === "on"
-      // The screensaver stage and the stock toggle are one switch.
-      if (key === "screensaverEnabled") root.setScreensaverOff(!patch[key])
-      return root.writeSettings(patch) ? "ok" : "failed"
+      var yes = String(on) === "true" || String(on) === "on"
+      if (stage !== "lock") return root.setScreensaverOn(yes)
+      return root.writeSettings({ lockEnabled: yes }) ? "ok" : "failed"
     }
-    function setScreensaverOff(off: string): string { return root.setScreensaverOff(String(off) === "true" || String(off) === "on") }
+    function setScreensaverOff(off: string): string { return root.setScreensaverOn(!(String(off) === "true" || String(off) === "on")) }
     function setDockedNoLock(on: string): string { return root.setDockedNoLock(String(on) === "true" || String(on) === "on") }
 
     function setTimeout(stage: string, seconds: string): string {
@@ -1516,37 +1521,6 @@ Item {
 
     function toggleStayAwake(): string {
       return root.setIdleEnabled(!root.idleEnabled)
-    }
-
-    function simulateIdle(): string {
-      root.simulatedIdle = true
-      root.startIdleCycle()
-      return "ok"
-    }
-
-    function simulateLock(mode: string): string {
-      if (mode === "real") { root.lockSystem("ipc"); return "locking" }
-      if (mode === "dry-run" || mode === "on") { root.lockDryRun = true; return "dry-run on" }
-      if (mode === "off") { root.lockDryRun = false; return "dry-run off" }
-      var was = root.lockDryRun
-      root.lockDryRun = true
-      root.lockSystem("ipc-dry-run")
-      root.lockDryRun = was
-      return "dry-run"
-    }
-
-    function mini(saverId: string): string {
-      var id = saverId && saverId !== "" ? saverId : root.cfg.saver
-      var saver = M.saverById(id, root.userSavers)
-      if (!saver || !M.isNativeSaver(saver)) return "unknown-saver"
-      root.miniSaver = id
-      root.miniVisible = true
-      return "ok"
-    }
-
-    function hideMini(): string {
-      root.miniVisible = false
-      return "ok"
     }
 
     // Generic settings access for scripts and tests: values are JSON.
@@ -1570,12 +1544,6 @@ Item {
     function finishSetup(): string { return root.finishSetup() }
     function undoSetup(): string { return root.undoSetup() }
     function setMenuEntry(on: string): string { return root.setMenuEntry(String(on) === "true" || String(on) === "on") }
-    function probeIpcOwner(): string { root.probeIpcOwner(); return "ok" }
-
-    function reloadCard(): string {
-      root.refreshCard()
-      return "ok"
-    }
 
     function list(): string {
       return JSON.stringify(M.allSavers(root.userSavers, root.cfg.hidden).map(function(s) {
@@ -1616,15 +1584,12 @@ Item {
     function rescan(): string { root.rescan(); return "ok" }
     function pick(kind: string): string { return root.pickFiles(kind) }
     function paste(): string { root.refreshClipboard(); return root.pasteClipboard() }
-    function clipboard(): string { root.refreshClipboard(); return root.clipboardHas }
-    // `qs ipc` splits arguments on commas, so a word with one goes base64.
-    function setText(saverId: string, text: string): string { return root.setWordmarkText(saverId, text) }
+    // `qs ipc` splits arguments on commas, so the word goes base64.
     function setText64(saverId: string, base64Text: string): string {
       var t
       try { t = Qt.atob(base64Text) } catch (e) { return "bad-base64" }
       return root.setWordmarkText(saverId, t)
     }
-    function wordmarkArt(saverId: string): string { return root.wordmarkArtPath(saverId) }
 
     function setRule(saverId: string, key: string, on: string): string {
       if (M.RULE_KEYS.indexOf(key) === -1) return "unknown-condition"
