@@ -15,6 +15,8 @@ BorderSurface {
   property string detail: "counts"
   property bool large: false
   property real maxWidth: 480
+  // A width to take exactly (the card above it), or 0 to size to its text.
+  property real matchWidth: 0
   readonly property var groups: service ? service.cardGroups : []
   readonly property int total: M.totalCount(groups)
   readonly property real k: large ? 1.6 : 1
@@ -23,7 +25,7 @@ BorderSurface {
 
   readonly property bool hasContent: total > 0
   visible: shown && hasContent
-  implicitWidth: Math.min(maxWidth, Math.max(Style.space(220) * k, column.implicitWidth + padding * 2))
+  implicitWidth: matchWidth > 0 ? matchWidth : Math.min(maxWidth, Math.max(Style.space(220) * k, column.implicitWidth + padding * 2))
   implicitHeight: column.implicitHeight + padding * 2
   padding: Style.space(14) * k
   radius: Style.cornerRadius

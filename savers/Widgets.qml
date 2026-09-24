@@ -114,6 +114,7 @@ Item {
           // A card decides for itself whether it has anything to show; the
           // column skips it, as it did the card, while it has not.
           Loader {
+            id: agentCard
             active: spot.hasAgent
             visible: active && !!item && item.hasContent
             anchors.horizontalCenter: spot.centre ? parent.horizontalCenter : undefined
@@ -135,6 +136,9 @@ Item {
             anchors.right: !spot.centre && !spot.atLeft ? parent.right : undefined
             sourceComponent: StatusCard {
               large: spot.centre
+              // Under the agent's card it takes that card's width, so the
+              // two read as one column.
+              matchWidth: agentCard.visible ? agentCard.width : 0
               service: root.service
               detail: root.notifications.detail ? String(root.notifications.detail) : "counts"
               maxWidth: spot.centre ? root.width * 0.6 : Math.max(Style.space(300), root.width * 0.4)
