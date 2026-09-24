@@ -15,6 +15,28 @@ the stock screensaver is the Original tile, untouched.
 
 ![Stelline](preview.png)
 
+- **A grid of savers, one click to choose.** Omarchy's own (the Original,
+  untouched), a Wordmark drawn in your theme's colours with animations of its
+  own, a clock, or a blank screen, with live thumbnails. **Shuffle** rotates
+  through the ones you tick, and **Preview** plays any of them now.
+- **Make your own.** Paste or pick pictures, a folder, a video clip or some
+  text, and get ASCII art in your theme's colours (or the pictures as they
+  are). Or describe one and a coding agent draws it.
+- **Widgets on top.** A clock, the notifications that arrived while you were
+  away, and your coding agents acted out by a small figure (Hands, Robot or
+  Morty) that shows who is working and who needs you. Each goes in a corner or
+  the middle, and the art keeps out from under them.
+- **Rules for when each one plays**: at night, on battery, docked, or with a
+  given theme.
+- **Timings that fit a laptop.** Separate screensaver and lock times, lock
+  off entirely, shorter timings on battery, never lock while docked, and
+  optionally nothing while a window is fullscreen.
+- **Holds off for videos and games.** Browsers, players and Steam ask over
+  D-Bus not to be interrupted; stock Omarchy never answers, Stelline does.
+- **Native and light.** One layer on every monitor that any key, click or
+  deliberate movement dismisses, a few percent of a core, themed by your
+  Omarchy theme, and **Stay awake** on the same cup and `Super+Ctrl+I`.
+
 It replaces Omarchy's built-in idle service (`omarchy.idle`) the sanctioned
 way — the manifest declares it a clone — and keeps the stock timeline verbatim:
 `idle.screensaver` and `idle.lock` in `shell.json`, the lock, wake, inhibitors,
