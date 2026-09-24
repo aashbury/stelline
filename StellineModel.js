@@ -1043,10 +1043,10 @@ function widgetDefaults(cfg) {
     // Which figure the agent is drawn as. The shapes on offer live with the
     // drawings, in savers/Robot.js; nothing stored here means the usual one,
     // and a shape from a later version falls back to it.
-    // `detail`: "state" says which agent and whether it needs you; "titles"
-    // adds what each session is on (its title, or the project folder) —
-    // opt-in, since the screen is unattended while it shows.
-    agent: { on: card.showAgent !== false, place: "corner", figure: "", detail: "state" }
+    // `detail`: "titles" (the default) says which agent, whether it needs
+    // you, and what each session is on (its title, or the project folder);
+    // "state" leaves the last out.
+    agent: { on: card.showAgent !== false, place: "corner", figure: "", detail: "titles" }
   }
 }
 
@@ -1077,6 +1077,11 @@ function widgetsOf(settings, cfg) {
     // and it is still the default: it means this tile's corner.
     if (PLACES.indexOf(out[key].place) === -1) out[key].place = cornerOf(settings, cfg)
   }
+  // Two ways each to say how much: notifications as counts or with titles
+  // ("bodies", once a third way, now reads as titles), an agent with or
+  // without what it is on.
+  out.notifications.detail = out.notifications.detail === "counts" ? "counts" : "summaries"
+  out.agent.detail = out.agent.detail === "state" ? "state" : "titles"
   return out
 }
 
@@ -1226,7 +1231,7 @@ function parseAgentProbe(text) {
 // The one line under the robot: what the most pressing session is up to, and
 // how many others there are.
 // What a session is on — its title, or the project folder — only when the
-// tile asks for it ("titles"); the default names the agent and nothing more.
+// tile asks for it ("titles", the default); "state" names the agent and nothing more.
 function agentSessionWhat(s, detail) {
   if (detail !== "titles" || !s) return ""
   return s.title ? String(s.title) : (s.project ? String(s.project) : "")

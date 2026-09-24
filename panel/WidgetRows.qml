@@ -2,11 +2,12 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 import "../StellineModel.js" as M
+import "../savers/Robot.js" as R
 
-// What sits on top of this saver. Each widget is a switch; on, it shows a
-// little picture of the screen — click where it should go — and its own few
-// choices beside it. Nothing here is a corner setting shared with the other
-// widgets: each one picks its own spot, and two in the same spot stack.
+// What sits on top of this saver. Each widget is a switch and, while it is
+// on, one line under it: where it goes, named, and its one or two choices.
+// The three read the same way, so learning one teaches the others. Each
+// widget picks its own spot; two in the same spot stack.
 Column {
   id: root
 
@@ -14,19 +15,51 @@ Column {
   property var cfg: ({})
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
-  readonly property color dim: Qt.darker(foreground, 1.4)
   readonly property var widgets: M.widgetsOf(settings, cfg)
   readonly property real indent: Style.space(36)
+  // An open list owns the keys until it closes.
+  readonly property bool editing: clockPlace.popupOpen || notificationsPlace.popupOpen || agentPlace.popupOpen || agentFigure.popupOpen
 
-  // The time as it would read now, so the two ways of writing it are a
-  // sample rather than a rule to decode.
-  property date sampleTime: new Date()
-  onVisibleChanged: if (visible) sampleTime = new Date()
-  Timer { interval: 30000; repeat: true; running: root.visible; onTriggered: root.sampleTime = new Date() }
+  readonly property var placeOptions: M.PLACES.map(function(p) { return { value: p, label: M.placeLabel(p) } })
+  readonly property var figureOptions: R.FIGURES.map(function(f) { return { value: f.id, label: f.name } })
 
   signal patched(var patch)
 
   function set(key, patch) { root.patched(M.patchWidget(root.settings, key, patch)) }
+
+  // A check box: a caption-sized button that says what it turns on.
+  component Check: Button {
+    property bool ticked: false
+    iconText: ticked ? "󰄲" : "󰄱"
+    bordered: true
+    selected: ticked
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    fontSize: Style.font.caption
+  }
+
+  // Never shown: it only measures a check box, so a list beside one is
+  // exactly as tall and the line reads level.
+  Button { id: probe; visible: false; text: "x"; iconText: "󰄱"; bordered: true; fontSize: Style.font.caption }
+
+  // Where a widget goes, by name.
+  component Place: Dropdown {
+    width: Style.space(132)
+    rowHeight: probe.implicitHeight
+    showLabel: false
+    options: root.placeOptions
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+  }
+
+  // The line of choices under a widget that is on; on a narrow panel or a
+  // large font it wraps rather than running out of the card.
+  component Choices: Flow {
+    x: root.indent
+    width: root.width - root.indent - Style.space(8)
+    spacing: Style.space(6)
+    bottomPadding: Style.space(8)
+  }
 
   width: parent ? parent.width : implicitWidth
   spacing: Style.space(2)
@@ -43,56 +76,27 @@ Column {
     fontFamily: root.fontFamily
     onClicked: root.set("clock", { on: !checked })
   }
-  Row {
+  Choices {
     visible: root.widgets.clock.on === true
-    x: root.indent
-    spacing: Style.space(12)
-    bottomPadding: Style.space(8)
-
-    PlacePicker {
-      anchors.verticalCenter: parent.verticalCenter
-      place: root.widgets.clock.place
-      foreground: root.foreground
-      fontFamily: root.fontFamily
-      onPicked: function(spot) { root.set("clock", { place: spot }) }
+    Place {
+      id: clockPlace
+      value: root.widgets.clock.place
+      onChanged: function(v) { root.set("clock", { place: v }) }
     }
-
-    Column {
-      anchors.verticalCenter: parent.verticalCenter
-      spacing: Style.space(6)
-      ButtonGroup {
-        options: [{ value: "HH:mm", label: Qt.formatTime(root.sampleTime, "HH:mm") },
-                  { value: "h:mm AP", label: Qt.formatTime(root.sampleTime, "h:mm AP") }]
-        value: String(root.widgets.clock.format).indexOf("AP") !== -1 ? "h:mm AP" : "HH:mm"
-        foreground: root.foreground
-        fontFamily: root.fontFamily
-        fontSize: Style.font.caption
-        focusable: false
-        onChanged: function(v) { root.set("clock", { format: v }) }
-      }
-      Row {
-        spacing: Style.space(6)
-        Button {
-          text: "date"
-          iconText: root.widgets.clock.showDate !== false ? "󰄲" : "󰄱"
-          bordered: true
-          selected: root.widgets.clock.showDate !== false
-          foreground: root.foreground
-          fontFamily: root.fontFamily
-          fontSize: Style.font.caption
-          onClicked: root.set("clock", { showDate: root.widgets.clock.showDate === false })
-        }
-        Button {
-          text: "seconds"
-          iconText: root.widgets.clock.showSeconds === true ? "󰄲" : "󰄱"
-          bordered: true
-          selected: root.widgets.clock.showSeconds === true
-          foreground: root.foreground
-          fontFamily: root.fontFamily
-          fontSize: Style.font.caption
-          onClicked: root.set("clock", { showSeconds: root.widgets.clock.showSeconds !== true })
-        }
-      }
+    Check {
+      text: "24h"
+      ticked: String(root.widgets.clock.format).indexOf("AP") === -1
+      onClicked: root.set("clock", { format: ticked ? "h:mm AP" : "HH:mm" })
+    }
+    Check {
+      text: "date"
+      ticked: root.widgets.clock.showDate !== false
+      onClicked: root.set("clock", { showDate: !ticked })
+    }
+    Check {
+      text: "seconds"
+      ticked: root.widgets.clock.showSeconds === true
+      onClicked: root.set("clock", { showSeconds: !ticked })
     }
   }
 
@@ -107,94 +111,55 @@ Column {
     fontFamily: root.fontFamily
     onClicked: root.set("notifications", { on: !checked })
   }
-  Row {
+  Choices {
     visible: root.widgets.notifications.on === true
-    x: root.indent
-    spacing: Style.space(12)
-    bottomPadding: Style.space(8)
-
-    PlacePicker {
-      anchors.verticalCenter: parent.verticalCenter
-      place: root.widgets.notifications.place
-      foreground: root.foreground
-      fontFamily: root.fontFamily
-      onPicked: function(spot) { root.set("notifications", { place: spot }) }
+    Place {
+      id: notificationsPlace
+      value: root.widgets.notifications.place
+      onChanged: function(v) { root.set("notifications", { place: v }) }
     }
-
-    ButtonGroup {
-      anchors.verticalCenter: parent.verticalCenter
-      options: [{ value: "counts", label: "how many" }, { value: "summaries", label: "what about" }, { value: "bodies", label: "in full" }]
-      value: root.widgets.notifications.detail || "counts"
-      foreground: root.foreground
-      fontFamily: root.fontFamily
-      fontSize: Style.font.caption
-      focusable: false
-      onChanged: function(v) { root.set("notifications", { detail: v }) }
+    // Off, each app and how many; on, the latest one's title too.
+    Check {
+      text: "show titles"
+      ticked: root.widgets.notifications.detail !== "counts"
+      tooltipText: "Adds the latest notification's title beside each app"
+      onClicked: root.set("notifications", { detail: ticked ? "counts" : "summaries" })
     }
   }
 
-  // ---- coding agent ----
+  // ---- coding agent: a figure acting out what the agents are doing ----
   SwitchRow {
     width: parent.width
     glyph: "󰚩"
-    // Named for what it shows, so it does not read as a setting for the
-    // agents themselves.
     label: "Agent status"
-    // Only Claude Code reports what it is waiting for; the others are read
-    // from whether they are busy, so the caption promises no more than that.
-    description: "Claude Code in full; other agents as working or waiting"
     checked: root.widgets.agent.on === true
     foreground: root.foreground
     fontFamily: root.fontFamily
     onClicked: root.set("agent", { on: !checked })
   }
-  // Where it goes, the same picture of the screen as every other widget's,
-  // and under it which figure: the figures get a line of their own, so
-  // they are never squeezed to fit beside it.
-  Column {
+  Choices {
     visible: root.widgets.agent.on === true
-    x: root.indent
-    width: parent.width - root.indent - Style.space(8)
-    spacing: Style.space(8)
-    bottomPadding: Style.space(8)
-
-    // Where, and how much it says: by default which agent and whether it
-    // needs you; what each session is on only if asked, the screen being
-    // unattended while it shows.
-    Row {
-      spacing: Style.space(12)
-      PlacePicker {
-        anchors.verticalCenter: parent.verticalCenter
-        place: root.widgets.agent.place
-        foreground: root.foreground
-        fontFamily: root.fontFamily
-        onPicked: function(spot) { root.set("agent", { place: spot }) }
-      }
-      ButtonGroup {
-        anchors.verticalCenter: parent.verticalCenter
-        options: [{ value: "state", label: "who, and if it needs you" }, { value: "titles", label: "and what it's on" }]
-        value: root.widgets.agent.detail === "titles" ? "titles" : "state"
-        foreground: root.foreground
-        fontFamily: root.fontFamily
-        fontSize: Style.font.caption
-        focusable: false
-        onChanged: function(v) { root.set("agent", { detail: v }) }
-      }
+    Place {
+      id: agentPlace
+      value: root.widgets.agent.place
+      onChanged: function(v) { root.set("agent", { place: v }) }
     }
-
-    Text {
-      textFormat: Text.PlainText
-      text: "How it looks — it acts out what they are doing"
-      color: root.dim
-      font.family: root.fontFamily
-      font.pixelSize: Style.font.caption
+    Check {
+      text: "show tasks"
+      ticked: root.widgets.agent.detail !== "state"
+      tooltipText: "What each session is working on, beside whether it needs you"
+      onClicked: root.set("agent", { detail: ticked ? "state" : "titles" })
     }
-
-    FigurePicker {
-      figure: root.widgets.agent.figure ? String(root.widgets.agent.figure) : ""
+    Dropdown {
+      id: agentFigure
+        width: Style.space(104)
+      rowHeight: probe.implicitHeight
+      showLabel: false
+      options: root.figureOptions
+      value: R.figureId(root.widgets.agent.figure ? String(root.widgets.agent.figure) : "")
       foreground: root.foreground
       fontFamily: root.fontFamily
-      onPicked: function(id) { root.set("agent", { figure: id }) }
+      onChanged: function(v) { root.set("agent", { figure: v }) }
     }
   }
 }

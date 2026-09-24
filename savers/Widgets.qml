@@ -122,7 +122,7 @@ Item {
               large: spot.centre
               service: root.service
               figure: root.agent.figure ? String(root.agent.figure) : ""
-              detail: root.agent.detail ? String(root.agent.detail) : "state"
+              detail: root.agent.detail ? String(root.agent.detail) : "titles"
               maxWidth: spot.centre ? root.width * 0.6 : Math.max(Style.space(300), root.width * 0.4)
               maxHeight: root.height * (spot.hasClock ? 0.35 : 0.55)
             }

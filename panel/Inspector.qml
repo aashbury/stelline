@@ -41,7 +41,7 @@ BorderSurface {
   readonly property bool showsBranding: saverId === "terminal"
   property bool deleteArmed: false
 
-  readonly property bool editing: fromField.activeFocus || toField.activeFocus || belowField.field.activeFocus || look.editing || nameField.activeFocus || describeField.activeFocus
+  readonly property bool editing: fromField.activeFocus || toField.activeFocus || belowField.field.activeFocus || look.editing || widgetRows.editing || nameField.activeFocus || describeField.activeFocus
 
   // Armed for long enough to read the line that appears under the name.
   function armDelete() { deleteArmed = true; disarm.restart() }
@@ -297,6 +297,7 @@ BorderSurface {
     // ---- on top: the widgets. The Original is Omarchy's own window and
     // carries none. ----
     WidgetRows {
+      id: widgetRows
       visible: !root.external && !root.failed
       width: parent.width
       settings: root.settings

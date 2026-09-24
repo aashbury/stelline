@@ -17,7 +17,7 @@ BorderSurface {
   property var service: null
   property string figure: ""
   // "state" (the agent, and whether it needs you) or "titles" (what it is on).
-  property string detail: "state"
+  property string detail: "titles"
   property bool shown: true
   property bool large: false
   property real maxWidth: 480

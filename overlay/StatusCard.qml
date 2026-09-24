@@ -19,7 +19,6 @@ BorderSurface {
   readonly property int total: M.totalCount(groups)
   readonly property real k: large ? 1.6 : 1
   readonly property color fg: Color.notifications.text
-  readonly property color dim: Qt.darker(fg, 1.4)
   readonly property string fontFamily: Style.font.family
 
   readonly property bool hasContent: total > 0
@@ -65,16 +64,6 @@ BorderSurface {
           color: modelData.urgency >= 2 ? Color.urgent : root.fg
           font.family: root.fontFamily
           font.pixelSize: Style.font.bodySmall * root.k
-        }
-        Text {
-          visible: root.detail === "bodies" && modelData.latestBody !== ""
-          width: parent.width
-          textFormat: Text.PlainText
-          elide: Text.ElideRight
-          text: "  " + modelData.latestBody
-          color: root.dim
-          font.family: root.fontFamily
-          font.pixelSize: Style.font.caption * root.k
         }
       }
     }

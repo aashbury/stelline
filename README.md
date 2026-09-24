@@ -381,12 +381,13 @@ a rule written by a newer version is inert on an older one.
 
 ## Widgets
 
-What sits on top of a saver, set per tile under **ON TOP**. The **clock** is
-the seven-segment face, small in a corner or large in the middle, with the
-time written both ways to pick from, and date and seconds as check boxes.
+What sits on top of a saver, set per tile under **ON TOP**. Each widget is a
+switch, and while it is on, one line under it: where it goes (a corner, or
+the middle, where it is drawn large) and its one or two check boxes. The
+**clock** is the seven-segment face, with **24h**, **date** and **seconds**.
 **Notifications** is a quiet card: how many arrived since you went idle, from
-which apps (counts by default; summaries or bodies are opt-in — it is an
-unattended screen).
+which apps — counts by default; **show titles** adds the latest one's title,
+opt-in because it is an unattended screen.
 
 The **coding agent** is a figure that acts out what your agents are doing,
 drawn in the theme's foreground with its lights in the accent. It types while
@@ -425,9 +426,9 @@ The grid can be made finer again without the widget growing: the figure's
 size is worked out from how many rows it has. Under it, which agent and
 whether it needs you, and a line for every other session, so the one that is
 stuck is never hidden behind the one that is busy. What each session is *on*
-— its title, or the project folder — is shown only if the tile asks for it
-(*and what it's on*, beside where the card goes): the screen is unattended
-while it shows, so by default it names nothing. Large in the middle of an empty screen it is a status
+— its title, or the project folder — is shown too (**show tasks**, on by
+default); untick it and the card names only the agent and whether it needs
+you. The figure is picked from the list beside it. Large in the middle of an empty screen it is a status
 board. Claude Code is read exactly, from the registry it keeps of its own
 running sessions (`~/.claude/sessions/`, honouring `CLAUDE_CONFIG_DIR`):
 its status, what it is waiting for, and the session's title from the
@@ -480,8 +481,8 @@ A saver's knobs sit under `savers.<id>`: `text`, `play`, `dwellSec`, `fps`,
 `effects`, `order` (`sequence`/`shuffle`), `fit` (`contain`/`cover`), `motion`
 (`none`/`zoom`), `background`, and `widgets` — `clock` (`on`, `place`,
 `format`, `showDate`, `showSeconds`), `notifications` (`on`, `place`,
-`detail` `counts`/`summaries`/`bodies`), `agent` (`on`, `place`, `figure`
-`deck`/`visor`/`morty`). A `place`
+`detail` `counts`/`summaries`), `agent` (`on`, `place`, `detail`
+`titles`/`state`, `figure` `deck`/`visor`/`morty`). A `place`
 is `top-left`, `top-right`, `bottom-left`, `bottom-right` or `centre`;
 anything else (including the older `corner`) means the tile's `corner`, which
 in turn defaults to the `card` below. `effects` empty means all of them.
