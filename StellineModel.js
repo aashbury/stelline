@@ -484,7 +484,7 @@ function timingsSummary(o) {
   var t = o || {}
   // With the lock off, the exceptions that only ever skip the lock say nothing.
   var locks = t.lockOn !== false
-  var parts = [mmss(t.screensaver), locks ? "lock " + mmss(t.lock) : "no lock"]
+  var parts = [t.screensaverOn === false ? "screensaver off" : mmss(t.screensaver), locks ? "lock " + mmss(t.lock) : "no lock"]
   if (t.battery) parts.push("on battery " + mmss(t.battery.screensaver) + (locks && t.battery.lock === "never" ? ", no lock" : ""))
   if (t.dockedNoLock && locks) parts.push("no lock docked")
   if (t.holdFullscreen) parts.push("not over fullscreen")

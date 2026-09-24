@@ -90,8 +90,9 @@ drawn through `ANTHROPIC_API_KEY`, which goes to `api.anthropic.com`.
 
 ## Use
 
-The panel is ordered by how often you touch a thing: the master switch and
-**Stay awake** at the top, then the gallery with **Shuffle** and **Preview**
+The panel is ordered by how often you touch a thing: the line under the title
+says what is in effect, and **Stay awake** — the one switch up top, since it
+holds off both the screensaver and the lock — sits under it, then the gallery with **Shuffle** and **Preview**
 in its header, then the two things you set once — **Timings** and
 **Shortcuts** — each folded to a line that says what it is set to
 (*5:00 · lock 10:00 · no lock docked*). It opens at the top with nothing
@@ -350,12 +351,14 @@ The sliders write `idle.screensaver` and `idle.lock` in
 `~/.config/omarchy/shell.json` — the same keys the stock service reads, so
 nothing forks. Both are seconds from the moment you went idle. The sliders
 always show those settings; the line under the title says what is in effect
-right now, rules included (*blank after 3:00, no lock · docked*). The lock switch
-is Stelline's own: off keeps the screensaver and never locks on idle (the stock
-service cannot do that). The switch at the top of the panel *is* Omarchy's own
-screensaver toggle — the same flag as *Trigger › Toggle › Screensaver* and
-`omarchy toggle screensaver` — so the two never disagree: off means no idle
-screensaver, lock left alone, previews still work, as in stock.
+right now, rules included (*blank after 3:00, no lock · docked*). Each has its
+own switch beside its time. The lock's is Stelline's own: off keeps the
+screensaver and never locks on idle (the stock service cannot do that). The
+screensaver's *is* Omarchy's own screensaver toggle — the same flag as
+*Trigger › Toggle › Screensaver* and `omarchy toggle screensaver` — so the two
+never disagree: off means no idle screensaver, lock left alone, previews still
+work, as in stock. **Stay awake** is the other thing entirely: for now, not for
+good, it holds off both.
 
 Two things hold both stages off without a switch of yours. Wayland-native
 players ask through the idle-inhibit protocol, which the idle monitor honours

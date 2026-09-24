@@ -1188,6 +1188,10 @@ test("timingsSummary reads the two times, then only the exceptions that are on",
   assert.equal(M.timingsSummary({ screensaver: 300, lock: 600, battery: { screensaver: 90, lock: 180 } }), "5:00 · lock 10:00 · on battery 1:30")
 })
 
+test("timingsSummary says when the screensaver itself is off", () => {
+  assert.equal(M.timingsSummary({ screensaver: 300, screensaverOn: false, lock: 600, lockOn: true }), "screensaver off · lock 10:00")
+})
+
 test("timingsSummary drops lock-only exceptions while the lock is off", () => {
   assert.equal(M.timingsSummary({ screensaver: 600, lock: 600, lockOn: false, dockedNoLock: true, battery: { screensaver: 90, lock: "never" } }), "10:00 · no lock · on battery 1:30")
 })

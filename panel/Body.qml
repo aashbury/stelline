@@ -90,16 +90,14 @@ Column {
   readonly property var shownSavers: gridCapped ? savers.slice(0, gridCap - 1) : savers
   readonly property int hiddenCount: savers.length - shownSavers.length
 
-  // Cursor rows, in visual order — most-used first: the master switch, stay
-  // awake, the gallery (its header's Shuffle and Preview, then one row per
+  // Cursor rows, in visual order — most-used first: stay awake, the gallery (its header's Shuffle and Preview, then one row per
   // tile, ending with "Show all" when capped and Add), then the two folded
   // rows set once. The timings' rows are cursor rows only while Timings is
   // open: the two laptop rows, and the battery pair while that is on.
-  readonly property int rowHero: 0
-  readonly property int rowStayAwake: 1
-  readonly property int rowShuffle: 2
-  readonly property int rowPreview: 3
-  readonly property int rowTileFirst: 4
+  readonly property int rowStayAwake: 0
+  readonly property int rowShuffle: 1
+  readonly property int rowPreview: 2
+  readonly property int rowTileFirst: 3
   readonly property int tileCount: shownSavers.length + (gridToggle ? 1 : 0) + 1
   readonly property int rowMore: gridToggle ? rowTileFirst + shownSavers.length : -1
   readonly property int rowTilesEnd: rowTileFirst + tileCount
@@ -117,7 +115,6 @@ Column {
 
   // The item that owns a cursor row, for scrolling it into view.
   function rowItem(index) {
-    if (index === rowHero) return hero
     if (index === rowStayAwake) return stayAwakeToggle
     if (index === rowShuffle) return shuffleButton
     if (index === rowPreview) return previewButton
@@ -248,13 +245,13 @@ Column {
   function activate() {
     if (!cursorActive) { cursorActive = true; return }
     if (!svc) return
-    if (cursorIndex === rowHero) setScreensaver(!screensaverOn)
-    else if (cursorIndex === rowStayAwake) toggleStayAwake()
+    if (cursorIndex === rowStayAwake) toggleStayAwake()
     else if (cursorIndex === rowPreview) preview("")
     else if (cursorIndex === rowMore) foldGrid()
     else if (inTiles(cursorIndex)) { var id = cursorSaverId(); if (id === "") startAdd(); else chooseSaver(id) }
     else if (cursorIndex === rowShuffle) toggleShuffle()
     else if (cursorIndex === rowTimings) toggleSection("timings")
+    else if (cursorIndex === rowScreensaver) setScreensaver(!screensaverOn)
     else if (cursorIndex === rowLock) setStage("lockEnabled", !cfg.lockEnabled)
     else if (cursorIndex === rowBattery) setBatteryTimings(!batteryTimings)
     else if (cursorIndex === rowBatteryLock) patchBatteryTimings({ lock: batteryLocks ? "never" : lockSeconds })
@@ -331,6 +328,8 @@ Column {
   function setScreensaverSeconds(v) {
     setSeconds("screensaver", v)
     if (lockSeconds < v) setSeconds("lock", v)
+    // A time set while the screensaver is off means it is wanted, as the lock.
+    if (!screensaverOn) setScreensaver(true)
   }
   function setLockSeconds(v) {
     setSeconds("lock", Math.max(v, screensaverSeconds))
@@ -396,22 +395,11 @@ Column {
         font.pixelSize: Style.font.display
       }
     }
-    // Without the service there is nothing to switch; what there is to do is
-    // restart the shell, so that is the control.
-    trailingControl: root.serviceOk ? masterSwitch : restartShell
-  }
-  Component {
-    id: masterSwitch
-    ToggleSwitch {
-      checked: root.screensaverOn
-      interactive: root.serviceOk
-      hasCursor: root.cursorActive && root.cursorIndex === root.rowHero
-      foreground: root.foreground
-      onToggled: root.setScreensaver(!root.screensaverOn)
-      // Said before the flip, not after: this is the screensaver alone.
-      PanelToolTip { visible: parent.containsMouse; text: "The screensaver at idle. The lock has its own switch below; Stay awake holds both off." }
-      onHovered: function(h) { root.hoverRow(root.rowHero, h) }
-    }
+    // The hero only says what is in effect. The one switch up top is Stay
+    // awake, which overrides everything; whether the screensaver and the lock
+    // come at all is set beside their times, under Timings. Without the
+    // service what there is to do is restart the shell, so that is the control.
+    trailingControl: root.serviceOk ? null : restartShell
   }
   Component {
     id: restartShell
@@ -613,6 +601,7 @@ Column {
     title: "Timings"
     summary: M.timingsSummary({
       screensaver: root.screensaverSeconds,
+      screensaverOn: root.screensaverOn,
       lock: root.lockSeconds,
       lockOn: root.cfg.lockEnabled !== false,
       battery: root.batteryRowsOpen ? { screensaver: root.batteryScreensaver, lock: root.batteryLocks ? root.batteryLock : "never" } : null,
@@ -639,6 +628,11 @@ Column {
       step: 30
       format: function(v) { return M.mmss(v) }
       parse: function(t) { return root.fromMinutes(t) }
+      // Omarchy's own screensaver toggle — the same flag as
+      // `omarchy toggle screensaver` — beside its time, as the lock's is.
+      showSwitch: true
+      switchChecked: root.screensaverOn
+      onSwitchToggled: root.setScreensaver(!root.screensaverOn)
       foreground: root.foreground
       fontFamily: root.fontFamily
       hasCursor: root.cursorActive && root.cursorIndex === root.rowScreensaver
