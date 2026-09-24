@@ -4,7 +4,9 @@ import qs.Ui
 
 // A labelled slider with its value read out on the right, and an optional
 // switch after the value (the lock row uses it for "lock at all"). The
-// readout is also the way to set a time exactly: click it and type.
+// readout is also the way to set a time exactly: click it and type. With the
+// switch off the row dims but keeps its time, and can still be set — the
+// page decides whether setting it turns the switch back on.
 CursorSurface {
   id: root
 
@@ -33,7 +35,7 @@ CursorSurface {
   // True while the readout is being typed into; the panel stops reading
   // keystrokes as shortcuts for as long as it is.
   property bool editing: false
-  readonly property bool settable: !(showSwitch && !switchChecked)
+  readonly property bool switchedOff: showSwitch && !switchChecked
 
   signal released(real value)
   signal switchToggled()
@@ -58,7 +60,6 @@ CursorSurface {
   }
 
   function startEditing() {
-    if (!root.settable) return
     valueField.text = root.format(root.value)
     root.editing = true
     valueField.forceActiveFocus()
@@ -87,7 +88,7 @@ CursorSurface {
       id: glyphText
       textFormat: Text.PlainText
       text: root.glyph
-      color: root.settable ? root.foreground : root.dim
+      color: root.switchedOff ? root.dim : root.foreground
       font.family: root.fontFamily
       font.pixelSize: Style.font.subtitle
     }
@@ -120,7 +121,7 @@ CursorSurface {
     integer: true
     tickCount: root.ticks
     value: root.value
-    opacity: root.settable ? 1 : 0.4
+    opacity: root.switchedOff ? 0.4 : 1
     // A drag lands on any whole second; the row's own step is what the
     // keyboard and the wheel move by, so a drag should land there too — a
     // screensaver delay of 3:16 is not a setting anyone meant.
@@ -154,8 +155,8 @@ CursorSurface {
       horizontalAlignment: Text.AlignRight
       verticalAlignment: Text.AlignVCenter
       textFormat: Text.PlainText
-      text: root.settable ? root.format(slider.liveValue) : "never"
-      color: root.settable ? (readoutMouse.containsMouse && root.typeable ? Color.accent : root.foreground) : root.dim
+      text: root.format(slider.liveValue)
+      color: readoutMouse.containsMouse && root.typeable ? Color.accent : (root.switchedOff ? root.dim : root.foreground)
       font.family: root.fontFamily
       font.pixelSize: Style.font.body
     }
@@ -163,7 +164,7 @@ CursorSurface {
     MouseArea {
       id: readoutMouse
       anchors.fill: parent
-      enabled: root.settable && !root.editing && root.typeable
+      enabled: !root.editing && root.typeable
       hoverEnabled: true
       cursorShape: Qt.IBeamCursor
       onClicked: root.startEditing()

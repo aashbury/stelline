@@ -325,6 +325,22 @@ Column {
   function setScreensaver(on) { if (svc) svc.setScreensaverOn(!!on) }
   function toggleStayAwake() { if (svc) svc.setIdleEnabled(stayAwake) }
   function setSeconds(stage, v) { if (svc) svc.writeIdleSeconds(stage, v) }
+  // The lock comes at or after the screensaver, never before: a screensaver
+  // moved past the lock takes the lock with it, and a lock time set while
+  // locking is off means locking is wanted.
+  function setScreensaverSeconds(v) {
+    setSeconds("screensaver", v)
+    if (lockSeconds < v) setSeconds("lock", v)
+  }
+  function setLockSeconds(v) {
+    setSeconds("lock", Math.max(v, screensaverSeconds))
+    if (cfg.lockEnabled === false) setStage("lockEnabled", true)
+  }
+  function setBatteryScreensaver(v) {
+    var patch = { screensaver: Math.round(v) }
+    if (batteryLocks && batteryLock < v) patch.lock = Math.round(v)
+    patchBatteryTimings(patch)
+  }
 
   function writeSituations(list) { if (svc) svc.writeSettings({ situations: list }) }
 
@@ -626,7 +642,7 @@ Column {
       foreground: root.foreground
       fontFamily: root.fontFamily
       hasCursor: root.cursorActive && root.cursorIndex === root.rowScreensaver
-      onReleased: function(v) { root.setSeconds("screensaver", v) }
+      onReleased: function(v) { root.setScreensaverSeconds(v) }
       onHovered: function(h) { root.hoverRow(root.rowScreensaver, h) }
       onWheeled: function(d) { root.scrollBy(d) }
       onEditingChanged: root.setEditing("screensaver", editing)
@@ -639,7 +655,7 @@ Column {
       glyph: "󰌾"
       label: "Lock"
       value: root.lockSeconds
-      minimum: 60
+      minimum: Math.max(60, root.screensaverSeconds)
       maximum: 3600
       step: 60
       format: function(v) { return M.mmss(v) }
@@ -649,7 +665,7 @@ Column {
       foreground: root.foreground
       fontFamily: root.fontFamily
       hasCursor: root.cursorActive && root.cursorIndex === root.rowLock
-      onReleased: function(v) { root.setSeconds("lock", v) }
+      onReleased: function(v) { root.setLockSeconds(v) }
       onSwitchToggled: root.setStage("lockEnabled", !root.cfg.lockEnabled)
       onHovered: function(h) { root.hoverRow(root.rowLock, h) }
       onWheeled: function(d) { root.scrollBy(d) }
@@ -692,7 +708,7 @@ Column {
         foreground: root.foreground
         fontFamily: root.fontFamily
         hasCursor: root.cursorActive && root.cursorIndex === root.rowBatteryScreensaver
-        onReleased: function(v) { root.patchBatteryTimings({ screensaver: Math.round(v) }) }
+        onReleased: function(v) { root.setBatteryScreensaver(v) }
         onHovered: function(h) { root.hoverRow(root.rowBatteryScreensaver, h) }
         onWheeled: function(d) { root.scrollBy(d) }
         onEditingChanged: root.setEditing("batteryScreensaver", editing)
@@ -704,7 +720,7 @@ Column {
         glyph: "󰌾"
         label: "Lock"
         value: root.batteryLock
-        minimum: 60
+        minimum: Math.max(60, root.batteryScreensaver)
         maximum: 3600
         step: 60
         format: function(v) { return M.mmss(v) }
@@ -714,7 +730,7 @@ Column {
         foreground: root.foreground
         fontFamily: root.fontFamily
         hasCursor: root.cursorActive && root.cursorIndex === root.rowBatteryLock
-        onReleased: function(v) { root.patchBatteryTimings({ lock: Math.round(v) }) }
+        onReleased: function(v) { root.patchBatteryTimings({ lock: Math.max(Math.round(v), root.batteryScreensaver) }) }
         onSwitchToggled: root.patchBatteryTimings({ lock: root.batteryLocks ? "never" : root.lockSeconds })
         onHovered: function(h) { root.hoverRow(root.rowBatteryLock, h) }
         onWheeled: function(d) { root.scrollBy(d) }
