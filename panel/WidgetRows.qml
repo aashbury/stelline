@@ -140,7 +140,9 @@ Column {
     // Named for what it shows, so it does not read as a setting for the
     // agents themselves.
     label: "Agent status"
-    description: "Whether your coding agents are working or waiting on you"
+    // Only Claude Code reports what it is waiting for; the others are read
+    // from whether they are busy, so the caption promises no more than that.
+    description: "Claude Code in full; other agents as working or waiting"
     checked: root.widgets.agent.on === true
     foreground: root.foreground
     fontFamily: root.fontFamily
@@ -156,11 +158,28 @@ Column {
     spacing: Style.space(8)
     bottomPadding: Style.space(8)
 
-    PlacePicker {
-      place: root.widgets.agent.place
-      foreground: root.foreground
-      fontFamily: root.fontFamily
-      onPicked: function(spot) { root.set("agent", { place: spot }) }
+    // Where, and how much it says: by default which agent and whether it
+    // needs you; what each session is on only if asked, the screen being
+    // unattended while it shows.
+    Row {
+      spacing: Style.space(12)
+      PlacePicker {
+        anchors.verticalCenter: parent.verticalCenter
+        place: root.widgets.agent.place
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        onPicked: function(spot) { root.set("agent", { place: spot }) }
+      }
+      ButtonGroup {
+        anchors.verticalCenter: parent.verticalCenter
+        options: [{ value: "state", label: "who, and if it needs you" }, { value: "titles", label: "and what it's on" }]
+        value: root.widgets.agent.detail === "titles" ? "titles" : "state"
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        fontSize: Style.font.caption
+        focusable: false
+        onChanged: function(v) { root.set("agent", { detail: v }) }
+      }
     }
 
     Text {

@@ -16,13 +16,15 @@ BorderSurface {
 
   property var service: null
   property string figure: ""
+  // "state" (the agent, and whether it needs you) or "titles" (what it is on).
+  property string detail: "state"
   property bool shown: true
   property bool large: false
   property real maxWidth: 480
   // In the middle the figure is as big as the screen allows, never bigger.
   property real maxHeight: 400
   readonly property var sessions: service && Array.isArray(service.agentSessions) ? service.agentSessions : []
-  readonly property var summary: M.agentSummary(sessions)
+  readonly property var summary: M.agentSummary(sessions, detail)
   readonly property string state: summary.state
   readonly property real k: large ? 1.6 : 1
   readonly property color fg: Color.notifications.text
@@ -50,7 +52,10 @@ BorderSurface {
   readonly property real frameWidth: Math.round(frameHeight * 3 / 4)
   readonly property string fontFamily: Style.font.family
 
-  visible: shown && sessions.length > 0
+  // Whether there is anything to draw, apart from being shown: what the
+  // layer above reads, since a hidden item's own visible reads false.
+  readonly property bool hasContent: sessions.length > 0
+  visible: shown && hasContent
   implicitWidth: frameWidth + padding * 2
   implicitHeight: column.implicitHeight + padding * 2
   padding: Style.space(14) * k
@@ -107,7 +112,7 @@ BorderSurface {
           required property var modelData
           width: parent.width
           textFormat: Text.PlainText
-          text: String(modelData.name) + " · " + String(modelData.title || modelData.project || "") + " · " + M.agentStateLabel(String(modelData.state))
+          text: String(modelData.name) + (M.agentSessionWhat(modelData, root.detail) !== "" ? " · " + M.agentSessionWhat(modelData, root.detail) : "") + " · " + M.agentStateLabel(String(modelData.state))
           color: root.colorFor(String(modelData.state))
           font.family: root.fontFamily
           font.pixelSize: Style.font.caption * root.k

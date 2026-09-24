@@ -102,7 +102,8 @@ Column {
   readonly property int rowBatteryScreensaver: batteryRowsOpen ? 5 : -1
   readonly property int rowBatteryLock: batteryRowsOpen ? 6 : -1
   readonly property int rowDockedLock: hasLaptopRows ? (batteryRowsOpen ? 7 : 5) : -1
-  readonly property int rowPreview: rowLock + 1 + (hasLaptopRows ? 2 : 0) + (batteryRowsOpen ? 2 : 0)
+  readonly property int rowFullscreen: rowLock + 1 + (hasLaptopRows ? 2 : 0) + (batteryRowsOpen ? 2 : 0)
+  readonly property int rowPreview: rowFullscreen + 1
   readonly property int rowTileFirst: rowPreview + 1
   readonly property int tileCount: shownSavers.length + (gridToggle ? 1 : 0) + 1
   readonly property int rowMore: gridToggle ? rowTileFirst + shownSavers.length : -1
@@ -123,6 +124,7 @@ Column {
     if (index === rowBatteryScreensaver) return batteryScreensaverRow
     if (index === rowBatteryLock) return batteryLockRow
     if (index === rowDockedLock) return dockedLockRow
+    if (index === rowFullscreen) return fullscreenRow
     if (index === rowShortcuts) return shortcuts
     return null
   }
@@ -243,6 +245,7 @@ Column {
     else if (cursorIndex === rowBattery) setBatteryTimings(!batteryTimings)
     else if (cursorIndex === rowBatteryLock) patchBatteryTimings({ lock: batteryLocks ? "never" : lockSeconds })
     else if (cursorIndex === rowDockedLock) svc.setDockedNoLock(!svc.dockedNoLock)
+    else if (cursorIndex === rowFullscreen) svc.setHoldFullscreen(!svc.holdFullscreen)
     else if (cursorIndex === rowShortcuts) toggleSection("shortcuts")
   }
 
@@ -345,6 +348,8 @@ Column {
     title: "Stelline"
     meta: root.serviceOk
       ? (root.stayAwake ? "staying awake"
+        : root.svc.inhibited ? "held off · " + M.inhibitorLabel(root.svc.inhibitors)
+        : root.svc.heldByFullscreen ? "held off · a window is fullscreen"
         : (!root.screensaverOn ? "screensaver off" + (root.svc.lockStageEnabled ? ", still locks at " + M.mmss(root.lockNow) : ", no lock")
         : root.playingName.toLowerCase() + " after " + M.mmss(root.screensaverNow)
           + (root.svc.lockStageEnabled ? ", lock at " + M.mmss(root.lockNow) : ", no lock")
@@ -373,6 +378,8 @@ Column {
       hasCursor: root.cursorActive && root.cursorIndex === root.rowHero
       foreground: root.foreground
       onToggled: root.setScreensaver(!root.screensaverOn)
+      // Said before the flip, not after: this is the screensaver alone.
+      PanelToolTip { visible: parent.containsMouse; text: "The screensaver at idle. The lock has its own switch below; Stay awake holds both off." }
       onHovered: function(h) { root.hoverRow(root.rowHero, h) }
     }
   }
@@ -554,6 +561,25 @@ Column {
     onHovered: function(h) { root.hoverRow(root.rowDockedLock, h) }
   }
 
+  // Video, browsers and Steam already hold the saver off by asking; this is
+  // for the games that never do. Off unless asked: a fullscreen editor left
+  // alone should still lock.
+  SwitchRow {
+    id: fullscreenRow
+    enabled: root.serviceOk
+    opacity: root.inertOpacity
+    width: parent.width
+    glyph: "󰊓"
+    label: "Not while a window is fullscreen"
+    description: root.svc && root.svc.heldByFullscreen ? "That's now" : ""
+    checked: root.svc ? root.svc.holdFullscreen === true : false
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    hasCursor: root.cursorActive && root.cursorIndex === root.rowFullscreen
+    onClicked: if (root.svc) root.svc.setHoldFullscreen(!checked)
+    onHovered: function(h) { root.hoverRow(root.rowFullscreen, h) }
+  }
+
   PanelSeparator { width: parent.width; foreground: root.foreground }
 
   // ---- savers ----
@@ -590,6 +616,7 @@ Column {
       onHovered: function(h) { root.hoverRow(root.rowPreview, h) }
     }
   }
+
 
   Grid {
     id: grid
@@ -636,28 +663,41 @@ Column {
     }
   }
 
-  Inspector {
+  // The two cards are built only while they are open: each is a good part
+  // of the panel, and building them at start-up for nobody cost the shell
+  // seconds before it answered.
+  Loader {
     id: inspector
-    visible: !root.adding && !!root.openSaver
+    active: !root.adding && !!root.openSaver
+    visible: active
     width: parent.width
-    saver: root.openSaver || ({})
-    svc: root.svc
-    body: root
-    bar: root.bar
-    foreground: root.foreground
-    fontFamily: root.fontFamily
-    onEditingChanged: root.setEditing("inspector", editing)
+    readonly property bool deleteArmed: !!item && item.deleteArmed === true
+    function armDelete() { if (item) item.armDelete() }
+    sourceComponent: Inspector {
+      width: inspector.width
+      saver: root.openSaver || ({})
+      svc: root.svc
+      body: root
+      bar: root.bar
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      onEditingChanged: root.setEditing("inspector", editing)
+    }
   }
 
-  AddCard {
+  Loader {
     id: addCard
-    visible: root.adding
+    active: root.adding
+    visible: active
     width: parent.width
-    svc: root.svc
-    body: root
-    foreground: root.foreground
-    fontFamily: root.fontFamily
-    onEditingChanged: root.setEditing("add", editing)
+    sourceComponent: AddCard {
+      width: addCard.width
+      svc: root.svc
+      body: root
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      onEditingChanged: root.setEditing("add", editing)
+    }
   }
 
   SwitchRow {

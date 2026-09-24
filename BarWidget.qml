@@ -28,7 +28,7 @@ Panel {
   // idle timeline follows panel edits without re-reading shell.json.
   onSettingsChanged: if (svc) svc.barSettings = settings
   Component.onCompleted: if (svc) svc.barSettings = settings
-  Component.onDestruction: if (svc) svc.barSettings = null
+  Component.onDestruction: if (svc) { svc.barSettings = null; svc.panelOpen = false }
 
   // The stock terminal saver cannot come up under an open panel (see the
   // service); it asks for the panel to close first.
@@ -38,7 +38,9 @@ Panel {
     function onPanelCloseRequested() { if (root.opened) root.close() }
   }
 
-  onOpenedChanged: if (opened) {
+  onOpenedChanged: {
+    if (svc) svc.panelOpen = opened
+    if (!opened) return
     body.reset()
     flick.contentY = 0
     Qt.callLater(function() { keyCatcher.forceActiveFocus() })
@@ -52,8 +54,8 @@ Panel {
     active: root.stayAwake
     dimmed: !root.svc
     tooltipText: !root.svc
-      ? "Stelline: service not loaded — run omarchy restart shell"
-      : (root.stayAwake ? "Staying awake · right-click to allow idle" : "Screensaver · right-click to stay awake")
+      ? "Stelline isn't running yet — restart the shell"
+      : (root.stayAwake ? "Staying awake · right-click to let it sleep again" : "Screensaver · right-click to stay awake")
     onPressed: function(buttonCode) {
       if (buttonCode === Qt.RightButton) {
         // Same call the stock coffee cup makes on omarchy.idle.

@@ -32,7 +32,10 @@ behind pinned windows, races on multi-monitor setups, and there is no way to
 keep the screensaver but skip the lock. Stelline is a layer-shell surface on
 every monitor: any key, click, wheel or deliberate pointer movement dismisses
 it, it sits above pinned windows, it costs a few percent of a core, and each
-stage has its own switch.
+stage has its own switch. And when a browser, a player or Steam asks the
+desktop not to start the screensaver — a request nothing on a stock box
+answers, which is why it fires over films and games — Stelline is what
+answers, and holds off.
 
 ## Install
 
@@ -53,6 +56,12 @@ never light up or respond; Finish setup removes it from the indicators list
 glyph, same hotkey. **Put the old one back**, under Shortcuts, restores the list exactly.
 
 Requires Omarchy 4.x. Stelline's id is `io.github.aashbury.stelline`.
+
+Nothing to install beyond a stock Omarchy: the conversions use ImageMagick,
+ffmpeg, jq and wl-clipboard, and the agent status and the screensaver
+inhibitors use python3 with its GLib bindings (`python-gobject`) — all part of
+the base install. The one thing that ever leaves the machine is a description
+drawn through `ANTHROPIC_API_KEY`, which goes to `api.anthropic.com`.
 
 ## Use
 
@@ -319,6 +328,18 @@ screensaver toggle — the same flag as *Trigger › Toggle › Screensaver* and
 `omarchy toggle screensaver` — so the two never disagree: off means no idle
 screensaver, lock left alone, previews still work, as in stock.
 
+Two things hold both stages off without a switch of yours. Wayland-native
+players ask through the idle-inhibit protocol, which the idle monitor honours
+by itself, as stock does. Browsers, most players and Steam ask instead over
+D-Bus (`org.freedesktop.ScreenSaver` — *Inhibit* with a reason, *UnInhibit*
+when done); on a stock box nothing owns that name, so those requests go
+nowhere and the saver fires over a film. Stelline owns it: while anything
+holds it, the line under the title says so (*held off · Firefox — video
+playing*), and a holder that quits without asking is dropped. For the games
+that never ask, **Not while a window is fullscreen** holds both stages off
+while the active window is fullscreen. It is off unless you turn it on: with
+it on, a fullscreen editor left alone never screensaves or locks either.
+
 ## When a saver plays
 
 Click a tile: that is the usual saver, the one that plays when nothing else
@@ -352,9 +373,9 @@ set of company logos for the working day is two tiles — give the clip a night
 rule from 17:00 to 08:30 and click the logos — and the battery timings still
 apply when the clip is playing. Nothing in the package is anyone's content:
 the built-ins draw your own branding file, the clock, or nothing; every other
-saver is one you made. Nothing ships enabled, so a fresh install behaves
-exactly like stock. Unknown condition types never match, so a rule written
-by a newer version is inert on an older one.
+saver is one you made. No rule ships turned on, and the stock timings, lock
+and stay-awake are kept as they are. Unknown condition types never match, so
+a rule written by a newer version is inert on an older one.
 
 ## Widgets
 
@@ -399,9 +420,12 @@ from the tables that drive the main movement, so the two drift against each
 other and the loop does not read as a short repeat.
 
 The grid can be made finer again without the widget growing: the figure's
-size is worked out from how many rows it has. Under it, which agent and what it is on, and a
-line for every other session, so the one that is stuck is never hidden behind
-the one that is busy. Large in the middle of an empty screen it is a status
+size is worked out from how many rows it has. Under it, which agent and
+whether it needs you, and a line for every other session, so the one that is
+stuck is never hidden behind the one that is busy. What each session is *on*
+— its title, or the project folder — is shown only if the tile asks for it
+(*and what it's on*, beside where the card goes): the screen is unattended
+while it shows, so by default it names nothing. Large in the middle of an empty screen it is a status
 board. Claude Code is read exactly, from the registry it keeps of its own
 running sessions (`~/.claude/sessions/`, honouring `CLAUDE_CONFIG_DIR`):
 its status, what it is waiting for, and the session's title from the
@@ -433,7 +457,7 @@ omarchy-shell stelline set64 shuffleFrom "$(printf '["clock","blank"]' | base64 
 Defaults:
 
 ```json
-{ "saver": "terminal", "shuffle": false, "shuffleFrom": ["wordmark", "clock"],
+{ "saver": "wordmark", "shuffle": false, "shuffleFrom": ["wordmark", "clock"],
   "screensaverEnabled": true, "lockEnabled": true,
   "savers": { "wordmark": { "text": "stelline", "effect": "cycle", "effects": [], "holdSec": 4, "background": "theme" },
               "clock": { "background": "theme", "widgets": { "clock": { "on": true, "place": "centre" } } },
@@ -510,6 +534,11 @@ the stock service; `status` reports `"clone": "stelline"`.
   is only as good as the model's drawing that day.
 - An Add in progress lives in the shell's memory: a shell restart while the
   file chooser is up loses the card, not the pictures.
+- *Not while a window is fullscreen* looks at the active window only: a
+  fullscreen game on another monitor, with the focus elsewhere, does not
+  count. If something else already owns `org.freedesktop.ScreenSaver` (a
+  `hypridle` of your own), Stelline waits its turn rather than fighting for it,
+  and the D-Bus requests go to that owner.
 - Pinned-effect terminal launching on more than one monitor follows the stock
   launcher's sequence but has only been tested on one.
 - Disabling the plugin leaves a harmless `{ "id": "omarchy.idle" }` entry in the
@@ -521,13 +550,17 @@ the stock service; `status` reports `"clone": "stelline"`.
 ## Uninstall
 
 ```sh
-# in the panel: Shortcuts › Put the old one back   (or: omarchy-shell stelline undoSetup)
+# first, in the panel: Shortcuts › Put the old one back   (or: omarchy-shell stelline undoSetup)
 omarchy plugin remove io.github.aashbury.stelline
 omarchy restart shell
 ```
 
-Removing re-enables the built-in idle service. Your `idle.screensaver` /
-`idle.lock` values stay as you left them.
+*Put the old one back* first: it returns the coffee cup to the bar and takes
+Stelline's line out of the menu, which removing the plugin does not do. (The
+menu line is safe either way — without Stelline it falls through to the stock
+screensaver.) Removing re-enables the built-in idle service. Your
+`idle.screensaver` / `idle.lock` values stay as you left them. Your own savers
+stay in `~/.config/omarchy/stelline/` until you delete that folder.
 
 ## Dev loop
 

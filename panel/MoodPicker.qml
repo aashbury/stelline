@@ -32,7 +32,7 @@ Column {
   // every other choice in the panel. The label is the row's, not ours.
   ButtonGroup {
     options: [{ value: "", label: "Everything", tooltip: "All " + root.effects.length + ", one after another at random" }]
-      .concat(root.moodKeys.map(function(k) { return { value: k, label: root.title(k), tooltip: (root.moods[k] || []).join(", ") } }))
+      .concat(root.moodKeys.map(function(k) { return { value: k, label: root.title(k), tooltip: (root.moods[k] || []).map(M.effectLabel).join(", ") } }))
     value: root.mood
     foreground: root.foreground
     fontFamily: root.fontFamily
@@ -61,7 +61,7 @@ Column {
       model: root.effects
       Button {
         required property var modelData
-        text: modelData
+        text: M.effectLabel(modelData)
         bordered: true
         selected: root.pinned.indexOf(modelData) !== -1
         foreground: root.foreground

@@ -66,9 +66,11 @@ Item {
         readonly property bool centre: modelData === "centre"
         readonly property bool atTop: String(modelData).indexOf("top") === 0
         readonly property bool atLeft: String(modelData).indexOf("left") !== -1
-        readonly property bool hasClock: root.at(root.clock, modelData)
-        readonly property bool hasAgent: root.live && root.at(root.agent, modelData)
-        readonly property bool hasCard: root.cards && root.at(root.notifications, modelData)
+        // Nothing is built for a layer that is not showing (a hidden
+        // overlay, a tile the panel has not opened): `active` gates all of it.
+        readonly property bool hasClock: root.active && root.at(root.clock, modelData)
+        readonly property bool hasAgent: root.active && root.live && root.at(root.agent, modelData)
+        readonly property bool hasCard: root.active && root.cards && root.at(root.notifications, modelData)
 
         anchors.centerIn: centre ? parent : undefined
         anchors.top: centre || !atTop ? undefined : parent.top
@@ -86,8 +88,11 @@ Item {
           anchors.verticalCenter: spot.centre ? parent.verticalCenter : undefined
           spacing: root.thumbnail ? Style.space(2) : (spot.centre ? Style.space(24) : Style.space(10))
 
-          // Faces are loaded once there is a size to fit, and only when shown:
-          // a face created at zero size fits itself to nothing.
+          // Each widget is made only for the spot its tile puts it in, and
+          // the faces only once there is a size to fit (a face created at
+          // zero size fits itself to nothing). Every tile in the grid draws
+          // this layer, so a widget built for all five spots of every tile
+          // would cost the shell seconds at start-up.
           Loader {
             visible: spot.hasClock
             active: visible && root.width > 0 && root.height > 0
@@ -106,25 +111,34 @@ Item {
             }
           }
 
-          AgentWidget {
+          // A card decides for itself whether it has anything to show; the
+          // column skips it, as it did the card, while it has not.
+          Loader {
+            active: spot.hasAgent
+            visible: active && !!item && item.hasContent
             anchors.horizontalCenter: spot.centre ? parent.horizontalCenter : undefined
             anchors.right: !spot.centre && !spot.atLeft ? parent.right : undefined
-            shown: spot.hasAgent
-            large: spot.centre
-            service: root.service
-            figure: root.agent.figure ? String(root.agent.figure) : ""
-            maxWidth: spot.centre ? root.width * 0.6 : Math.max(Style.space(300), root.width * 0.4)
-            maxHeight: root.height * (spot.hasClock ? 0.35 : 0.55)
+            sourceComponent: AgentWidget {
+              large: spot.centre
+              service: root.service
+              figure: root.agent.figure ? String(root.agent.figure) : ""
+              detail: root.agent.detail ? String(root.agent.detail) : "state"
+              maxWidth: spot.centre ? root.width * 0.6 : Math.max(Style.space(300), root.width * 0.4)
+              maxHeight: root.height * (spot.hasClock ? 0.35 : 0.55)
+            }
           }
 
-          StatusCard {
+          Loader {
+            active: spot.hasCard
+            visible: active && !!item && item.hasContent
             anchors.horizontalCenter: spot.centre ? parent.horizontalCenter : undefined
             anchors.right: !spot.centre && !spot.atLeft ? parent.right : undefined
-            shown: spot.hasCard
-            large: spot.centre
-            service: root.service
-            detail: root.notifications.detail ? String(root.notifications.detail) : "counts"
-            maxWidth: spot.centre ? root.width * 0.6 : Math.max(Style.space(300), root.width * 0.4)
+            sourceComponent: StatusCard {
+              large: spot.centre
+              service: root.service
+              detail: root.notifications.detail ? String(root.notifications.detail) : "counts"
+              maxWidth: spot.centre ? root.width * 0.6 : Math.max(Style.space(300), root.width * 0.4)
+            }
           }
         }
       }

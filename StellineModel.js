@@ -116,6 +116,10 @@ function defaults() {
     shuffleFrom: ["wordmark", "clock"],
     screensaverEnabled: true,
     lockEnabled: true,
+    // Hold the saver and the lock off while the active window is fullscreen
+    // (a game that never asks). Off: a fullscreen editor left alone should
+    // still lock.
+    holdFullscreen: false,
     savers: {
       // A default, not a hardcoding: type over the text and it is yours. Every
       // animation is on out of the box, because that is the thing to look at.
@@ -177,8 +181,9 @@ function findEntry(config, id) {
 function coerce(value, fallback) {
   if (value === undefined || value === null) return fallback
   // No default to coerce against (a knob newer than the defaults, a widget on
-  // a shipped tile): the value is kept as it is, not turned into a string.
-  if (fallback === undefined) return value
+  // a shipped tile, a record that is empty until something is remembered):
+  // the value is kept as it is, not turned into a string.
+  if (fallback === undefined || fallback === null) return value
   if (typeof fallback === "boolean") {
     if (typeof value === "boolean") return value
     var s = String(value).trim().toLowerCase()
@@ -624,7 +629,9 @@ function wordmarkScript(text, outPath) {
     "fonts=$(magick -list font 2>/dev/null | awk '/^ *Font: /{print $2}' | grep -viE 'mono|italic|oblique|serif|cjk' || true); font=''",
     "for weight in Black ExtraBold Heavy Bold; do font=$(grep -m1 -iE -- \"-$weight\\$\" <<<\"$fonts\" || true); [[ -n $font ]] && break; done",
     // the letters, white on black, slanted forward, with room for the depth
-    "magick -background black -fill white ${font:+-font \"$font\"} -pointsize 240 label:\"$text\" -trim +repage " +
+    // The text goes in on stdin, so a word starting with @ is a word and
+    // not a file to read; % doubled, so it is not a format escape.
+    "printf %s \"${text//%/%%}\" | magick -background black -fill white ${font:+-font \"$font\"} -pointsize 240 label:@- -trim +repage " +
       "-bordercolor black -border 60 -shear 12x0 -trim +repage -bordercolor black -border 90 \"$tmp/m.png\" || exit 1",
     "read -r w h < <(magick identify -format '%w %h\\n' \"$tmp/m.png\"); [[ -n ${h:-} ]] || exit 1",
     // the extrusion: the letters stepped down and to the right
@@ -702,16 +709,25 @@ function applyFinishSetup(config, pluginId) {
   var ours = findEntry(config, pluginId)
   if (ours && ours !== null) {
     var prev = isPlainObject(ours.setup) ? ours.setup : {}
-    ours.setup = { done: true, indicatorsItemsBefore: prev.done === true ? prev.indicatorsItemsBefore : before }
+    ours.setup = { done: true, indicatorsItemsBefore: prev.done === true ? rememberedItems(prev.indicatorsItemsBefore) : before }
     changed = true
   }
   return changed
 }
 
+// The remembered indicator list. An earlier version stored it as one
+// comma-joined string; that is read back as the list it was.
+function rememberedItems(v) {
+  if (Array.isArray(v)) return v.length ? v : null
+  if (typeof v !== "string" || v.trim() === "") return null
+  var items = v.split(",").map(function(x) { return x.trim() }).filter(function(x) { return x !== "" })
+  return items.length ? items : null
+}
+
 function applyUndoSetup(config, pluginId) {
   var ours = findEntry(config, pluginId)
   if (!ours || !isPlainObject(ours.setup) || ours.setup.done !== true) return false
-  var before = ours.setup.indicatorsItemsBefore
+  var before = rememberedItems(ours.setup.indicatorsItemsBefore)
   var sections = ["left", "center", "right"]
   for (var s = 0; s < sections.length; s++) {
     var list = config.bar.layout[sections[s]]
@@ -727,10 +743,161 @@ function applyUndoSetup(config, pluginId) {
   return true
 }
 
+// ---- inhibitors asked for over D-Bus -------------------------------------------
+//
+// Browsers, players and Steam ask the desktop not to start the screensaver
+// through org.freedesktop.ScreenSaver (Inhibit/UnInhibit with a cookie);
+// Wayland-native players use the idle-inhibit protocol, which the idle
+// monitor honours by itself. Nothing on a stock Omarchy owns the D-Bus
+// name, so the requests went nowhere. This program, run by the service,
+// owns it and prints one JSON line whenever the set of holders changes:
+//   {"inhibitors":[{"app":"Firefox","reason":"video-playing"}]}
+// plus {"owner":true|false} as the name comes and goes, and {"lock":true}
+// when something asks for the lock. A holder that disconnects without
+// UnInhibit (a crash, a closed tab) is dropped. It leaves with the shell.
+function screenSaverBusScript() {
+  return [
+    "import json, os, signal, sys",
+    "try:",
+    "    import gi",
+    "    gi.require_version('Gio', '2.0'); gi.require_version('GLib', '2.0')",
+    "    from gi.repository import Gio, GLib",
+    "except Exception as e:",
+    "    print(json.dumps({'error': 'needs python-gobject: ' + str(e)}), flush=True); sys.exit(2)",
+    "XML = ('<node><interface name=\"org.freedesktop.ScreenSaver\">'",
+    "  '<method name=\"Inhibit\"><arg type=\"s\" name=\"application_name\" direction=\"in\"/><arg type=\"s\" name=\"reason_for_inhibit\" direction=\"in\"/><arg type=\"u\" name=\"cookie\" direction=\"out\"/></method>'",
+    "  '<method name=\"UnInhibit\"><arg type=\"u\" name=\"cookie\" direction=\"in\"/></method>'",
+    "  '<method name=\"GetActive\"><arg type=\"b\" direction=\"out\"/></method>'",
+    "  '<method name=\"GetActiveTime\"><arg type=\"u\" direction=\"out\"/></method>'",
+    "  '<method name=\"GetSessionIdleTime\"><arg type=\"u\" direction=\"out\"/></method>'",
+    "  '<method name=\"SetActive\"><arg type=\"b\" name=\"e\" direction=\"in\"/><arg type=\"b\" direction=\"out\"/></method>'",
+    "  '<method name=\"SimulateUserActivity\"/><method name=\"Lock\"/>'",
+    "  '<method name=\"Throttle\"><arg type=\"s\" direction=\"in\"/><arg type=\"s\" direction=\"in\"/><arg type=\"u\" direction=\"out\"/></method>'",
+    "  '<method name=\"UnThrottle\"><arg type=\"u\" direction=\"in\"/></method>'",
+    "  '</interface></node>')",
+    "held = {}",
+    "watches = {}",
+    "counter = [0]",
+    "def emit():",
+    "    print(json.dumps({'inhibitors': [{'app': a, 'reason': r} for (_, a, r) in held.values()]}), flush=True)",
+    "def gone(sender):",
+    "    for c in [c for c, v in held.items() if v[0] == sender]:",
+    "        del held[c]",
+    "    w = watches.pop(sender, None)",
+    "    if w: Gio.bus_unwatch_name(w)",
+    "    emit()",
+    "def call(conn, sender, path, iface, method, params, inv):",
+    "    if method == 'Inhibit':",
+    "        app, reason = params.unpack()",
+    "        counter[0] += 1",
+    "        held[counter[0]] = (sender, str(app), str(reason))",
+    "        if sender not in watches:",
+    "            watches[sender] = Gio.bus_watch_name_on_connection(conn, sender, Gio.BusNameWatcherFlags.NONE, None, lambda c, n: gone(n))",
+    "        inv.return_value(GLib.Variant('(u)', (counter[0],)))",
+    "        emit()",
+    "    elif method == 'UnInhibit':",
+    "        (cookie,) = params.unpack()",
+    "        if held.pop(cookie, None) is not None: emit()",
+    "        inv.return_value(None)",
+    "    elif method == 'Lock':",
+    "        print(json.dumps({'lock': True}), flush=True); inv.return_value(None)",
+    "    elif method in ('GetActive', 'SetActive'): inv.return_value(GLib.Variant('(b)', (False,)))",
+    "    elif method in ('GetActiveTime', 'GetSessionIdleTime', 'Throttle'): inv.return_value(GLib.Variant('(u)', (0,)))",
+    "    else: inv.return_value(None)",
+    "info = Gio.DBusNodeInfo.new_for_xml(XML)",
+    "def acquired_bus(conn, name):",
+    "    for path in ('/org/freedesktop/ScreenSaver', '/ScreenSaver'):",
+    "        conn.register_object(path, info.interfaces[0], call, None, None)",
+    "Gio.bus_own_name(Gio.BusType.SESSION, 'org.freedesktop.ScreenSaver', Gio.BusNameOwnerFlags.NONE, acquired_bus,",
+    "    lambda c, n: print(json.dumps({'owner': True}), flush=True),",
+    "    lambda c, n: print(json.dumps({'owner': False}), flush=True))",
+    "loop = GLib.MainLoop()",
+    "parent = os.getppid()",
+    "def alive():",
+    "    if os.getppid() != parent: loop.quit()",
+    "    return True",
+    "GLib.timeout_add_seconds(5, alive)",
+    "signal.signal(signal.SIGTERM, lambda *a: loop.quit())",
+    "loop.run()"
+  ].join("\n")
+}
+
+// One line from the program above, or null for anything else.
+function parseBusLine(line) {
+  var t = String(line || "").trim()
+  if (t === "" || t.charAt(0) !== "{") return null
+  try { var j = JSON.parse(t); return isPlainObject(j) ? j : null } catch (e) { return null }
+}
+
+// The holders, as the hero line says them: "Firefox — video playing", and
+// how many more when several hold it at once.
+function inhibitorLabel(list) {
+  var l = Array.isArray(list) ? list : []
+  if (!l.length) return ""
+  var app = String(l[0].app || "").trim() || "an app"
+  var why = String(l[0].reason || "").trim().replace(/[-_]+/g, " ").toLowerCase()
+  var s = app + (why !== "" ? " — " + why : "")
+  if (s.length > 44) s = s.substring(0, 43) + "…"
+  return l.length > 1 ? s + ", +" + (l.length - 1) : s
+}
+
+// hyprctl activewindow -j: 2 is fullscreen (1 is only maximised).
+function isFullscreen(json) {
+  try { var j = JSON.parse(String(json || "")); return isPlainObject(j) && Number(j.fullscreen) === 2 } catch (e) { return false }
+}
+
+// Base64 to text, read as UTF-8. Qt.atob gives one character per byte (and
+// is deprecated for strings), so a name with an accent came through wrong.
+// Null when the input is not base64 at all.
+function fromBase64(s) {
+  var alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
+  var str = String(s === undefined || s === null ? "" : s).replace(/[\s=]/g, "")
+  if (/[^A-Za-z0-9+\/]/.test(str)) return null
+  var bytes = []
+  for (var i = 0; i < str.length; i += 4) {
+    var n = 0, k = 0
+    for (var j = 0; j < 4 && i + j < str.length; j++) { n = (n << 6) | alphabet.indexOf(str.charAt(i + j)); k++ }
+    n <<= (4 - k) * 6
+    if (k > 1) bytes.push((n >> 16) & 255)
+    if (k > 2) bytes.push((n >> 8) & 255)
+    if (k > 3) bytes.push(n & 255)
+  }
+  var out = "", p = 0
+  while (p < bytes.length) {
+    var b = bytes[p++]
+    var extra = b < 128 ? 0 : (b < 224 ? 1 : (b < 240 ? 2 : 3))
+    var cp = extra === 0 ? b : (extra === 1 ? b & 31 : (extra === 2 ? b & 15 : b & 7))
+    for (var e = 0; e < extra && p < bytes.length; e++) cp = (cp << 6) | (bytes[p++] & 63)
+    out += String.fromCodePoint(cp)
+  }
+  return out
+}
+
+// Omarchy's effect ids run words together; the chips say them apart.
+var EFFECT_LABELS = { binarypath: "binary path", blackhole: "black hole", bouncyballs: "bouncy balls", colorshift: "colour shift", errorcorrect: "error correct", laseretch: "laser etch", middleout: "middle out", orbittingvolley: "orbiting volley", randomsequence: "random sequence", synthgrid: "synth grid", vhstape: "VHS tape" }
+function effectLabel(id) { return EFFECT_LABELS[id] || String(id || "") }
+
+// What an import's error means, for the tile: the common ones in plain
+// words, anything else as the tool said it, one line.
+function importFailureText(error) {
+  var e = String(error || "").trim().split("\n")[0]
+  if (e === "") return "it did not finish"
+  if (/not logged in|\/login|\b401\b|unauthori[sz]ed|authentication/i.test(e)) return "the agent isn't signed in"
+  if (/rate.?limit|quota|\b429\b|usage limit|over.*limit|too many requests/i.test(e)) return "the agent is over its limit"
+  if (/timed? ?out/i.test(e)) return "it took too long and was stopped"
+  if (/no art in it/i.test(e)) return "the agent answered without any art"
+  return e.length > 90 ? e.substring(0, 89) + "…" : e
+}
+
 // ---- menu override (jsonc) ------------------------------------------------------
 
 var MENU_MARKER = "// stelline: System > Screensaver opens Stelline (Finish setup)"
-var MENU_ENTRY = '"system.screensaver": {"action": "omarchy-shell stelline show"},'
+// With the plugin gone (removed without Put the old one back, or the shell
+// not up yet) the entry falls through to the stock launcher, so System ›
+// Screensaver never goes dead.
+var MENU_ENTRY = '"system.screensaver": {"action": "omarchy-shell stelline show || omarchy-launch-screensaver force"},'
+// What an earlier version wrote; still taken out when the override goes.
+var MENU_ENTRY_OLD = '"system.screensaver": {"action": "omarchy-shell stelline show"},'
 
 // Omarchy's reader strips whole-line // comments and trailing commas; mirror it.
 function jsoncParse(text) {
@@ -765,7 +932,7 @@ function menuRemoveOverride(text) {
   if (!menuHasOverride(src)) return src
   var lines = src.split("\n").filter(function(line) {
     var t = line.trim()
-    return t !== MENU_MARKER && t !== MENU_ENTRY
+    return t !== MENU_MARKER && t !== MENU_ENTRY && t !== MENU_ENTRY_OLD
   })
   var next = lines.join("\n")
   try { jsoncParse(next) } catch (e) { return null }
@@ -863,7 +1030,10 @@ function widgetDefaults(cfg) {
     // Which figure the agent is drawn as. The shapes on offer live with the
     // drawings, in savers/Robot.js; nothing stored here means the usual one,
     // and a shape from a later version falls back to it.
-    agent: { on: card.showAgent !== false, place: "corner", figure: "" }
+    // `detail`: "state" says which agent and whether it needs you; "titles"
+    // adds what each session is on (its title, or the project folder) —
+    // opt-in, since the screen is unattended while it shows.
+    agent: { on: card.showAgent !== false, place: "corner", figure: "", detail: "state" }
   }
 }
 
@@ -1042,11 +1212,17 @@ function parseAgentProbe(text) {
 
 // The one line under the robot: what the most pressing session is up to, and
 // how many others there are.
-function agentSummary(sessions) {
+// What a session is on — its title, or the project folder — only when the
+// tile asks for it ("titles"); the default names the agent and nothing more.
+function agentSessionWhat(s, detail) {
+  if (detail !== "titles" || !s) return ""
+  return s.title ? String(s.title) : (s.project ? String(s.project) : "")
+}
+function agentSummary(sessions, detail) {
   var list = Array.isArray(sessions) ? sessions : []
   if (list.length === 0) return { state: "idle", count: 0, line: "" }
   var top = list[0]
-  var what = top.title ? String(top.title) : (top.project ? String(top.project) : "")
+  var what = agentSessionWhat(top, detail)
   var line = String(top.name || agentName(String(top.agent || "")))
   if (what !== "") line += " · " + what
   if (list.length > 1) {
@@ -1803,7 +1979,7 @@ function prepBash(stretch) {
   return [
   "prep() {",
   "  prep_path=$1; prep_flags=''; local a m",
-  "  magick \"$1[0]\" -auto-orient -resize '800x800>' -resize '" + k + "%x100%' \"$2\" 2>/dev/null || return 0",
+  "  magick \"${1//%/%%}[0]\" -auto-orient -resize '800x800>' -resize '" + k + "%x100%' \"$2\" 2>/dev/null || return 0",
   "  prep_path=$2",
   "  a=$(magick \"$2\" -alpha extract -format '%[fx:mean]' info: 2>/dev/null || echo 1)",
   "  if awk -v a=\"$a\" 'BEGIN { exit !(a > 0.9) }'; then",
@@ -1838,7 +2014,7 @@ function previewScript(stageDir, cellAspect, detail) {
     "    command -v ffmpeg >/dev/null 2>&1 || die 'needs ffmpeg for clips'",
     "    ffmpeg -v error -y -ss 1 -i \"$src\" -frames:v 1 \"$frame\" 2>/dev/null || ffmpeg -v error -y -i \"$src\" -frames:v 1 \"$frame\" 2>/dev/null || die 'the clip could not be read'",
     "    img=$frame; extra=--no-trim ;;",
-    "  *.gif) magick \"$src[0]\" \"$frame\" 2>/dev/null && img=$frame ;;",
+    "  *.gif) magick \"${src//%/%%}[0]\" \"$frame\" 2>/dev/null && img=$frame ;;",
     "esac",
     "prep \"$img\" \"$stage/prep.png\"",
     "dots_art \"$prep_path\" \"$stage/preview.txt\" " + ASCII_COLUMNS + " " + ASCII_ROWS + " \"$prep_flags $extra\" " + detailLevel(detail) + " || die 'it could not be converted'",
@@ -1872,6 +2048,16 @@ function parsePicked(kind, paths) {
   return classifyPaths(list)
 }
 
+// An import the shell took down with it (a restart or a crash part-way)
+// leaves its saver.json saying it is still being made. Given those folders,
+// this marks each one stopped, so the tile offers Try again instead of
+// waiting for nothing.
+function orphanStampBash() {
+  return "command -v jq >/dev/null 2>&1 || exit 0; for d in \"$@\"; do f=\"$d/saver.json\"; [[ -f $f ]] || continue; " +
+    "jq -c 'del(.importing) | .error=\"stopped\"' \"$f\" > \"$f.tmp\" 2>/dev/null && mv -f \"$f.tmp\" \"$f\" || rm -f \"$f.tmp\"; done; " +
+    "[[ -n ${1:-} ]] && touch \"$(dirname \"$1\")/.stamp\"; exit 0"
+}
+
 // The bash that builds one saver, written by the service to a file and run
 // in the background. Everything lands under `dir`; saver.json is written
 // first with importing:true (the tile appears at once) and rewritten at the
@@ -1890,7 +2076,10 @@ function importScript(spec, rootDir, stageDir) {
     "mkdir -p \"$dir\" || exit 1",
     "tmp=$(mktemp -d)",
     // A tile deleted while this ran has nowhere to write and nothing to say.
-    "fail() { [[ -d $dir ]] || { rm -rf \"$tmp\"; exit 1; }; printf %s " + q(metaJson(spec, { error: "__MSG__" })).replace("__MSG__", "'\"$1\"'") + " > \"$dir/saver.json\"; touch \"$root/.stamp\"; " + notify("󰀦", "__MSG__").replace("__MSG__", "'\"$1\"'") + "; rm -rf \"$tmp\"; exit 1; }",
+    // The reason goes into saver.json as data, never spliced into the JSON
+    // text: an agent's error line can carry quotes. Without jq (the first
+    // thing checked) the reason is that.
+    "fail() { [[ -d $dir ]] || { rm -rf \"$tmp\"; exit 1; }; if command -v jq >/dev/null 2>&1; then jq -c --arg e \"$1\" '.error=$e' <<<" + q(metaJson(spec, {})) + " > \"$dir/saver.json\"; else printf %s " + q(metaJson(spec, { error: "needs jq" })) + " > \"$dir/saver.json\"; fi; touch \"$root/.stamp\"; omarchy-notification-send -g " + q("󰀦") + " " + q("Stelline") + " \"$1\" >/dev/null 2>&1 || true; rm -rf \"$tmp\"; exit 1; }",
     "trap 'rm -rf \"$tmp\"' EXIT",
     // What this kind needs, said plainly rather than blamed on the file.
     "need() { command -v \"$1\" >/dev/null 2>&1 || fail \"needs $2\"; }",
@@ -1905,6 +2094,8 @@ function importScript(spec, rootDir, stageDir) {
   }
   var listTxt = "pieces=$(ls -1 \"$dir\"/*.txt 2>/dev/null | xargs -rn1 basename | jq -R . | jq -sc .); [[ $pieces != '[]' ]] || fail 'nothing could be converted'"
   var paths = (spec.paths || []).map(q).join(" ")
+  // A folder and a clip are one path each; only it may stand in command position.
+  var first = q(String(Array.isArray(spec.paths) && spec.paths.length ? spec.paths[0] : ""))
   var style = spec.style === "image" ? "image" : "ascii"
   // A pasted picture lives in the runtime directory, gone at logout: it is
   // copied into the saver, and saver.json names the copy.
@@ -1916,7 +2107,7 @@ function importScript(spec, rootDir, stageDir) {
   if (spec.source === "images" || spec.source === "folder") {
     lines.push("srcs=()")
     if (spec.source === "folder") {
-      lines.push("while IFS= read -r f; do srcs+=(\"$f\"); done < <(" + findPicturesBash(paths) + ")")
+      lines.push("while IFS= read -r f; do srcs+=(\"$f\"); done < <(" + findPicturesBash(first) + ")")
     } else {
       lines.push("for f in " + paths + "; do [[ -f $f ]] && srcs+=(\"$f\"); done")
     }
@@ -1924,7 +2115,7 @@ function importScript(spec, rootDir, stageDir) {
     if (spec.source === "images") lines.push(keep("srcs"), srcJson("srcs"))
     else lines.push("srcjson=" + q(JSON.stringify(spec.paths || [])))
     if (style === "image") {
-      if (spec.source === "folder") lines.push(finish("--arg folder " + paths + " '.folder=$folder'"))
+      if (spec.source === "folder") lines.push(finish("--arg folder " + first + " '.folder=$folder'"))
       else lines.push(finish("--argjson srcs \"$srcjson\" '.pieces=$srcs | .source.paths=$srcs'"))
     } else {
       lines.push(
@@ -1946,7 +2137,7 @@ function importScript(spec, rootDir, stageDir) {
   } else if (spec.source === "video") {
     var fps = Math.max(2, Math.min(24, Math.round(Number(spec.fps) || 10)))
     var secs = Math.max(1, Math.min(120, Math.round(Number(spec.seconds) || 20)))
-    lines.push("src=" + paths, "[[ -f $src ]] || fail 'clip not found'", "need ffmpeg ffmpeg")
+    lines.push("src=" + first, "[[ -f $src ]] || fail 'clip not found'", "need ffmpeg ffmpeg")
     if (style === "image") {
       lines.push(
         "ffmpeg -v error -y -i \"$src\" -t " + secs + " -vf \"fps=" + Math.min(fps, 15) + ",scale=960:-2:flags=lanczos,split[a][b];[a]palettegen=max_colors=128[p];[b][p]paletteuse=dither=bayer:bayer_scale=3\" \"$dir/clip.gif\" || fail 'ffmpeg could not read the clip'",
@@ -2023,7 +2214,7 @@ function importScript(spec, rootDir, stageDir) {
       // files, since a picture is far bigger than an argument may be.
       "if [[ -z $out && -n ${ANTHROPIC_API_KEY:-} ]]; then",
       "  jq -n --arg p \"$ask\" '[{type:\"text\", text:$p}]' > \"$tmp/parts.json\"",
-      "  i=0; for f in \"${imgs[@]}\"; do i=$((i+1)); magick \"$f[0]\" -resize '1568x1568>' \"$tmp/img$i.png\" 2>/dev/null || continue; base64 -w0 \"$tmp/img$i.png\" > \"$tmp/img$i.b64\"; jq --rawfile d \"$tmp/img$i.b64\" '[{type:\"image\", source:{type:\"base64\", media_type:\"image/png\", data:$d}}] + .' \"$tmp/parts.json\" > \"$tmp/parts2.json\" && mv \"$tmp/parts2.json\" \"$tmp/parts.json\"; done",
+      "  i=0; for f in \"${imgs[@]}\"; do i=$((i+1)); magick \"${f//%/%%}[0]\" -resize '1568x1568>' \"$tmp/img$i.png\" 2>/dev/null || continue; base64 -w0 \"$tmp/img$i.png\" > \"$tmp/img$i.b64\"; jq --rawfile d \"$tmp/img$i.b64\" '[{type:\"image\", source:{type:\"base64\", media_type:\"image/png\", data:$d}}] + .' \"$tmp/parts.json\" > \"$tmp/parts2.json\" && mv \"$tmp/parts2.json\" \"$tmp/parts.json\"; done",
       "  jq -n --slurpfile c \"$tmp/parts.json\" --arg m \"${model:-claude-opus-5}\" --arg e \"$effort\" --arg s \"$system\" '{model:$m, max_tokens:64000, output_config:{effort:$e}, fallbacks:\"default\", system:$s, messages:[{role:\"user\", content:$c[0]}]}' > \"$tmp/body.json\"",
       "  resp=$(curl -s --max-time 600 https://api.anthropic.com/v1/messages -H 'content-type: application/json' -H \"x-api-key: $ANTHROPIC_API_KEY\" -H 'anthropic-version: 2023-06-01' -H 'anthropic-beta: server-side-fallback-2026-07-01' -d @\"$tmp/body.json\") || resp=''",
       "  [[ $(jq -r '.stop_reason // empty' <<<\"$resp\" 2>/dev/null) == refusal ]] && fail 'the model declined that description'",
@@ -2273,6 +2464,11 @@ function forgetSaver(cfg, saverId) {
 
 if (typeof module !== "undefined") {
   module.exports = {
+  effectLabel: effectLabel, importFailureText: importFailureText,
+  agentSessionWhat: agentSessionWhat,
+  screenSaverBusScript: screenSaverBusScript, parseBusLine: parseBusLine, inhibitorLabel: inhibitorLabel, isFullscreen: isFullscreen,
+  fromBase64: fromBase64,
+  orphanStampBash: orphanStampBash,
     PLUGIN_ID: PLUGIN_ID,
     SAVERS: SAVERS,
     saverById: saverById,

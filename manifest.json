@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "io.github.aashbury.stelline",
   "name": "Stelline",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "author": "aashbury",
   "license": "MIT",
   "homepage": "https://github.com/aashbury/stelline",
@@ -36,7 +36,8 @@
       "saver": "wordmark",
       "shuffle": false,
       "screensaverEnabled": true,
-      "lockEnabled": true
+      "lockEnabled": true,
+      "holdFullscreen": false
     },
     "schema": [
       {
@@ -61,6 +62,12 @@
         "type": "boolean",
         "label": "Lock at the lock timeout",
         "description": "Off keeps the screensaver but never locks on idle."
+      },
+      {
+        "key": "holdFullscreen",
+        "type": "boolean",
+        "label": "Not while a window is fullscreen",
+        "description": "Holds the screensaver and the lock off while the active window is fullscreen, for games that never ask."
       }
     ]
   }

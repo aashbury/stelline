@@ -38,7 +38,7 @@ Section {
   ActionRow {
     width: parent.width - parent.leftPadding - parent.rightPadding
     glyph: "󰌌"
-    label: "Super+Ctrl+S starts it"
+    label: "Super+Ctrl+S shows the screensaver"
     description: root.hotkeyBound ? "Already in your key bindings" : "A line for your key bindings file"
     buttonText: root.copied ? "Copied" : (root.hotkeyBound ? "Copy it again" : "Copy the line")
     buttonIcon: root.copied ? "󰄬" : "󰆏"

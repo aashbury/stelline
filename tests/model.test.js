@@ -154,11 +154,20 @@ test("finish setup removes StayAwake from the indicators, remembers the list, an
   assert.equal(c2.bar.layout.center[0].items, undefined)
 })
 
+test("the remembered indicator list survives a settings round trip, and a list an older version joined with commas still restores", () => {
+  const list = ["ScreenRecording", "Reminder", "NightLight", "Dnd", "StayAwake"]
+  const merged = M.mergeSettings({ setup: { done: true, indicatorsItemsBefore: list } }, [])
+  assert.deepEqual(merged.setup.indicatorsItemsBefore, list)
+  const c = { bar: { layout: { left: [], center: [{ id: "omarchy.indicators", items: ["ScreenRecording", "Reminder", "NightLight", "Dnd"] }, { id: M.PLUGIN_ID, setup: { done: true, indicatorsItemsBefore: list.join(",") } }], right: [] } }, plugins: [] }
+  assert.ok(M.applyUndoSetup(c, M.PLUGIN_ID))
+  assert.deepEqual(c.bar.layout.center[0].items, list)
+})
+
 test("menu override inserts before the final brace, survives a comment-only template, refuses a broken file, and removes cleanly", () => {
   const template = "// Omarchy menu extensions\n// \"setup.x\": {\"label\": \"X\"}\n{\n}\n"
   const out = M.menuInsertOverride(template)
   assert.ok(out.includes(M.MENU_MARKER))
-  assert.equal(M.jsoncParse(out)["system.screensaver"].action, "omarchy-shell stelline show")
+  assert.equal(M.jsoncParse(out)["system.screensaver"].action, "omarchy-shell stelline show || omarchy-launch-screensaver force")
   const withUser = '{\n  "setup.custom": {"label": "Mine", "action": "true"},\n}\n'
   const out2 = M.menuInsertOverride(withUser)
   const parsed = M.jsoncParse(out2)
@@ -167,6 +176,11 @@ test("menu override inserts before the final brace, survives a comment-only temp
   assert.equal(M.menuInsertOverride(out2), out2)
   assert.equal(M.menuInsertOverride('{ "broken": '), null)
   assert.equal(M.menuInsertOverride(""), M.menuInsertOverride("{}"))
+  // the entry falls back to the stock launcher, and an older entry still comes out
+  assert.ok(out.indexOf("|| omarchy-launch-screensaver force") !== -1)
+  const older = out.replace(" || omarchy-launch-screensaver force", "")
+  assert.ok(M.menuHasOverride(older))
+  assert.equal(M.menuRemoveOverride(older).indexOf("system.screensaver"), -1)
   const back = M.menuRemoveOverride(out2)
   assert.ok(!M.menuHasOverride(back))
   assert.equal(M.jsoncParse(back)["system.screensaver"], undefined)
@@ -256,7 +270,7 @@ test("import scripts: each source produces a self-contained bash pipeline", () =
   assert.match(gif, /palettegen/)
   assert.match(gif, /\.pieces=\["clip\.gif"\]/)
   const txt = M.importScript({ ...base, source: "text", text: "Acme Co." }, root)
-  assert.match(txt, /label:"\$text"/)
+  assert.match(txt, /label:@-/)
   // drawn like a wordmark: in tones, packed to braille, not transcoded
   assert.match(txt, /LC_ALL=C awk/)
   assert.doesNotMatch(txt, /--mode block/)
@@ -378,7 +392,7 @@ test("a wordmark's word: the setting, then what it was made from, then the defau
 
 test("wordmarkScript draws a word and refuses an empty one", () => {
   const sh = M.wordmarkScript("Acme Co.", "/home/you/art.txt")
-  assert.match(sh, /label:"\$text"/)
+  assert.match(sh, /label:@-/)
   // drawn in tones and packed into braille here, not transcoded to blocks
   assert.match(sh, /-shear 12x0/)
   assert.match(sh, /LC_ALL=C awk/)
@@ -571,8 +585,11 @@ test("agent sessions: Claude's own status wins, waitingFor tells needs from wait
   const sum = M.agentSummary(list)
   assert.equal(sum.state, "needs")
   assert.equal(sum.count, 3)
-  assert.equal(sum.line, "Claude Code · Fix the login form · 3 sessions")
-  assert.equal(M.agentSummary([{ agent: "gemini", project: "site", state: "working" }]).line, "Gemini · site")
+  assert.equal(sum.line, "Claude Code · 3 sessions")
+  assert.equal(M.agentSummary(list, "titles").line, "Claude Code · Fix the login form · 3 sessions")
+  assert.equal(M.agentSummary([{ agent: "gemini", project: "site", state: "working" }]).line, "Gemini")
+  assert.equal(M.agentSummary([{ agent: "gemini", project: "site", state: "working" }], "titles").line, "Gemini · site")
+  assert.equal(M.widgetsOf({}, {}).agent.detail, "state")
   assert.deepEqual(M.agentSummary([]), { state: "idle", count: 0, line: "" })
   assert.deepEqual(M.parseAgentProbe("nonsense"), [])
   assert.equal(M.agentStateLabel("needs"), "needs you")
@@ -1120,4 +1137,27 @@ test("a dot-matrix picture saver keeps its detail and can be drawn again at anot
   assert.equal(JSON.parse(M.metaJson({ ...spec, id: "p" }, {})).source.detail, 4)
   // and the old pieces go before the new ones are drawn
   assert.match(M.importScript({ ...spec, id: "p" }, "/r", "/s"), /rm -f "\$dir"\/\[0-9\]\[0-9\]\[0-9\]\.txt/)
+})
+
+test("base64 from the command line is read as UTF-8, and non-base64 is refused", () => {
+  const text = "café · ステリーネ — \"quoted\""
+  assert.equal(M.fromBase64(Buffer.from(text, "utf8").toString("base64")), text)
+  assert.equal(M.fromBase64(Buffer.from("ab", "utf8").toString("base64")), "ab")
+  assert.equal(M.fromBase64(""), "")
+  assert.equal(M.fromBase64("not base64!"), null)
+})
+
+test("D-Bus inhibitors: the helper's lines parse, the hero label reads well, fullscreen means 2", () => {
+  assert.deepEqual(M.parseBusLine('{"inhibitors":[{"app":"Firefox","reason":"video-playing"}]}'), { inhibitors: [{ app: "Firefox", reason: "video-playing" }] })
+  assert.equal(M.parseBusLine("Traceback (most recent call last)"), null)
+  assert.equal(M.parseBusLine(""), null)
+  assert.equal(M.inhibitorLabel([{ app: "Firefox", reason: "video-playing" }]), "Firefox — video playing")
+  assert.equal(M.inhibitorLabel([{ app: "Steam", reason: "" }, { app: "vlc", reason: "playing" }]), "Steam, +1")
+  assert.equal(M.inhibitorLabel([]), "")
+  assert.equal(M.isFullscreen('{"class":"steam_app_1","fullscreen":2}'), true)
+  assert.equal(M.isFullscreen('{"class":"foot","fullscreen":1}'), false)
+  assert.equal(M.isFullscreen("Invalid"), false)
+  assert.equal(M.defaults().holdFullscreen, false)
+  assert.equal(M.mergeSettings({ holdFullscreen: "true" }, []).holdFullscreen, true)
+  assert.ok(M.screenSaverBusScript().indexOf("org.freedesktop.ScreenSaver") !== -1)
 })

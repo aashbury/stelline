@@ -41,7 +41,10 @@ BorderSurface {
     return d
   }
   readonly property string mode: M.composeMode(live, ai)
-  readonly property bool canCreate: mode !== "" && !picking
+  // Not while the card has already said the conversion cannot happen: the
+  // import would fail the same way.
+  readonly property bool blocked: (attached && previewError !== "") || (kind === "words" && !!wordArt && String(wordArt.error || "") !== "")
+  readonly property bool canCreate: mode !== "" && !picking && !blocked
   readonly property string source: draft && draft.source ? String(draft.source) : ""
   readonly property bool attached: !!(draft && draft.source && Array.isArray(draft.paths) && draft.paths.length)
   readonly property bool hasPictures: attached && source === "images"
@@ -88,7 +91,7 @@ BorderSurface {
     return ""
   }
 
-  readonly property string agentHint: "Needs a coding agent: set one with omarchy default agent, or install Claude Code, or set ANTHROPIC_API_KEY."
+  readonly property string agentHint: "Needs a coding agent — Claude Code, Codex or another one Omarchy knows — or an Anthropic API key."
 
   // What the card holds is restored whenever it comes back: opened afresh,
   // or re-made with the panel while a chooser was up.
@@ -303,7 +306,7 @@ BorderSurface {
     Thumb {
       width: parent.each
       height: Math.round(parent.each * 0.66)
-      label: root.kind === "clip" ? "as dots, moving" : "as a dot matrix"
+      label: root.kind === "clip" ? "as dots, moving" : "as dots"
       chosen: root.style === "ascii"
       onPicked: root.style = "ascii"
       AsciiArt {
@@ -446,6 +449,17 @@ BorderSurface {
           PanelToolTip { visible: kindMouse.containsMouse && !kindCard.usable; text: root.agentHint }
         }
       }
+    }
+    // Why a card is greyed, said where it can be read, not only on hover.
+    Text {
+      width: parent.width
+      visible: root.ai === ""
+      wrapMode: Text.WordWrap
+      textFormat: Text.PlainText
+      text: "Describe it " + root.agentHint.charAt(0).toLowerCase() + root.agentHint.substring(1)
+      color: root.dim
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption
     }
 
     // ---- describe it ----

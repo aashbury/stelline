@@ -82,11 +82,25 @@ Item {
         var next = M.parseScan(String(text || ""))
         root.userSavers = next
         root.prunePending()
+        root.stampOrphans(next)
         root.logEvent("savers-scanned", next.length + " user saver" + (next.length === 1 ? "" : "s"))
       }
     }
     onExited: if (root.scanAgain) { root.scanAgain = false; scanDebounce.restart() }
   }
+  // A saver still marked as being made with nothing making it: the import
+  // went down with the shell. Marked stopped, the tile offers Try again.
+  function stampOrphans(savers) {
+    if (orphanStamp.running) return
+    var live = root.importingIds.concat(root.importQueue.map(function(q) { return q.id }))
+    var dirs = savers.filter(function(s) { return s.series && s.series.importing === true && live.indexOf(s.id) === -1 })
+      .map(function(s) { return root.userSaversDir + "/" + s.id })
+    if (!dirs.length) return
+    orphanStamp.command = ["bash", "-c", M.orphanStampBash(), "_"].concat(dirs)
+    orphanStamp.running = true
+    logEvent("import-orphaned", dirs.length + " marked stopped")
+  }
+  Process { id: orphanStamp; onExited: root.rescan() }
   FileView {
     id: userDirWatcher
     path: root.userSaversDir
@@ -96,7 +110,7 @@ Item {
   }
   Process {
     id: userDirSetup
-    command: ["bash", "-c", "mkdir -p " + M.shellQuote(root.userSaversDir)]
+    command: ["bash", "-c", "mkdir -p " + M.shellQuote(root.userSaversDir) + " " + M.shellQuote(root.runtimeDir)]
     onExited: { userDirWatcher.reload(); root.rescan() }
   }
 
@@ -112,7 +126,9 @@ Item {
   // shows up at once (saver.json is written first) and fills in when done.
   property var importQueue: []
   property var importingIds: []
-  readonly property string runtimeDir: Quickshell.env("XDG_RUNTIME_DIR") || "/tmp"
+  // Scratch that only this user can reach: never a shared /tmp, where a
+  // planted name could be run as us.
+  readonly property string runtimeDir: Quickshell.env("XDG_RUNTIME_DIR") || (home + "/.cache/stelline")
   // The panel's in-progress "Add": kept here so it survives the panel closing
   // while the file chooser is up.
   property var importDraft: null
@@ -373,13 +389,22 @@ Item {
     return "ok"
   }
 
+  // Drawn one at a time. A word set while another is being drawn waits its
+  // turn, and the latest word for a saver replaces one still waiting.
+  property var wordmarkQueue: []
   function renderWordmark(id, text) {
-    if (root.renderingWordmarks.indexOf(id) !== -1) return
-    root.renderingWordmarks = root.renderingWordmarks.concat([id])
-    var path = root.runtimeDir + "/stelline-wordmark-" + id + ".sh"
-    wordmarkWriter.pending = { id: id, path: path }
-    runProcess(wordmarkWriter, "wordmark-write " + id,
-      "printf %s " + M.shellQuote(M.wordmarkScript(text, root.wordmarkArtPath(id))) + " > " + M.shellQuote(path))
+    root.wordmarkQueue = root.wordmarkQueue.filter(function(j) { return j.id !== id }).concat([{ id: id, text: text }])
+    if (root.renderingWordmarks.indexOf(id) === -1) root.renderingWordmarks = root.renderingWordmarks.concat([id])
+    runNextWordmark()
+  }
+  function runNextWordmark() {
+    if (wordmarkWriter.running || wordmarkRunner.running || !root.wordmarkQueue.length) return
+    var job = root.wordmarkQueue[0]
+    root.wordmarkQueue = root.wordmarkQueue.slice(1)
+    var path = root.runtimeDir + "/stelline-wordmark-" + job.id + ".sh"
+    wordmarkWriter.pending = { id: job.id, path: path }
+    if (!runProcess(wordmarkWriter, "wordmark-write " + job.id,
+      "printf %s " + M.shellQuote(M.wordmarkScript(job.text, root.wordmarkArtPath(job.id))) + " > " + M.shellQuote(path))) finishWordmark(job.id)
   }
   Process {
     id: wordmarkWriter
@@ -387,9 +412,9 @@ Item {
     onExited: function(exitCode) {
       var job = wordmarkWriter.pending
       wordmarkWriter.pending = null
-      if (exitCode !== 0 || !job) { root.finishWordmark(job ? job.id : "") ; return }
+      if (exitCode !== 0 || !job) { root.finishWordmark(job ? job.id : ""); return }
       wordmarkRunner.jobId = job.id
-      root.runProcess(wordmarkRunner, "wordmark " + job.id, "bash " + M.shellQuote(job.path) + "; rm -f " + M.shellQuote(job.path))
+      if (!root.runProcess(wordmarkRunner, "wordmark " + job.id, "bash " + M.shellQuote(job.path) + "; rm -f " + M.shellQuote(job.path))) root.finishWordmark(job.id)
     }
   }
   Process {
@@ -404,7 +429,9 @@ Item {
     }
   }
   function finishWordmark(id) {
-    root.renderingWordmarks = root.renderingWordmarks.filter(function(i) { return i !== id })
+    var waiting = root.wordmarkQueue.some(function(j) { return j.id === id })
+    if (!waiting) root.renderingWordmarks = root.renderingWordmarks.filter(function(i) { return i !== id })
+    runNextWordmark()
   }
 
   // The clipboard as a source. `clipboardHas` is "image" (bytes), "paths"
@@ -417,8 +444,11 @@ Item {
     clipProbe.command = ["bash", "-c", M.clipboardProbeScript()]
     clipProbe.running = true
   }
-  // Copy something after the card is up and Paste appears on its own.
-  Timer { interval: 1500; repeat: true; running: M.isPlainObject(root.importDraft) && !paster.running && !picker.running; onTriggered: root.refreshClipboard() }
+  // Copy something after the card is up and Paste appears on its own. Only
+  // while the panel is open: a card left behind is looked at again when the
+  // panel is.
+  property bool panelOpen: false
+  Timer { interval: 1500; repeat: true; running: root.panelOpen && M.isPlainObject(root.importDraft) && !paster.running && !picker.running; onTriggered: root.refreshClipboard() }
   Process {
     id: clipProbe
     stdout: SplitParser { onRead: function(line) { var t = String(line).trim(); root.clipboardHas = (t === "image" || t === "paths") ? t : "" } }
@@ -645,7 +675,71 @@ Item {
   readonly property int firstIdleTimeoutSeconds: M.firstTimeout(effective)
   readonly property int screensaverDelaySeconds: Math.max(0, screensaverTimeoutSeconds - firstIdleTimeoutSeconds)
   readonly property int lockDelaySeconds: Math.max(0, lockTimeoutSeconds - firstIdleTimeoutSeconds)
-  readonly property bool idleEnabled: stayAwakeStateLoaded && !stayAwake && (screensaverStageEnabled || lockStageEnabled)
+  readonly property bool idleEnabled: stayAwakeStateLoaded && !stayAwake && !inhibited && !heldByFullscreen && (screensaverStageEnabled || lockStageEnabled)
+
+  // ---- held off: by an app that asked, or by a fullscreen window ----------------
+  // Browsers, players and Steam ask over D-Bus (org.freedesktop.ScreenSaver)
+  // not to start the screensaver; a helper owns that name for the shell and
+  // reports who is holding it. While anything does, neither stage fires —
+  // the same as the Wayland idle-inhibit requests the monitor honours itself.
+  property var inhibitors: []
+  property bool busOwned: false
+  readonly property bool inhibited: inhibitors.length > 0
+  onInhibitedChanged: if (inhibited && root.inIdleCycle) cancelIdleCycle("inhibited")
+  Process {
+    id: screenSaverBus
+    command: ["python3", "-c", M.screenSaverBusScript()]
+    running: true
+    stdout: SplitParser { onRead: function(line) { root.onBusLine(String(line)) } }
+    onExited: function(exitCode) {
+      root.busOwned = false
+      root.inhibitors = []
+      root.logEvent("screensaver-bus", "exited " + exitCode + (exitCode === 2 ? " (needs python-gobject)" : ""))
+      if (exitCode !== 2) busRetry.restart()
+    }
+  }
+  Timer { id: busRetry; interval: 60000; onTriggered: screenSaverBus.running = true }
+  function onBusLine(line) {
+    var m = M.parseBusLine(line)
+    if (!m) return
+    if (m.owner !== undefined) { root.busOwned = m.owner === true; logEvent("screensaver-bus", root.busOwned ? "owns org.freedesktop.ScreenSaver" : "name held by another service, waiting") }
+    if (Array.isArray(m.inhibitors)) { root.inhibitors = m.inhibitors; logEvent("inhibit", m.inhibitors.length ? M.inhibitorLabel(m.inhibitors) : "none") }
+    if (m.error) logEvent("screensaver-bus", String(m.error))
+    if (m.lock === true) lockSystem("dbus")
+  }
+
+  // A game that never asks: with the switch on, a fullscreen active window
+  // holds both stages off. Followed through Hyprland's own events, so
+  // nothing polls; one hyprctl call per change of window.
+  readonly property bool holdFullscreen: cfg.holdFullscreen === true
+  property bool fullscreenActive: false
+  readonly property bool heldByFullscreen: holdFullscreen && fullscreenActive
+  onHeldByFullscreenChanged: if (heldByFullscreen && root.inIdleCycle) cancelIdleCycle("fullscreen")
+  onHoldFullscreenChanged: if (holdFullscreen) probeFullscreen(); else fullscreenActive = false
+  function setHoldFullscreen(on) { return writeSettings({ holdFullscreen: !!on }) ? "ok" : "failed" }
+  Connections {
+    target: Hyprland
+    function onRawEvent(event) {
+      if (!root.holdFullscreen) return
+      var n = String(event.name)
+      if (n === "fullscreen" || n === "activewindow" || n === "closewindow" || n === "openwindow" || n === "workspace" || n === "focusedmon") fullscreenDebounce.restart()
+    }
+  }
+  Timer { id: fullscreenDebounce; interval: 300; onTriggered: root.probeFullscreen() }
+  function probeFullscreen() {
+    if (fullscreenProbe.running) { fullscreenDebounce.restart(); return }
+    fullscreenProbe.running = true
+  }
+  Process {
+    id: fullscreenProbe
+    command: ["hyprctl", "activewindow", "-j"]
+    stdout: StdioCollector {
+      onStreamFinished: {
+        var on = M.isFullscreen(text)
+        if (on !== root.fullscreenActive) { root.fullscreenActive = on; root.logEvent("fullscreen", on ? "the active window is fullscreen" : "no longer fullscreen") }
+      }
+    }
+  }
 
   // Changing the timeout of a live IdleMonitor does not re-register the
   // ext-idle-notify timer (upstream #8038); bounce `enabled` so it does.
@@ -799,7 +893,9 @@ Item {
     if (!shell || typeof shell.mutateShellConfig !== "function") return "failed"
     var changed = false
     shell.mutateShellConfig(function(config) { changed = M.applyUndoSetup(config, root.pluginId) })
-    if (root.cfg.integration && root.cfg.integration.menuEntry) setMenuEntry(false)
+    // The menu entry goes by what is in the file, not by the setting: a
+    // marker left by an earlier setup is taken out too.
+    if (root.menuOverrideActive) setMenuEntry(false)
     logEvent("undo-setup", changed ? "restored" : "nothing to do")
     return changed ? "ok" : "nothing-to-do"
   }
@@ -1164,6 +1260,7 @@ Item {
       saver: root.cfg.saver,
       overlay: { visible: root.overlayVisible, saver: root.overlaySaver, reason: root.overlayReason },
       stages: { screensaver: root.screensaverStageEnabled, lock: root.lockStageEnabled },
+      held: { inhibitors: root.inhibitors, fullscreen: root.heldByFullscreen, holdFullscreen: root.holdFullscreen, busOwned: root.busOwned },
       screensaverOff: root.screensaverOff,
       locked: root.locked,
       lockSource: root.lockSource,
@@ -1458,6 +1555,7 @@ Item {
 
   Component.onCompleted: {
     logEvent("service-ready")
+    if (holdFullscreen) probeFullscreen()
     refreshStayAwakeState()
     refreshScreensaverOff()
     refreshThemes()
@@ -1538,7 +1636,7 @@ Item {
 
     function set64(key: string, base64Json: string): string {
       var json
-      try { json = Qt.atob(base64Json) } catch (e) { return "bad-base64" }
+      json = M.fromBase64(base64Json); if (json === null) return "bad-base64"
       return root.applyJsonSetting(key, json)
     }
 
@@ -1557,7 +1655,8 @@ Item {
     // it survives `qs ipc` splitting arguments on commas.
     function import64(base64Json: string): string {
       var spec
-      try { spec = JSON.parse(Qt.atob(base64Json)) } catch (e) { return "bad-json" }
+      var raw64 = M.fromBase64(base64Json); if (raw64 === null) return "bad-base64"
+      try { spec = JSON.parse(raw64) } catch (e) { return "bad-json" }
       return root.importSaver(spec)
     }
     function deleteSaver(saverId: string): string { return root.deleteSaver(saverId) }
@@ -1566,12 +1665,13 @@ Item {
     function stop(saverId: string): string { return root.stopImport(saverId) }
     function rename64(saverId: string, base64Name: string): string {
       var t
-      try { t = Qt.atob(base64Name) } catch (e) { return "bad-base64" }
+      t = M.fromBase64(base64Name); if (t === null) return "bad-base64"
       return root.renameSaver(saverId, t)
     }
     function describe64(saverId: string, base64Json: string): string {
       var j
-      try { j = JSON.parse(Qt.atob(base64Json)) } catch (e) { return "bad-json" }
+      var raw64b = M.fromBase64(base64Json); if (raw64b === null) return "bad-base64"
+      try { j = JSON.parse(raw64b) } catch (e) { return "bad-json" }
       return root.redescribe(saverId, j && j.words, !j || j.animated !== false, !!(j && j.previous))
     }
     function cancelAdd(): string { root.importDraft = null; return "ok" }
@@ -1588,7 +1688,7 @@ Item {
     // `qs ipc` splits arguments on commas, so the word goes base64.
     function setText64(saverId: string, base64Text: string): string {
       var t
-      try { t = Qt.atob(base64Text) } catch (e) { return "bad-base64" }
+      t = M.fromBase64(base64Text); if (t === null) return "bad-base64"
       return root.setWordmarkText(saverId, t)
     }
 

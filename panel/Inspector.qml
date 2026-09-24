@@ -126,7 +126,7 @@ BorderSurface {
           text: root.deleteArmed ? "Click again to delete it, and every rule that points at it"
             : (root.importing ? (root.described ? "Drawing it now — Stop leaves the tile, to ask again" : "Converting…")
             : (root.stopped ? "Stopped before it was done"
-            : (root.failed ? "Import failed: " + root.saver.series.error
+            : (root.failed ? "Import failed: " + M.importFailureText(root.saver.series.error)
             : (root.saver && root.saver.about ? root.saver.about : (root.saver && root.saver.meta ? root.saver.meta : "")))))
           color: root.deleteArmed || (root.failed && !root.stopped) ? Color.urgent : root.dim
           font.family: root.fontFamily

@@ -22,7 +22,8 @@ BorderSurface {
   readonly property color dim: Qt.darker(fg, 1.4)
   readonly property string fontFamily: Style.font.family
 
-  visible: shown && total > 0
+  readonly property bool hasContent: total > 0
+  visible: shown && hasContent
   implicitWidth: Math.min(maxWidth, Math.max(Style.space(220) * k, column.implicitWidth + padding * 2))
   implicitHeight: column.implicitHeight + padding * 2
   padding: Style.space(14) * k
