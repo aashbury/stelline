@@ -17,6 +17,9 @@ Item {
   property bool thumbnail: false
   property var service: null
   property var settings: ({})
+  // The share of the width the art may take, set by the scene so it keeps
+  // out from under the corner widgets.
+  property real artRoom: 1
   property var series: ({})
 
   readonly property string kind: series && series.kind === "image" ? "image" : "ascii"
@@ -162,7 +165,7 @@ Item {
     visible: root.kind === "ascii" && !root.animating
     art: visible ? root.frame : ""
     cycleToken: root.token
-    fitWidth: root.thumbnail ? 0.8 : 0.8
+    fitWidth: Math.min(0.8, root.artRoom * 0.95)
     fitHeight: root.thumbnail ? 0.6 : 0.75
     ambientStyle: root.thumbnail ? "" : root.ambient
     effect: root.thumbnail ? "none" : root.effect

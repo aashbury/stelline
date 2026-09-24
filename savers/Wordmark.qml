@@ -17,6 +17,9 @@ Item {
   property bool thumbnail: false
   property var service: null
   property var settings: ({})
+  // The share of the width the art may take, set by the scene so it keeps
+  // out from under the corner widgets.
+  property real artRoom: 1
 
   readonly property color fg: Color.foreground
   readonly property color bg: settings && settings.background === "black" ? "black" : Color.background
@@ -121,6 +124,9 @@ Item {
   AsciiShow {
     id: show
     anchors.fill: parent
+    // The canvas stays the whole screen — the effects that use it do — but
+    // the word fits between the corner widgets.
+    fitWidth: Math.min(0.8, root.artRoom * 0.95)
     ambientStyle: root.thumbnail ? "" : root.ambient
     cycleToken: root.token
     onPhaseChanged: if (phase === "live") root.scheduleNext()

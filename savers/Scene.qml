@@ -39,10 +39,13 @@ Item {
       item.settings = Qt.binding(function() { return root.settings })
       if ("series" in item) item.series = Qt.binding(function() { return root.saver && root.saver.series ? root.saver.series : ({}) })
       item.active = Qt.binding(function() { return root.active })
+      // Art in dots keeps out from under the corner widgets.
+      if ("artRoom" in item) item.artRoom = Qt.binding(function() { return root.width > 0 ? Math.max(0.3, 1 - 2 * widgets.reserve / root.width) : 1 })
     }
   }
 
   Widgets {
+    id: widgets
     anchors.fill: parent
     visible: !root.external && loader.active
     service: root.service
