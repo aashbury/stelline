@@ -1161,3 +1161,16 @@ test("D-Bus inhibitors: the helper's lines parse, the hero label reads well, ful
   assert.equal(M.mergeSettings({ holdFullscreen: "true" }, []).holdFullscreen, true)
   assert.ok(M.screenSaverBusScript().indexOf("org.freedesktop.ScreenSaver") !== -1)
 })
+
+test("timingsSummary reads the two times, then only the exceptions that are on", () => {
+  assert.equal(M.timingsSummary({ screensaver: 300, lock: 600, lockOn: true }), "5:00 · lock 10:00")
+  assert.equal(M.timingsSummary({ screensaver: 150, lock: 600, lockOn: false }), "2:30 · no lock")
+  assert.equal(
+    M.timingsSummary({ screensaver: 300, lock: 600, lockOn: true, battery: { screensaver: 90, lock: "never" }, dockedNoLock: true, holdFullscreen: true }),
+    "5:00 · lock 10:00 · on battery 1:30, no lock · no lock docked · not over fullscreen")
+  assert.equal(M.timingsSummary({ screensaver: 300, lock: 600, battery: { screensaver: 90, lock: 180 } }), "5:00 · lock 10:00 · on battery 1:30")
+})
+
+test("timingsSummary drops lock-only exceptions while the lock is off", () => {
+  assert.equal(M.timingsSummary({ screensaver: 600, lock: 600, lockOn: false, dockedNoLock: true, battery: { screensaver: 90, lock: "never" } }), "10:00 · no lock · on battery 1:30")
+})

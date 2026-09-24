@@ -5,10 +5,10 @@ import qs.Ui
 import "../StellineModel.js" as M
 
 // The panel body. Level 1: hero, stay awake (the coffee cup — changed often,
-// so it sits at the top), the timings, the saver grid (click a tile = that
-// one plays). Level 2: a tile's gear opens it below the grid — when it
-// plays, how it looks, what sits on top, delete. Level 3: the Shortcuts row,
-// set once, collapsed to what it says.
+// so it sits at the top), and the saver grid (click a tile = that one plays)
+// with Shuffle and Preview in its header. Level 2: a tile's gear opens it
+// below the grid — how it looks, what sits on top, when it plays, delete.
+// Level 3: Timings and Shortcuts, set once, each folded to what it says.
 //
 // Nothing here explains itself in a sentence: the stock panels don't, and a
 // row that needs a caption is a row that needs a better label.
@@ -91,33 +91,38 @@ Column {
   readonly property int hiddenCount: savers.length - shownSavers.length
 
   // Cursor rows, in visual order — most-used first: the master switch, stay
-  // awake, the timings (with the two laptop rows, and the battery pair while
-  // it is open), then the gallery, then what gets set once. Tiles are one
-  // row each and end with "Show all" (when capped) and Add.
+  // awake, the gallery (its header's Shuffle and Preview, then one row per
+  // tile, ending with "Show all" when capped and Add), then the two folded
+  // rows set once. The timings' rows are cursor rows only while Timings is
+  // open: the two laptop rows, and the battery pair while that is on.
   readonly property int rowHero: 0
   readonly property int rowStayAwake: 1
-  readonly property int rowScreensaver: 2
-  readonly property int rowLock: 3
-  readonly property int rowBattery: hasLaptopRows ? 4 : -1
-  readonly property int rowBatteryScreensaver: batteryRowsOpen ? 5 : -1
-  readonly property int rowBatteryLock: batteryRowsOpen ? 6 : -1
-  readonly property int rowDockedLock: hasLaptopRows ? (batteryRowsOpen ? 7 : 5) : -1
-  readonly property int rowFullscreen: rowLock + 1 + (hasLaptopRows ? 2 : 0) + (batteryRowsOpen ? 2 : 0)
-  readonly property int rowPreview: rowFullscreen + 1
-  readonly property int rowTileFirst: rowPreview + 1
+  readonly property int rowShuffle: 2
+  readonly property int rowPreview: 3
+  readonly property int rowTileFirst: 4
   readonly property int tileCount: shownSavers.length + (gridToggle ? 1 : 0) + 1
   readonly property int rowMore: gridToggle ? rowTileFirst + shownSavers.length : -1
-  readonly property int rowShuffle: rowTileFirst + tileCount
-  readonly property int rowShortcuts: rowShuffle + 1
+  readonly property int rowTilesEnd: rowTileFirst + tileCount
+  readonly property int rowTimings: rowTilesEnd
+  readonly property bool timingsOpen: openSection === "timings"
+  readonly property int rowScreensaver: timingsOpen ? rowTimings + 1 : -1
+  readonly property int rowLock: timingsOpen ? rowTimings + 2 : -1
+  readonly property int rowBattery: timingsOpen && hasLaptopRows ? rowTimings + 3 : -1
+  readonly property int rowBatteryScreensaver: timingsOpen && batteryRowsOpen ? rowTimings + 4 : -1
+  readonly property int rowBatteryLock: timingsOpen && batteryRowsOpen ? rowTimings + 5 : -1
+  readonly property int rowDockedLock: timingsOpen && hasLaptopRows ? rowTimings + (batteryRowsOpen ? 6 : 4) : -1
+  readonly property int rowFullscreen: timingsOpen ? rowTimings + 3 + (hasLaptopRows ? 2 : 0) + (batteryRowsOpen ? 2 : 0) : -1
+  readonly property int rowShortcuts: timingsOpen ? rowFullscreen + 1 : rowTimings + 1
   readonly property int rowCount: rowShortcuts + 1
 
   // The item that owns a cursor row, for scrolling it into view.
   function rowItem(index) {
     if (index === rowHero) return hero
     if (index === rowStayAwake) return stayAwakeToggle
+    if (index === rowShuffle) return shuffleButton
     if (index === rowPreview) return previewButton
-    if (index >= rowTileFirst && index < rowShuffle) return tileRepeater.itemAt(index - rowTileFirst)
-    if (index === rowShuffle) return shuffleToggle
+    if (inTiles(index)) return tileRepeater.itemAt(index - rowTileFirst)
+    if (index === rowTimings) return timingsSection
     if (index === rowScreensaver) return screensaverRow
     if (index === rowLock) return lockRow
     if (index === rowBattery) return batteryRow
@@ -158,13 +163,17 @@ Column {
     id: revealSection
     interval: 60
     onTriggered: {
-      var item = root.rowItem(root.rowShortcuts)
-      if (!item) return
+      var item = root.openSection === "timings" ? timingsSection : shortcuts
       var p = item.mapToItem(root, 0, 0)
       root.ensureVisible(p.y, Math.min(item.height, Style.space(420)))
     }
   }
-  function toggleSection(name) { openSection = openSection === name ? "" : name }
+  // One folded row open at a time. The cursor stays on the row that folded,
+  // whose place in the order the other one's rows may have moved.
+  function toggleSection(name) {
+    openSection = openSection === name ? "" : name
+    if (cursorActive) cursorIndex = name === "timings" ? rowTimings : rowShortcuts
+  }
 
   // Opens at the top with nothing unfolded, the way every panel does; an
   // Add in progress is the one thing worth coming back to.
@@ -201,7 +210,7 @@ Column {
     cursorIndex = rowMore
   }
 
-  function inTiles(index) { return index >= rowTileFirst && index < rowShuffle }
+  function inTiles(index) { return index >= rowTileFirst && index < rowTilesEnd }
 
   function move(dx, dy) {
     if (!cursorActive) { cursorActive = true; return }
@@ -209,16 +218,20 @@ Column {
       var next
       if (inTiles(cursorIndex)) {
         next = cursorIndex + (dy > 0 ? columns : -columns)
-        if (next >= rowShuffle) next = rowShuffle
+        if (next >= rowTilesEnd) next = rowTimings
         else if (next < rowTileFirst) next = rowPreview
-      } else if (cursorIndex === rowPreview && dy > 0) next = rowTileFirst
-      else if (cursorIndex === rowShuffle && dy < 0) next = rowShuffle - 1
+      } else if ((cursorIndex === rowShuffle || cursorIndex === rowPreview) && dy > 0) next = rowTileFirst
+      else if ((cursorIndex === rowShuffle || cursorIndex === rowPreview) && dy < 0) next = rowStayAwake
+      else if (cursorIndex === rowTimings && dy < 0) next = rowTilesEnd - 1
       else next = cursorIndex + (dy > 0 ? 1 : -1)
       cursorIndex = Math.max(0, Math.min(rowCount - 1, next))
       return
     }
     if (dx !== 0) {
-      if (inTiles(cursorIndex)) cursorIndex = Math.max(rowTileFirst, Math.min(rowShuffle - 1, cursorIndex + (dx > 0 ? 1 : -1)))
+      // Shuffle and Preview share the gallery's header, side by side.
+      if (cursorIndex === rowShuffle && dx > 0) cursorIndex = rowPreview
+      else if (cursorIndex === rowPreview && dx < 0) cursorIndex = rowShuffle
+      else if (inTiles(cursorIndex)) cursorIndex = Math.max(rowTileFirst, Math.min(rowTilesEnd - 1, cursorIndex + (dx > 0 ? 1 : -1)))
       else if (cursorIndex === rowScreensaver) screensaverRow.nudge(dx > 0 ? 1 : -1)
       else if (cursorIndex === rowLock) lockRow.nudge(dx > 0 ? 1 : -1)
       else if (cursorIndex === rowBatteryScreensaver) batteryScreensaverRow.nudge(dx > 0 ? 1 : -1)
@@ -241,6 +254,7 @@ Column {
     else if (cursorIndex === rowMore) foldGrid()
     else if (inTiles(cursorIndex)) { var id = cursorSaverId(); if (id === "") startAdd(); else chooseSaver(id) }
     else if (cursorIndex === rowShuffle) toggleShuffle()
+    else if (cursorIndex === rowTimings) toggleSection("timings")
     else if (cursorIndex === rowLock) setStage("lockEnabled", !cfg.lockEnabled)
     else if (cursorIndex === rowBattery) setBatteryTimings(!batteryTimings)
     else if (cursorIndex === rowBatteryLock) patchBatteryTimings({ lock: batteryLocks ? "never" : lockSeconds })
@@ -422,174 +436,14 @@ Column {
 
   PanelSeparator { width: parent.width; foreground: root.foreground }
 
-  // ---- timings ----
-  PanelSectionHeader { text: "TIMINGS"; foreground: root.foreground; fontFamily: root.fontFamily }
-
-  SliderRow {
-    id: screensaverRow
-    width: parent.width
-    enabled: root.serviceOk
-    opacity: root.inertOpacity
-    bar: root.bar
-    glyph: "󱄄"
-    label: "Screensaver"
-    value: root.screensaverSeconds
-    minimum: 30
-    maximum: 1800
-    step: 30
-    format: function(v) { return M.mmss(v) }
-    parse: function(t) { return root.fromMinutes(t) }
-    foreground: root.foreground
-    fontFamily: root.fontFamily
-    hasCursor: root.cursorActive && root.cursorIndex === root.rowScreensaver
-    onReleased: function(v) { root.setSeconds("screensaver", v) }
-    onHovered: function(h) { root.hoverRow(root.rowScreensaver, h) }
-    onWheeled: function(d) { root.scrollBy(d) }
-    onEditingChanged: root.setEditing("screensaver", editing)
-  }
-
-  SliderRow {
-    id: lockRow
-    width: parent.width
-    enabled: root.serviceOk
-    opacity: root.inertOpacity
-    bar: root.bar
-    glyph: "󰌾"
-    label: "Lock"
-    value: root.lockSeconds
-    minimum: 60
-    maximum: 3600
-    step: 60
-    format: function(v) { return M.mmss(v) }
-    parse: function(t) { return root.fromMinutes(t) }
-    showSwitch: true
-    switchChecked: root.cfg.lockEnabled
-    foreground: root.foreground
-    fontFamily: root.fontFamily
-    hasCursor: root.cursorActive && root.cursorIndex === root.rowLock
-    onReleased: function(v) { root.setSeconds("lock", v) }
-    onSwitchToggled: root.setStage("lockEnabled", !root.cfg.lockEnabled)
-    onHovered: function(h) { root.hoverRow(root.rowLock, h) }
-    onWheeled: function(d) { root.scrollBy(d) }
-    onEditingChanged: root.setEditing("lock", editing)
-  }
-
-  // A laptop's two exceptions, where you look when the timings bother you.
-  // Each is an ordinary rule underneath.
-  SwitchRow {
-    id: batteryRow
-    visible: root.hasLaptopRows
-    enabled: root.serviceOk
-    opacity: root.inertOpacity
-    width: parent.width
-    glyph: "󰁹"
-    label: "Different timings on battery"
-    description: root.svc && root.svc.onBattery && root.batteryTimings ? "That's now" : ""
-    checked: root.batteryTimings
-    foreground: root.foreground
-    fontFamily: root.fontFamily
-    hasCursor: root.cursorActive && root.cursorIndex === root.rowBattery
-    onClicked: root.setBatteryTimings(!checked)
-    onHovered: function(h) { root.hoverRow(root.rowBattery, h) }
-  }
-  Column {
-    visible: root.batteryRowsOpen
-    enabled: root.serviceOk
-    opacity: root.inertOpacity
-    width: parent.width
-    leftPadding: Style.space(24)
-    spacing: Style.space(8)
-    SliderRow {
-      id: batteryScreensaverRow
-      width: parent.width - parent.leftPadding
-      bar: root.bar
-      glyph: "󱄄"
-      label: "Screensaver"
-      value: root.batteryScreensaver
-      minimum: 30
-      maximum: 1800
-      step: 30
-      format: function(v) { return M.mmss(v) }
-      parse: function(t) { return root.fromMinutes(t) }
-      foreground: root.foreground
-      fontFamily: root.fontFamily
-      hasCursor: root.cursorActive && root.cursorIndex === root.rowBatteryScreensaver
-      onReleased: function(v) { root.patchBatteryTimings({ screensaver: Math.round(v) }) }
-      onHovered: function(h) { root.hoverRow(root.rowBatteryScreensaver, h) }
-      onWheeled: function(d) { root.scrollBy(d) }
-      onEditingChanged: root.setEditing("batteryScreensaver", editing)
-    }
-    SliderRow {
-      id: batteryLockRow
-      width: parent.width - parent.leftPadding
-      bar: root.bar
-      glyph: "󰌾"
-      label: "Lock"
-      value: root.batteryLock
-      minimum: 60
-      maximum: 3600
-      step: 60
-      format: function(v) { return M.mmss(v) }
-      parse: function(t) { return root.fromMinutes(t) }
-      showSwitch: true
-      switchChecked: root.batteryLocks
-      foreground: root.foreground
-      fontFamily: root.fontFamily
-      hasCursor: root.cursorActive && root.cursorIndex === root.rowBatteryLock
-      onReleased: function(v) { root.patchBatteryTimings({ lock: Math.round(v) }) }
-      onSwitchToggled: root.patchBatteryTimings({ lock: root.batteryLocks ? "never" : root.lockSeconds })
-      onHovered: function(h) { root.hoverRow(root.rowBatteryLock, h) }
-      onWheeled: function(d) { root.scrollBy(d) }
-      onEditingChanged: root.setEditing("batteryLock", editing)
-    }
-  }
-
-  SwitchRow {
-    id: dockedLockRow
-    visible: root.hasLaptopRows
-    enabled: root.serviceOk
-    opacity: root.inertOpacity
-    width: parent.width
-    glyph: "󰍹"
-    label: "Never lock while docked"
-    description: root.svc && root.svc.docked && root.svc.dockedNoLock ? "That's now" : ""
-    checked: root.svc ? root.svc.dockedNoLock === true : false
-    foreground: root.foreground
-    fontFamily: root.fontFamily
-    hasCursor: root.cursorActive && root.cursorIndex === root.rowDockedLock
-    onClicked: if (root.svc) root.svc.setDockedNoLock(!checked)
-    onHovered: function(h) { root.hoverRow(root.rowDockedLock, h) }
-  }
-
-  // Video, browsers and Steam already hold the saver off by asking; this is
-  // for the games that never do. Off unless asked: a fullscreen editor left
-  // alone should still lock.
-  SwitchRow {
-    id: fullscreenRow
-    enabled: root.serviceOk
-    opacity: root.inertOpacity
-    width: parent.width
-    glyph: "󰊓"
-    label: "Not while a window is fullscreen"
-    description: root.svc && root.svc.heldByFullscreen ? "That's now" : ""
-    checked: root.svc ? root.svc.holdFullscreen === true : false
-    foreground: root.foreground
-    fontFamily: root.fontFamily
-    hasCursor: root.cursorActive && root.cursorIndex === root.rowFullscreen
-    onClicked: if (root.svc) root.svc.setHoldFullscreen(!checked)
-    onHovered: function(h) { root.hoverRow(root.rowFullscreen, h) }
-  }
-
-  PanelSeparator { width: parent.width; foreground: root.foreground }
-
   // ---- savers ----
-  // Preview rides the header: it plays whichever saver is chosen below, so
-  // this is where you look for it.
+  // Shuffle and Preview ride the header: both are about the grid below —
+  // Shuffle turns the tiles into checkboxes, Preview plays what they choose.
   Item {
     width: parent.width
     enabled: root.serviceOk
     opacity: root.inertOpacity
-    implicitHeight: Math.max(saversHeading.implicitHeight, previewButton.implicitHeight)
+    implicitHeight: Math.max(saversHeading.implicitHeight, headerButtons.implicitHeight)
 
     PanelSectionHeader {
       id: saversHeading
@@ -600,23 +454,54 @@ Column {
       fontFamily: root.fontFamily
     }
 
-    Button {
-      id: previewButton
+    Row {
+      id: headerButtons
       anchors.right: parent.right
       anchors.verticalCenter: parent.verticalCenter
-      text: "Preview"
-      iconText: "󰐊"
-      bordered: true
-      foreground: root.foreground
-      fontFamily: root.fontFamily
-      fontSize: Style.font.caption
-      hasCursor: root.cursorActive && root.cursorIndex === root.rowPreview
-      tooltipText: root.shuffling ? "Show one from the shuffle now" : "Show " + root.playingName + " now"
-      onClicked: root.preview("")
-      onHovered: function(h) { root.hoverRow(root.rowPreview, h) }
+      spacing: Style.space(6)
+
+      Button {
+        id: shuffleButton
+        text: "Shuffle"
+        iconText: "󰒟"
+        bordered: true
+        selected: root.cfg.shuffle === true
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        fontSize: Style.font.caption
+        hasCursor: root.cursorActive && root.cursorIndex === root.rowShuffle
+        tooltipText: root.cfg.shuffle ? "Back to one saver" : "Rotate through savers — tick the ones you want"
+        onClicked: root.toggleShuffle()
+        onHovered: function(h) { root.hoverRow(root.rowShuffle, h) }
+      }
+
+      Button {
+        id: previewButton
+        text: "Preview"
+        iconText: "󰐊"
+        bordered: true
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        fontSize: Style.font.caption
+        hasCursor: root.cursorActive && root.cursorIndex === root.rowPreview
+        tooltipText: root.shuffling ? "Show one from the shuffle now" : "Show " + root.playingName + " now"
+        onClicked: root.preview("")
+        onHovered: function(h) { root.hoverRow(root.rowPreview, h) }
+      }
     }
   }
 
+  // Shuffle on with nothing ticked plays everything; say so where the ticks are.
+  Text {
+    visible: root.shuffleUnticked
+    width: parent.width
+    textFormat: Text.PlainText
+    wrapMode: Text.WordWrap
+    text: "Every saver is in the shuffle — tick the ones you want"
+    color: Qt.darker(root.foreground, 1.4)
+    font.family: root.fontFamily
+    font.pixelSize: Style.font.caption
+  }
 
   Grid {
     id: grid
@@ -700,23 +585,175 @@ Column {
     }
   }
 
-  SwitchRow {
-    id: shuffleToggle
-    width: parent.width
+  PanelSeparator { width: parent.width; foreground: root.foreground }
+
+  // ---- timings ----
+  // Set once and then left alone, so folded to what they say: the two times
+  // and whichever exceptions are on. Open, the same rows as ever.
+  Section {
+    id: timingsSection
     enabled: root.serviceOk
     opacity: root.inertOpacity
-    glyph: "󰒟"
-    label: "Shuffle"
-    description: root.shuffleUnticked ? "Every saver — tick the ones you want" : ""
-    checked: root.cfg.shuffle
+    title: "Timings"
+    summary: M.timingsSummary({
+      screensaver: root.screensaverSeconds,
+      lock: root.lockSeconds,
+      lockOn: root.cfg.lockEnabled !== false,
+      battery: root.batteryRowsOpen ? { screensaver: root.batteryScreensaver, lock: root.batteryLocks ? root.batteryLock : "never" } : null,
+      dockedNoLock: root.hasLaptopRows && !!root.svc && root.svc.dockedNoLock === true,
+      holdFullscreen: !!root.svc && root.svc.holdFullscreen === true
+    })
+    bodySpacing: Style.space(8)
+    open: root.timingsOpen
     foreground: root.foreground
     fontFamily: root.fontFamily
-    hasCursor: root.cursorActive && root.cursorIndex === root.rowShuffle
-    onClicked: root.toggleShuffle()
-    onHovered: function(h) { root.hoverRow(root.rowShuffle, h) }
-  }
+    hasCursor: root.cursorActive && root.cursorIndex === root.rowTimings
+    onClicked: root.toggleSection("timings")
+    onHovered: function(h) { root.hoverRow(root.rowTimings, h) }
 
-  PanelSeparator { width: parent.width; foreground: root.foreground }
+    SliderRow {
+      id: screensaverRow
+      width: parent.width - parent.leftPadding - parent.rightPadding
+      bar: root.bar
+      glyph: "󱄄"
+      label: "Screensaver"
+      value: root.screensaverSeconds
+      minimum: 30
+      maximum: 1800
+      step: 30
+      format: function(v) { return M.mmss(v) }
+      parse: function(t) { return root.fromMinutes(t) }
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      hasCursor: root.cursorActive && root.cursorIndex === root.rowScreensaver
+      onReleased: function(v) { root.setSeconds("screensaver", v) }
+      onHovered: function(h) { root.hoverRow(root.rowScreensaver, h) }
+      onWheeled: function(d) { root.scrollBy(d) }
+      onEditingChanged: root.setEditing("screensaver", editing)
+    }
+
+    SliderRow {
+      id: lockRow
+      width: parent.width - parent.leftPadding - parent.rightPadding
+      bar: root.bar
+      glyph: "󰌾"
+      label: "Lock"
+      value: root.lockSeconds
+      minimum: 60
+      maximum: 3600
+      step: 60
+      format: function(v) { return M.mmss(v) }
+      parse: function(t) { return root.fromMinutes(t) }
+      showSwitch: true
+      switchChecked: root.cfg.lockEnabled
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      hasCursor: root.cursorActive && root.cursorIndex === root.rowLock
+      onReleased: function(v) { root.setSeconds("lock", v) }
+      onSwitchToggled: root.setStage("lockEnabled", !root.cfg.lockEnabled)
+      onHovered: function(h) { root.hoverRow(root.rowLock, h) }
+      onWheeled: function(d) { root.scrollBy(d) }
+      onEditingChanged: root.setEditing("lock", editing)
+    }
+
+    // A laptop's two exceptions, where you look when the timings bother you.
+    // Each is an ordinary rule underneath.
+    SwitchRow {
+      id: batteryRow
+      visible: root.hasLaptopRows
+      width: parent.width - parent.leftPadding - parent.rightPadding
+      glyph: "󰁹"
+      label: "Different timings on battery"
+      description: root.svc && root.svc.onBattery && root.batteryTimings ? "That's now" : ""
+      checked: root.batteryTimings
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      hasCursor: root.cursorActive && root.cursorIndex === root.rowBattery
+      onClicked: root.setBatteryTimings(!checked)
+      onHovered: function(h) { root.hoverRow(root.rowBattery, h) }
+    }
+    Column {
+      visible: root.batteryRowsOpen
+      width: parent.width - parent.leftPadding - parent.rightPadding
+      leftPadding: Style.space(24)
+      spacing: Style.space(8)
+      SliderRow {
+        id: batteryScreensaverRow
+        width: parent.width - parent.leftPadding
+        bar: root.bar
+        glyph: "󱄄"
+        label: "Screensaver"
+        value: root.batteryScreensaver
+        minimum: 30
+        maximum: 1800
+        step: 30
+        format: function(v) { return M.mmss(v) }
+        parse: function(t) { return root.fromMinutes(t) }
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        hasCursor: root.cursorActive && root.cursorIndex === root.rowBatteryScreensaver
+        onReleased: function(v) { root.patchBatteryTimings({ screensaver: Math.round(v) }) }
+        onHovered: function(h) { root.hoverRow(root.rowBatteryScreensaver, h) }
+        onWheeled: function(d) { root.scrollBy(d) }
+        onEditingChanged: root.setEditing("batteryScreensaver", editing)
+      }
+      SliderRow {
+        id: batteryLockRow
+        width: parent.width - parent.leftPadding
+        bar: root.bar
+        glyph: "󰌾"
+        label: "Lock"
+        value: root.batteryLock
+        minimum: 60
+        maximum: 3600
+        step: 60
+        format: function(v) { return M.mmss(v) }
+        parse: function(t) { return root.fromMinutes(t) }
+        showSwitch: true
+        switchChecked: root.batteryLocks
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        hasCursor: root.cursorActive && root.cursorIndex === root.rowBatteryLock
+        onReleased: function(v) { root.patchBatteryTimings({ lock: Math.round(v) }) }
+        onSwitchToggled: root.patchBatteryTimings({ lock: root.batteryLocks ? "never" : root.lockSeconds })
+        onHovered: function(h) { root.hoverRow(root.rowBatteryLock, h) }
+        onWheeled: function(d) { root.scrollBy(d) }
+        onEditingChanged: root.setEditing("batteryLock", editing)
+      }
+    }
+
+    SwitchRow {
+      id: dockedLockRow
+      visible: root.hasLaptopRows
+      width: parent.width - parent.leftPadding - parent.rightPadding
+      glyph: "󰍹"
+      label: "Never lock while docked"
+      description: root.svc && root.svc.docked && root.svc.dockedNoLock ? "That's now" : ""
+      checked: root.svc ? root.svc.dockedNoLock === true : false
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      hasCursor: root.cursorActive && root.cursorIndex === root.rowDockedLock
+      onClicked: if (root.svc) root.svc.setDockedNoLock(!checked)
+      onHovered: function(h) { root.hoverRow(root.rowDockedLock, h) }
+    }
+
+    // Video, browsers and Steam already hold the saver off by asking; this is
+    // for the games that never do. Off unless asked: a fullscreen editor left
+    // alone should still lock.
+    SwitchRow {
+      id: fullscreenRow
+      width: parent.width - parent.leftPadding - parent.rightPadding
+      glyph: "󰊓"
+      label: "Not while a window is fullscreen"
+      description: root.svc && root.svc.heldByFullscreen ? "That's now" : ""
+      checked: root.svc ? root.svc.holdFullscreen === true : false
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      hasCursor: root.cursorActive && root.cursorIndex === root.rowFullscreen
+      onClicked: if (root.svc) root.svc.setHoldFullscreen(!checked)
+      onHovered: function(h) { root.hoverRow(root.rowFullscreen, h) }
+    }
+  }
 
   // ---- shortcuts ----
   ShortcutsSection {

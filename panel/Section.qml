@@ -15,6 +15,10 @@ Column {
   property string fontFamily: Style.font.family
   readonly property color dim: Qt.darker(foreground, 1.4)
   default property alias content: body.data
+  property alias bodySpacing: body.spacing
+  // How far the rows inside sit in from the head. Inside a card whose other
+  // rows are not folded, 0 keeps every glyph and switch in one column.
+  property real inset: Style.space(8)
 
   signal clicked()
   signal hovered(bool isHovered)
@@ -80,8 +84,8 @@ Column {
     visible: root.open
     width: parent.width
     topPadding: Style.space(2)
-    leftPadding: Style.space(8)
-    rightPadding: Style.space(8)
+    leftPadding: root.inset
+    rightPadding: root.inset
     bottomPadding: Style.space(10)
     spacing: Style.space(4)
   }

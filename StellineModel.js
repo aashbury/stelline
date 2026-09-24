@@ -478,6 +478,19 @@ function mmss(seconds) {
   return m + ":" + (r < 10 ? "0" : "") + r
 }
 
+// The Timings row, folded: the two times, then only the exceptions that are
+// switched on, so a default setup reads as one short line.
+function timingsSummary(o) {
+  var t = o || {}
+  // With the lock off, the exceptions that only ever skip the lock say nothing.
+  var locks = t.lockOn !== false
+  var parts = [mmss(t.screensaver), locks ? "lock " + mmss(t.lock) : "no lock"]
+  if (t.battery) parts.push("on battery " + mmss(t.battery.screensaver) + (locks && t.battery.lock === "never" ? ", no lock" : ""))
+  if (t.dockedNoLock && locks) parts.push("no lock docked")
+  if (t.holdFullscreen) parts.push("not over fullscreen")
+  return parts.join(" · ")
+}
+
 // ---- status card ------------------------------------------------------------
 
 // Omarchy mirrors every toast to a one-line JSON file, and moves it into
@@ -2464,6 +2477,7 @@ function forgetSaver(cfg, saverId) {
 
 if (typeof module !== "undefined") {
   module.exports = {
+  timingsSummary: timingsSummary,
   effectLabel: effectLabel, importFailureText: importFailureText,
   agentSessionWhat: agentSessionWhat,
   screenSaverBusScript: screenSaverBusScript, parseBusLine: parseBusLine, inhibitorLabel: inhibitorLabel, isFullscreen: isFullscreen,
