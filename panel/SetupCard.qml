@@ -80,6 +80,9 @@ BorderSurface {
       Button {
         visible: !root.stale
         text: root.detailsOpen ? "Hide" : "What this changes"
+        // Bordered, with an icon, so it stands the same height as Finish setup.
+        iconText: root.detailsOpen ? "󰅃" : "󰋽"
+        bordered: true
         foreground: root.foreground
         fontFamily: root.fontFamily
         fontSize: Style.font.caption
