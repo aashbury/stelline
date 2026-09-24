@@ -3,10 +3,11 @@ import qs.Commons
 import qs.Ui
 import "../StellineModel.js" as M
 
-// The open tile, below the grid, the same three blocks for every saver:
-// when it plays (its rule — the only place a rule is edited), how it looks
-// (the knobs of its type), and what sits on top (the widgets). Delete for
-// anything but the Original. Editors only appear for what is switched on.
+// The open tile, below the grid, the same three blocks for every saver: how
+// it looks (its words or artwork, and the knobs of its type), what sits on
+// top (the widgets), and — folded to what it says — when it plays (its rule,
+// the only place a rule is edited). Delete for anything but the Original.
+// Editors only appear for what is switched on.
 BorderSurface {
   id: root
 
@@ -45,9 +46,11 @@ BorderSurface {
   // Armed for long enough to read the line that appears under the name.
   function armDelete() { deleteArmed = true; disarm.restart() }
   Timer { id: disarm; interval: 8000; onTriggered: root.deleteArmed = false }
-  onSaverIdChanged: { deleteArmed = false; renaming = false; describeField.text = described ? String(sourceInfo.prompt || "") : ""; describeAnimated = sourceInfo.animated !== false }
+  onSaverIdChanged: { deleteArmed = false; renaming = false; rulesOpen = false; describeField.text = described ? String(sourceInfo.prompt || "") : ""; describeAnimated = sourceInfo.animated !== false }
   Component.onCompleted: { describeField.text = described ? String(sourceInfo.prompt || "") : ""; describeAnimated = sourceInfo.animated !== false }
   property bool describeAnimated: true
+  // When it plays is folded unless asked for; most savers never get a rule.
+  property bool rulesOpen: false
 
   function startRename() { if (!renamable) return; nameField.text = saver.name; renaming = true; nameField.forceActiveFocus(); nameField.selectAll() }
   function finishRename() {
@@ -188,12 +191,14 @@ BorderSurface {
       }
     }
 
-    // ---- the description: its words, changed and drawn again ----
+    // ---- look: its words or artwork, then the knobs of its type ----
+    PanelSectionHeader { visible: root.described || root.showsBranding || (look.hasKnobs && !root.failed); text: "LOOK"; foreground: root.foreground; fontFamily: root.fontFamily }
+
+    // The description: its words, changed and drawn again.
     Column {
       visible: root.described
       width: parent.width
       spacing: Style.space(6)
-      PanelSectionHeader { text: "DESCRIPTION"; foreground: root.foreground; fontFamily: root.fontFamily }
       TextField {
         id: describeField
         width: parent.width
@@ -259,18 +264,64 @@ BorderSurface {
       }
     }
 
-    // ---- plays when ----
+    // The artwork: the branding file, same as Style › Screensaver.
     Column {
+      visible: root.showsBranding
+      width: parent.width
+      spacing: Style.space(6)
+      Flow {
+        width: parent.width
+        spacing: Style.space(6)
+        Button { text: "Use a picture…"; iconText: "󰋩"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; tooltipText: "A PNG or SVG, turned into text art"; onClicked: if (root.svc) root.svc.brandingImage() }
+        Button { text: "Edit the text…"; iconText: "󰏫"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; tooltipText: "Opens the art in your editor — the same file as Style › Screensaver"; onClicked: if (root.svc) root.svc.brandingText() }
+        Button { text: "Back to the Omarchy logo"; iconText: "󰕌"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: if (root.svc) root.svc.brandingReset() }
+      }
+    }
+
+    SaverSettings {
+      id: look
+      visible: hasKnobs && !root.failed
+      width: parent.width
+      saverId: root.saverId
+      saver: root.saver
+      settings: root.settings
+      svc: root.svc
+      bar: root.bar
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      leftPadding: 0
+      onPatched: function(patch) { if (root.svc) root.svc.writeSaverSetting(root.saverId, patch) }
+      onScrollBy: function(d) { if (root.body) root.body.scrollBy(d) }
+    }
+
+    // ---- on top: the widgets. The Original is Omarchy's own window and
+    // carries none. ----
+    WidgetRows {
+      visible: !root.external && !root.failed
+      width: parent.width
+      settings: root.settings
+      cfg: root.cfg
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      onPatched: function(patch) { if (root.svc) root.svc.writeSaverSetting(root.saverId, patch) }
+    }
+
+    // ---- plays when: every switch here writes a rule that belongs to this
+    // saver, and the tile's caption says so. Folded to what the rule says. ----
+    Section {
       visible: !root.failed
       width: parent.width
-      spacing: Style.space(2)
-
-      // Naming the saver here is the whole point: every switch below writes
-      // a rule that belongs to it, and the tile's caption says so.
-      PanelSectionHeader { text: "WHEN " + (root.saver && root.saver.name ? String(root.saver.name).toUpperCase() : "IT") + " PLAYS"; foreground: root.foreground; fontFamily: root.fontFamily }
+      title: "When it plays"
+      summary: root.rule && root.rule.enabled === true && M.situationLabel(root.rule) !== "" ? M.situationLabel(root.rule).toLowerCase() : "whenever it's chosen"
+      bodySpacing: Style.space(2)
+      inset: 0
+      open: root.rulesOpen
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      onClicked: root.rulesOpen = !root.rulesOpen
 
       SwitchRow {
-        width: parent.width
+        width: parent.width - parent.leftPadding - parent.rightPadding
         glyph: "󰖔"
         label: "At night"
         checked: M.ruleHas(root.rule, "night")
@@ -312,7 +363,7 @@ BorderSurface {
       }
 
       SwitchRow {
-        width: parent.width
+        width: parent.width - parent.leftPadding - parent.rightPadding
         glyph: "󰁹"
         label: "On battery"
         checked: M.ruleHas(root.rule, "battery")
@@ -348,7 +399,7 @@ BorderSurface {
       }
 
       SwitchRow {
-        width: parent.width
+        width: parent.width - parent.leftPadding - parent.rightPadding
         glyph: "󰍹"
         label: "Docked"
         checked: M.ruleHas(root.rule, "docked")
@@ -358,7 +409,7 @@ BorderSurface {
       }
 
       SwitchRow {
-        width: parent.width
+        width: parent.width - parent.leftPadding - parent.rightPadding
         glyph: "󰏘"
         label: "With a theme"
         checked: M.ruleHas(root.rule, "theme")
@@ -380,51 +431,6 @@ BorderSurface {
           onChanged: function(v) { root.patchCondition("theme", { name: v }) }
         }
       }
-    }
-
-    // ---- artwork: the branding file, same as Style › Screensaver ----
-    Column {
-      visible: root.showsBranding
-      width: parent.width
-      spacing: Style.space(6)
-      PanelSectionHeader { text: "ARTWORK"; foreground: root.foreground; fontFamily: root.fontFamily }
-      Flow {
-        width: parent.width
-        spacing: Style.space(6)
-        Button { text: "Use a picture…"; iconText: "󰋩"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; tooltipText: "A PNG or SVG, turned into text art"; onClicked: if (root.svc) root.svc.brandingImage() }
-        Button { text: "Edit the text…"; iconText: "󰏫"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; tooltipText: "Opens the art in your editor — the same file as Style › Screensaver"; onClicked: if (root.svc) root.svc.brandingText() }
-        Button { text: "Back to the Omarchy logo"; iconText: "󰕌"; bordered: true; foreground: root.foreground; fontFamily: root.fontFamily; fontSize: Style.font.caption; onClicked: if (root.svc) root.svc.brandingReset() }
-      }
-    }
-
-    // ---- look: the knobs of this saver's type ----
-    PanelSectionHeader { visible: look.hasKnobs && !root.failed; text: "LOOK"; foreground: root.foreground; fontFamily: root.fontFamily }
-    SaverSettings {
-      id: look
-      visible: hasKnobs && !root.failed
-      width: parent.width
-      saverId: root.saverId
-      saver: root.saver
-      settings: root.settings
-      svc: root.svc
-      bar: root.bar
-      foreground: root.foreground
-      fontFamily: root.fontFamily
-      leftPadding: 0
-      onPatched: function(patch) { if (root.svc) root.svc.writeSaverSetting(root.saverId, patch) }
-      onScrollBy: function(d) { if (root.body) root.body.scrollBy(d) }
-    }
-
-    // ---- on top: the widgets. The Original is Omarchy's own window and
-    // carries none. ----
-    WidgetRows {
-      visible: !root.external && !root.failed
-      width: parent.width
-      settings: root.settings
-      cfg: root.cfg
-      foreground: root.foreground
-      fontFamily: root.fontFamily
-      onPatched: function(patch) { if (root.svc) root.svc.writeSaverSetting(root.saverId, patch) }
     }
   }
 }

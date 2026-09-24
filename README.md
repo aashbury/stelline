@@ -66,8 +66,11 @@ drawn through `ANTHROPIC_API_KEY`, which goes to `api.anthropic.com`.
 ## Use
 
 The panel is ordered by how often you touch a thing: the master switch and
-**Stay awake** at the top, then the timings, then the gallery, then the one
-row you set once (Shortcuts) collapsed to one line. It opens at the top with nothing unfolded, every time. Rows are plain:
+**Stay awake** at the top, then the gallery with **Shuffle** and **Preview**
+in its header, then the two things you set once — **Timings** and
+**Shortcuts** — each folded to a line that says what it is set to
+(*5:00 · lock 10:00 · no lock docked*). It opens at the top with nothing
+unfolded, every time. Rows are plain:
 a glyph, a label, a switch — the only boxes are the one open detail card and
 the Add card, and nothing carries a sentence of explanation, the way Omarchy's
 own panels don't. A gallery past four rows keeps four and ends in a **Show
@@ -79,9 +82,10 @@ all** tile.
 | bar icon | right-click | toggle Stay awake (the coffee cup) |
 | bar icon | middle-click | preview the current saver |
 | panel | click a tile | make it the usual saver (with Shuffle on: check it in) |
-| panel | ⚙ on a tile | the same three blocks on every tile: **WHEN … PLAYS** (its rule), **LOOK** (the knobs of its type), **ON TOP** (its widgets), and Delete; for the Original, the artwork instead of widgets. ▶ and ⚙ appear while the pointer or the keyboard cursor is on a tile |
+| panel | ⚙ on a tile | the same three blocks on every tile: **LOOK** (its words or artwork, and the knobs of its type), **ON TOP** (its widgets), and **When it plays** (its rule, folded to what it says), plus Delete; the Original has no widgets. ▶ and ⚙ appear while the pointer or the keyboard cursor is on a tile |
 | panel | click another tile while a ⚙ panel is open | the panel follows to that tile |
-| panel | **Different timings on battery**, **Never lock while docked** | laptops only; each is an ordinary rule underneath |
+| panel | **Timings** | the screensaver and lock sliders, **Not while a window is fullscreen**, and on laptops **Different timings on battery** and **Never lock while docked** — each exception an ordinary rule underneath |
+| panel | **Shuffle** in the gallery's header | the tiles become checkboxes; the shuffle plays the ticked ones (none ticked: all of them) |
 | panel | 󰅶 Stay awake | the coffee cup — top of the panel, same as Super+Ctrl+I |
 | panel | ▶ on a tile | preview it |
 | panel | the **Add** tile | a new saver of any kind: *Describe it*, *Words*, *Pictures*, *A clip*, *Clock* or *Blank*, each with only the settings it needs; pasting a picture or a clip picks the kind for you |
@@ -89,7 +93,7 @@ all** tile.
 | saver | `→` or `n` | next saver in the rotation |
 
 Keyboard in the panel: `h`/`j`/`k`/`l` or arrows move (through the grid too),
-`Enter` activates, `h`/`l` also step a slider, `p` previews the tile under the
+`Enter` activates (and opens or folds Timings and Shortcuts), `h`/`l` also step a slider, `p` previews the tile under the
 cursor, `g` opens it, `n` adds, `s` toggles Shuffle, `x` deletes (twice),
 `Esc` closes. Fields inside
 editors take the mouse.
@@ -343,12 +347,10 @@ it on, a fullscreen editor left alone never screensaves or locks either.
 ## When a saver plays
 
 Click a tile: that is the usual saver, the one that plays when nothing else
-applies. A tile's ⚙ is the one place a saver's rule is edited. Under **WHEN
-<SAVER> PLAYS** are four switches — at night, on battery, docked, with a
-theme; all the ones that are on have to hold, and each shows its own fields
-once it is on. **Different timings at those times** adds the same two sliders
-as at the top of the panel, for while the rule holds; the lock slider's own
-switch is *never lock*.
+applies. A tile's ⚙ is the one place a saver's rule is edited. **When it plays**, folded
+to what the rule says (*at night · docked*, or *whenever it's chosen*), opens
+to four switches — at night, on battery, docked, with a theme; all the ones
+that are on have to hold, and each shows its own fields once it is on.
 
 | Condition | Holds when |
 |---|---|
@@ -357,8 +359,8 @@ switch is *never lock*.
 | Docked | an external monitor is one of the active outputs — the laptop's own panel does not count, and whether the lid is open or closed makes no difference. Nothing to set. |
 | With a theme | `~/.local/state/omarchy/current/theme.name` equals the chosen slug |
 
-A rule that changes only the timings has no tile, so it lives under the
-sliders, and on a laptop there are two: **Different timings on battery**
+A rule that changes only the timings has no tile, so it lives under
+**Timings**, beside the sliders, and on a laptop there are two: **Different timings on battery**
 (on, it unfolds its own screensaver and lock sliders, starting shorter) and
 **Never lock while docked** (on, the screensaver plays for as long as you are
 away and a nudge of the mouse is straight back in; the lock returns the
