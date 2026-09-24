@@ -602,9 +602,11 @@ stay in `~/.config/omarchy/stelline/` until you delete that folder.
 
 ## Dev loop
 
+From your own checkout of this repository, link it in place of an installed
+copy (remove that one first), so edits load straight from the checkout:
+
 ```sh
-git clone https://github.com/aashbury/stelline.git ~/Work/aashbury/stelline
-ln -s ~/Work/aashbury/stelline ~/.config/omarchy/plugins/io.github.aashbury.stelline
+ln -s "$PWD" ~/.config/omarchy/plugins/io.github.aashbury.stelline
 omarchy plugin enable io.github.aashbury.stelline --section center
 omarchy restart shell
 ```
@@ -615,7 +617,7 @@ tests/*.test.js`. `omarchy plugin validate .` runs the shell's manifest checks.
 `qs log -p /usr/share/omarchy/shell` shows every idle event. The figures
 and the wordmark are vector drawings in `art/`, baked to dots by
 `node tools/bake.js` (needs `rsvg-convert` and ImageMagick). Renderer
-experiments go in a second Quickshell instance under `~/Work/tries/` (a
+experiments go in a second Quickshell instance in a scratch folder outside the repository (a
 folder with `Commons`, `Ui` and `savers` symlinked, and a `shell.qml` that
 loads one component) so a runaway paint loop cannot take the bar down with
 it.
