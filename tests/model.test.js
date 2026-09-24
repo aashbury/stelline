@@ -121,6 +121,20 @@ test("digest groups notifications by app, keeps old history out, sorts by urgenc
   assert.equal(g[1].latestSummary, "Bob")
   assert.equal(M.totalCount(g), 3)
   assert.equal(M.digest(lines, 0, 1).length, 1)
+  // every app is kept unless a cap is asked for
+  assert.equal(M.digest(lines, 0).length, 3)
+})
+
+test("appGlyph says what kind of notification it is; moreLine counts what did not fit", () => {
+  assert.equal(M.appGlyph({ app: "Omarchy", glyph: "󱐋" }), "󱐋")
+  assert.equal(M.appGlyph({ app: "Thunderbird" }), "󰇮")
+  assert.equal(M.appGlyph({ app: "Slack" }), "󰭹")
+  assert.equal(M.appGlyph({ app: "Some App", appIcon: "org.mozilla.firefox" }), "󰖟")
+  assert.equal(M.appGlyph({ app: "Claude Code" }), "󰚩")
+  assert.equal(M.appGlyph({ app: "mystery" }), "󰂚")
+  assert.equal(M.moreLine([]), "")
+  assert.equal(M.moreLine([{ app: "Slack", count: 3 }]), "+ 3 more from Slack")
+  assert.equal(M.moreLine([{ app: "Slack", count: 3 }, { app: "Mail", count: 9 }]), "+ 12 more from 2 other apps")
 })
 
 test("terminalLoop pins only real effects and drops its traps before pkill", () => {

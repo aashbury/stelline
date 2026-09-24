@@ -387,7 +387,17 @@ the middle, where it is drawn large) and its one or two check boxes. The
 **clock** is the seven-segment face, with **24h**, **date** and **seconds**.
 **Notifications** is a quiet card: how many arrived since you went idle, from
 which apps — counts by default; **show titles** adds the latest one's title,
-opt-in because it is an unattended screen.
+opt-in because it is an unattended screen. Each app gets a glyph for its kind
+(mail, chat, calendar, browser, music, updates, battery, …) in the theme's
+accent, urgent ones in its warning colour; the first four apps are listed,
+urgent first, and the rest counted on one line (*+ 7 more from 3 other apps*).
+
+Every widget takes one width, so the screen stays balanced: in a corner each
+card, and the clock, is the same width, stacking in one column; in the middle
+the cards sit side by side under the clock, larger. A corner has the screen's
+height, or half of it when the corner above or below it is in use; the
+agent's figure gives way inside its card when room runs short, so nothing
+runs off a small screen.
 
 The **coding agent** is a figure that acts out what your agents are doing,
 drawn in the theme's foreground with its lights in the accent. It types while

@@ -36,6 +36,14 @@ Item {
 
   function at(w, spot) { return !!w && w.on === true && w.place === spot }
 
+  // One width for every widget, so the screen stays balanced whatever sits
+  // where: each card in a corner, and a corner clock, take the same width;
+  // in the middle each card takes the larger one and the clock spans the row
+  // of cards under it. What a card holds fits that width — a figure short of
+  // height gets smaller inside its card, never the card narrower.
+  readonly property real cardWidth: Math.round(Math.min(Style.space(300), root.width * 0.3))
+  readonly property real centreCardWidth: Math.round(Math.min(Style.space(300) * 1.6, root.width * 0.3))
+
   Timer {
     interval: 45000
     repeat: true
@@ -71,6 +79,19 @@ Item {
         readonly property bool hasClock: root.active && root.at(root.clock, modelData)
         readonly property bool hasAgent: root.active && root.live && root.at(root.agent, modelData)
         readonly property bool hasCard: root.active && root.cards && root.at(root.notifications, modelData)
+        // The height this spot's stack may take. A corner has the screen's
+        // height, or half of it when the corner above or below it on the
+        // same side is in use too; the middle has the whole height.
+        readonly property string opposite: (atTop ? "bottom" : "top") + (atLeft ? "-left" : "-right")
+        readonly property bool sharesSide: !centre && (root.at(root.clock, opposite) || root.at(root.agent, opposite) || root.at(root.notifications, opposite))
+        readonly property real room: root.height - root.margin * 2
+        readonly property real budget: sharesSide ? (room - stack.spacing) / 2 : room
+        // What the clock and the card leave: the agent's figure is the one
+        // thing here that can give, so it takes the rest. In the middle the
+        // card sits beside it, not under it.
+        readonly property real agentRoom: budget
+          - (clockLoader.visible ? clockLoader.height + stack.spacing : 0)
+          - (!centre && cardLoader.visible ? cardLoader.height + stack.spacing : 0)
 
         anchors.centerIn: centre ? parent : undefined
         anchors.top: centre || !atTop ? undefined : parent.top
@@ -94,14 +115,16 @@ Item {
           // this layer, so a widget built for all five spots of every tile
           // would cost the shell seconds at start-up.
           Loader {
+            id: clockLoader
             visible: spot.hasClock
             active: visible && root.width > 0 && root.height > 0
             anchors.right: !spot.centre && !spot.atLeft ? parent.right : undefined
-            width: spot.centre ? root.width : (root.thumbnail ? Math.round(root.width * 0.42) : Style.space(250))
+            width: root.thumbnail ? (spot.centre ? root.width : Math.round(root.width * 0.42))
+              : (spot.centre ? (cards.width > 0 ? cards.width : root.width) : root.cardWidth)
             // In the middle on its own the face takes the screen; with a card
             // under it, it moves up to make room.
             height: spot.centre
-              ? Math.round(root.height * (root.thumbnail || !(spot.hasCard || spot.hasAgent) ? 1 : 0.55))
+              ? Math.round(root.thumbnail || !(spot.hasCard || spot.hasAgent) ? root.height : spot.budget * 0.4)
               : (root.thumbnail ? Math.round(root.height * 0.3) : Style.space(100))
             sourceComponent: ClockFace {
               compact: !spot.centre
@@ -112,36 +135,42 @@ Item {
           }
 
           // A card decides for itself whether it has anything to show; the
-          // column skips it, as it did the card, while it has not.
-          Loader {
-            id: agentCard
-            active: spot.hasAgent
-            visible: active && !!item && item.hasContent
+          // column skips it, as it did the card, while it has not. In a
+          // corner the two cards stack, one width; in the middle, under a
+          // clock that has taken the top of the screen, they sit side by side.
+          Grid {
+            id: cards
             anchors.horizontalCenter: spot.centre ? parent.horizontalCenter : undefined
             anchors.right: !spot.centre && !spot.atLeft ? parent.right : undefined
-            sourceComponent: AgentWidget {
-              large: spot.centre
-              service: root.service
-              figure: root.agent.figure ? String(root.agent.figure) : ""
-              detail: root.agent.detail ? String(root.agent.detail) : "titles"
-              maxWidth: spot.centre ? root.width * 0.6 : Math.max(Style.space(300), root.width * 0.4)
-              maxHeight: root.height * (spot.hasClock ? 0.35 : 0.55)
-            }
-          }
+            columns: spot.centre ? 2 : 1
+            columnSpacing: stack.spacing
+            rowSpacing: stack.spacing
+            horizontalItemAlignment: spot.centre ? Grid.AlignHCenter : (spot.atLeft ? Grid.AlignLeft : Grid.AlignRight)
 
-          Loader {
-            active: spot.hasCard
-            visible: active && !!item && item.hasContent
-            anchors.horizontalCenter: spot.centre ? parent.horizontalCenter : undefined
-            anchors.right: !spot.centre && !spot.atLeft ? parent.right : undefined
-            sourceComponent: StatusCard {
-              large: spot.centre
-              // Under the agent's card it takes that card's width, so the
-              // two read as one column.
-              matchWidth: agentCard.visible ? agentCard.width : 0
-              service: root.service
-              detail: root.notifications.detail ? String(root.notifications.detail) : "counts"
-              maxWidth: spot.centre ? root.width * 0.6 : Math.max(Style.space(300), root.width * 0.4)
+            Loader {
+              id: agentCard
+              active: spot.hasAgent
+              visible: active && !!item && item.hasContent
+              sourceComponent: AgentWidget {
+                large: spot.centre
+                service: root.service
+                figure: root.agent.figure ? String(root.agent.figure) : ""
+                detail: root.agent.detail ? String(root.agent.detail) : "titles"
+                cardWidth: spot.centre ? root.centreCardWidth : root.cardWidth
+                maxHeight: spot.agentRoom
+              }
+            }
+
+            Loader {
+              id: cardLoader
+              active: spot.hasCard
+              visible: active && !!item && item.hasContent
+              sourceComponent: StatusCard {
+                large: spot.centre
+                service: root.service
+                detail: root.notifications.detail ? String(root.notifications.detail) : "counts"
+                matchWidth: spot.centre ? root.centreCardWidth : root.cardWidth
+              }
             }
           }
         }

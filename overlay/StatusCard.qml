@@ -19,6 +19,12 @@ BorderSurface {
   property real matchWidth: 0
   readonly property var groups: service ? service.cardGroups : []
   readonly property int total: M.totalCount(groups)
+  // The first few apps, urgent first and then the latest; the rest are
+  // counted on one line under them, so a busy afternoon never runs the card
+  // off the screen.
+  property int maxApps: 4
+  readonly property var shownGroups: groups.slice(0, Math.max(1, maxApps))
+  readonly property string more: M.moreLine(groups.slice(shownGroups.length))
   readonly property real k: large ? 1.6 : 1
   readonly property color fg: Color.notifications.text
   readonly property string fontFamily: Style.font.family
@@ -42,6 +48,8 @@ BorderSurface {
 
     Text {
       visible: root.total > 0
+      width: parent.width
+      elide: Text.ElideRight
       textFormat: Text.PlainText
       text: "󰂚 " + root.total + (root.total === 1 ? " notification" : " notifications")
       color: root.fg
@@ -51,23 +59,50 @@ BorderSurface {
     }
 
     Repeater {
-      model: root.groups
-      Column {
+      model: root.shownGroups
+      Row {
+        id: line
         required property var modelData
+        readonly property color ink: modelData.urgency >= 2 ? Color.urgent : root.fg
         width: column.width
-        spacing: Style.space(1)
+        spacing: Style.space(8) * root.k
+
+        // What kind it is, at a glance, in a slot of its own so the words
+        // line up down the card.
         Text {
-          width: parent.width
+          id: glyph
+          width: Math.ceil(Style.font.bodySmall * root.k * 1.3)
+          horizontalAlignment: Text.AlignHCenter
+          textFormat: Text.PlainText
+          text: M.appGlyph(line.modelData)
+          color: line.modelData.urgency >= 2 ? Color.urgent : Color.accent
+          font.family: root.fontFamily
+          font.pixelSize: Style.font.bodySmall * root.k
+        }
+        Text {
+          width: line.width - glyph.width - line.spacing
           textFormat: Text.PlainText
           elide: Text.ElideRight
-          text: (modelData.glyph ? modelData.glyph + " " : "") + modelData.app
-            + (modelData.count > 1 ? " ×" + modelData.count : "")
-            + (root.detail !== "counts" && modelData.latestSummary ? " — " + modelData.latestSummary : "")
-          color: modelData.urgency >= 2 ? Color.urgent : root.fg
+          text: line.modelData.app
+            + (line.modelData.count > 1 ? " ×" + line.modelData.count : "")
+            + (root.detail !== "counts" && line.modelData.latestSummary ? " — " + line.modelData.latestSummary : "")
+          color: line.ink
           font.family: root.fontFamily
           font.pixelSize: Style.font.bodySmall * root.k
         }
       }
+    }
+
+    Text {
+      visible: root.more !== ""
+      width: parent.width
+      leftPadding: Math.ceil(Style.font.bodySmall * root.k * 1.3) + Style.space(8) * root.k
+      textFormat: Text.PlainText
+      elide: Text.ElideRight
+      text: root.more
+      color: Qt.darker(root.fg, 1.4)
+      font.family: root.fontFamily
+      font.pixelSize: Style.font.caption * root.k
     }
   }
 }

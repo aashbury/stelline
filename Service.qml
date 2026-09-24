@@ -869,7 +869,7 @@ Item {
       onStreamFinished: {
         // Idle savers show what arrived since you left; previews show the last half hour.
         var since = root.overlayReason === "idle" ? root.idleStartedAtMs : Date.now() - 30 * 60 * 1000
-        root.cardGroups = M.digest(String(text || ""), since, root.cfg.card && root.cfg.card.maxApps)
+        root.cardGroups = M.digest(String(text || ""), since)
       }
     }
   }

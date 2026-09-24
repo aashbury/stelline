@@ -495,7 +495,9 @@ function timingsSummary(o) {
 
 // Omarchy mirrors every toast to a one-line JSON file, and moves it into
 // history/ when it leaves the screen. Group what is worth knowing about by
-// app: live toasts always count, history only since `sinceMs`.
+// app: live toasts always count, history only since `sinceMs`. Every app is
+// kept — the card shows the first few and counts the rest — and `maxApps`,
+// when given, cuts the list.
 function digest(ndjson, sinceMs, maxApps) {
   var groups = {}
   var lines = String(ndjson || "").split("\n")
@@ -509,7 +511,7 @@ function digest(ndjson, sinceMs, maxApps) {
     if (n.__history === true && ts < (Number(sinceMs) || 0)) continue
     var app = displayAppName(n.app)
     var g = groups[app]
-    if (!g) g = groups[app] = { app: app, count: 0, urgency: 0, glyph: "", latestSummary: "", latestBody: "", latestTs: 0 }
+    if (!g) g = groups[app] = { app: app, count: 0, urgency: 0, glyph: "", appIcon: "", latestSummary: "", latestBody: "", latestTs: 0 }
     g.count += 1
     g.urgency = Math.max(g.urgency, Number(n.urgency) || 0)
     if (ts >= g.latestTs) {
@@ -517,12 +519,51 @@ function digest(ndjson, sinceMs, maxApps) {
       g.latestSummary = String(n.summary || "")
       g.latestBody = String(n.body || "").replace(/\s+/g, " ").trim()
       if (n.glyph) g.glyph = String(n.glyph)
+      if (n.appIcon) g.appIcon = String(n.appIcon)
     }
   }
   var out = Object.keys(groups).map(function(k) { return groups[k] })
   out.sort(function(a, b) { return (b.urgency - a.urgency) || (b.latestTs - a.latestTs) })
-  var cap = Number(maxApps) > 0 ? Number(maxApps) : 4
-  return out.slice(0, cap)
+  return Number(maxApps) > 0 ? out.slice(0, Number(maxApps)) : out
+}
+
+// A glyph for a group of notifications, so the card says at a glance what
+// kind they are. The sender's own glyph first (Omarchy's toasts carry one),
+// then what its name or icon name says it is, then a bell. Glyphs rather than
+// the apps' own icons: they take the theme's colour like everything else on
+// the screen, and a missing icon never leaves a hole.
+var APP_GLYPHS = [
+  [/mail|thunderbird|evolution|geary|outlook|proton/, "󰇮"],
+  [/slack|discord|signal|telegram|whatsapp|element|matrix|teams|zoom|messag|chat|beeper/, "󰭹"],
+  [/calendar|gnome-calendar|reminder|todo|task/, "󰃭"],
+  [/firefox|chrom|brave|browser|zen|vivaldi|edge|web/, "󰖟"],
+  [/spotify|music|player|mpv|vlc|audio|podcast/, "󰝚"],
+  [/download|transmission|torrent/, "󰇚"],
+  [/update|pacman|yay|paru|flatpak|package/, "󰚰"],
+  [/battery|power|upower/, "󰁹"],
+  [/screenshot|screen ?shot|grim|hyprshot|satty|record/, "󰹑"],
+  [/claude|codex|gemini|opencode|copilot|crush|agent|ai\b/, "󰚩"],
+  [/github|gitlab|\bgit\b/, "󰊢"],
+  [/ghostty|alacritty|kitty|foot|terminal|wezterm/, "󰆍"],
+  [/bluetooth/, "󰂯"],
+  [/wifi|network|nm-applet/, "󰖩"],
+  [/volume|pulse|pipewire/, "󰕾"]
+]
+function appGlyph(group) {
+  var g = isPlainObject(group) ? group : {}
+  if (g.glyph) return String(g.glyph)
+  var name = (String(g.app || "") + " " + String(g.appIcon || "")).toLowerCase()
+  for (var i = 0; i < APP_GLYPHS.length; i++) if (APP_GLYPHS[i][0].test(name)) return APP_GLYPHS[i][1]
+  return "󰂚"
+}
+
+// The card's last line, for what did not fit: "+ 3 more from Slack",
+// "+ 12 more from 5 other apps".
+function moreLine(rest) {
+  var list = Array.isArray(rest) ? rest : []
+  if (list.length === 0) return ""
+  var n = totalCount(list)
+  return "+ " + n + " more from " + (list.length === 1 ? list[0].app : list.length + " other apps")
 }
 
 // Omarchy's own toasts arrive under an internal sender name.
@@ -2483,6 +2524,7 @@ function forgetSaver(cfg, saverId) {
 if (typeof module !== "undefined") {
   module.exports = {
   timingsSummary: timingsSummary,
+  appGlyph: appGlyph, moreLine: moreLine,
   effectLabel: effectLabel, importFailureText: importFailureText,
   agentSessionWhat: agentSessionWhat,
   screenSaverBusScript: screenSaverBusScript, parseBusLine: parseBusLine, inhibitorLabel: inhibitorLabel, isFullscreen: isFullscreen,

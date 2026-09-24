@@ -20,8 +20,12 @@ BorderSurface {
   property string detail: "titles"
   property bool shown: true
   property bool large: false
-  property real maxWidth: 480
-  // In the middle the figure is as big as the screen allows, never bigger.
+  // The card's width, set by the layer so every widget matches. The figure
+  // fits inside it, and inside the height it is given.
+  property real cardWidth: Style.space(300)
+  // The height the card may take: the figure is as big as that allows —
+  // in the middle as big as the screen allows — and shrinks, rather than the
+  // card running off the screen, when the spot is shared.
   property real maxHeight: 400
   readonly property var sessions: service && Array.isArray(service.agentSessions) ? service.agentSessions : []
   readonly property var summary: M.agentSummary(sessions, detail)
@@ -44,19 +48,23 @@ BorderSurface {
   // holds; the words go under it, the width of the frame. In a corner the
   // frame is tall enough for a fine grid's dots to stay dots; in the middle
   // it is as tall as the screen allows, less the room the words need.
+  readonly property int moreSessions: Math.max(0, sessions.length - 5)
   readonly property real captionRoom: (Style.font.body * 1.4 + Style.font.bodySmall * 1.4 + Style.space(12)) * k
-    + Math.min(4, Math.max(0, sessions.length - 1)) * Style.font.caption * k * 1.4
-  readonly property real frameHeight: large
-    ? Math.max(Style.space(300), Math.min(Style.space(560), maxHeight - captionRoom - padding * 2, (maxWidth - padding * 2) * 4 / 3))
-    : Math.min(Style.space(300), (maxWidth - padding * 2) * 4 / 3)
-  readonly property real frameWidth: Math.round(frameHeight * 3 / 4)
+    + (Math.min(4, Math.max(0, sessions.length - 1)) + (moreSessions > 0 ? 1 : 0)) * Style.font.caption * k * 1.4
+  // Below the floor a figure turns to mush; at the floor the card may run
+  // tight, but the figure still reads.
+  readonly property real textWidth: cardWidth - padding * 2
+  readonly property real frameHeight: Math.max(Style.space(120),
+    Math.min(large ? Style.space(560) : Style.space(300), maxHeight - captionRoom - padding * 2, textWidth * 4 / 3))
+  // Centred over the words, which keep the card's whole width.
+  readonly property real frameWidth: Math.min(textWidth, Math.round(frameHeight * 3 / 4))
   readonly property string fontFamily: Style.font.family
 
   // Whether there is anything to draw, apart from being shown: what the
   // layer above reads, since a hidden item's own visible reads false.
   readonly property bool hasContent: sessions.length > 0
   visible: shown && hasContent
-  implicitWidth: frameWidth + padding * 2
+  implicitWidth: cardWidth
   implicitHeight: column.implicitHeight + padding * 2
   padding: Style.space(14) * k
   radius: Style.cornerRadius
@@ -68,7 +76,7 @@ BorderSurface {
     anchors.left: parent.left
     anchors.top: parent.top
     anchors.margins: root.padding
-    width: root.frameWidth
+    width: root.textWidth
     spacing: Style.space(10) * root.k
 
     RobotFigure {
@@ -78,6 +86,7 @@ BorderSurface {
       tone: root.tone
       light: root.light
       fontFamily: root.fontFamily
+      x: Math.round((root.textWidth - root.frameWidth) / 2)
       width: root.frameWidth
       height: root.frameHeight
     }
@@ -118,6 +127,16 @@ BorderSurface {
           font.pixelSize: Style.font.caption * root.k
           elide: Text.ElideRight
         }
+      }
+      Text {
+        visible: root.moreSessions > 0
+        width: parent.width
+        textFormat: Text.PlainText
+        text: "+ " + root.moreSessions + " more"
+        color: Qt.darker(root.fg, 1.4)
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.caption * root.k
+        elide: Text.ElideRight
       }
     }
   }
