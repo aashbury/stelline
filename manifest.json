@@ -7,7 +7,7 @@
   "license": "MIT",
   "homepage": "https://github.com/aashbury/stelline",
   "repository": "https://github.com/aashbury/stelline",
-  "description": "A screensaver manager for Omarchy. Pick from a grid of savers — Omarchy's own, a themed wordmark, a clock, or your own from pictures, a clip, text or a description — with widgets for the time, missed notifications and your coding agents, and rules for night, battery or docking. Holds off for videos and games.",
+  "description": "A screensaver manager for Omarchy. Pick from a grid of savers — Omarchy's own, a themed wordmark, a clock, or your own from pictures, a clip, text or a description — with widgets for the time, missed notifications and your coding agents, and rules for night, battery or docking, including never locking while docked at your desk. Holds off for videos and games.",
   "kinds": [
     "service",
     "bar-widget"

@@ -29,8 +29,11 @@ the stock screensaver is the Original tile, untouched.
 - **Rules for when each one plays**: at night, on battery, docked, or with a
   given theme.
 - **Timings that fit a laptop.** Separate screensaver and lock times, lock
-  off entirely, shorter timings on battery, never lock while docked, and
-  optionally nothing while a window is fullscreen.
+  off entirely, shorter timings on battery, and optionally nothing while a
+  window is fullscreen.
+- **Never lock while docked.** At your desk with an external monitor, the
+  screensaver still plays but the machine never locks, so a nudge of the
+  mouse is straight back in; unplug the monitor and the lock is back.
 - **Holds off for videos and games.** Browsers, players and Steam ask over
   D-Bus not to be interrupted; stock Omarchy never answers, Stelline does.
 - **Native and light.** One layer on every monitor that any key, click or
