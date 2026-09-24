@@ -103,7 +103,8 @@ Column {
     glyph: "󰔛"
     labelWidth: root.labelWidth
     readoutWidth: root.readoutWidth
-    label: root.isSeries && !root.isWordmark ? "Each piece" : "Rest between"
+    // One picture is drawn again on each cycle; several take turns.
+    label: root.isWordmark ? "Rest between" : (root.series && root.series.pieces && root.series.pieces.length > 1 ? "Each picture" : "Redraw every")
     value: root.isSeries && !root.isWordmark
       ? (Number(root.settings.dwellSec) || Number(root.series.dwellSec) || 12)
       : (root.settings.holdSec !== undefined && Number(root.settings.holdSec) >= 0 ? Number(root.settings.holdSec) : 4)

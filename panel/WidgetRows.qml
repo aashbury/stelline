@@ -2,7 +2,6 @@ import QtQuick
 import qs.Commons
 import qs.Ui
 import "../StellineModel.js" as M
-import "../savers/Robot.js" as R
 
 // What sits on top of this saver. Each widget is a switch and, while it is
 // on, one line under it: where it goes, named, and its one or two choices.
@@ -21,7 +20,6 @@ Column {
   readonly property bool editing: clockPlace.popupOpen || notificationsPlace.popupOpen || agentPlace.popupOpen || agentFigure.popupOpen
 
   readonly property var placeOptions: M.PLACES.map(function(p) { return { value: p, label: M.placeLabel(p) } })
-  readonly property var figureOptions: R.FIGURES.map(function(f) { return { value: f.id, label: f.name } })
 
   signal patched(var patch)
 
@@ -43,10 +41,9 @@ Column {
   Button { id: probe; visible: false; text: "x"; iconText: "󰄱"; bordered: true; fontSize: Style.font.caption }
 
   // Where a widget goes, by name.
-  component Place: Dropdown {
+  component Place: Choice {
     width: Style.space(132)
     rowHeight: probe.implicitHeight
-    showLabel: false
     options: root.placeOptions
     foreground: root.foreground
     fontFamily: root.fontFamily
@@ -150,16 +147,13 @@ Column {
       tooltipText: "What each session is working on, beside whether it needs you"
       onClicked: root.set("agent", { detail: ticked ? "state" : "titles" })
     }
-    Dropdown {
+    FigureChoice {
       id: agentFigure
-        width: Style.space(104)
       rowHeight: probe.implicitHeight
-      showLabel: false
-      options: root.figureOptions
-      value: R.figureId(root.widgets.agent.figure ? String(root.widgets.agent.figure) : "")
+      figure: root.widgets.agent.figure ? String(root.widgets.agent.figure) : ""
       foreground: root.foreground
       fontFamily: root.fontFamily
-      onChanged: function(v) { root.set("agent", { figure: v }) }
+      onPicked: function(id) { root.set("agent", { figure: id }) }
     }
   }
 }
