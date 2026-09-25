@@ -219,7 +219,7 @@ appears the moment the clipboard holds one) picks the kind for you.
 
 | Kind | What it asks for | Becomes |
 |---|---|---|
-| **Describe it** | a description; optionally up to four pictures to draw from; *an animation* or *a still* | ASCII art drawn by your **default coding agent** (`omarchy default agent` — Claude Code, Codex, Gemini, OpenCode, Copilot, Crush, Pi, Oh My Pi or Grok), each in its one-shot mode with tools off or read-only where it has such a switch; Claude Code if no default is set; the Claude API with `ANTHROPIC_API_KEY` as a last resort. Pictures are offered only with an agent that can be handed one (Claude Code, Codex, Gemini, or the API); it draws from them the way the words ask, and redraws rather than copies — for a true likeness use **Pictures**. With none of these about, the card is greyed and says what to install. |
+| **Describe it** | a description; optionally up to four pictures to draw from; *an animation* or *a still* | ASCII art drawn by your **default coding agent** (`omarchy default agent`) if it is one that can be run with no tools — Claude Code, GitHub Copilot, Pi or Oh My Pi; otherwise Claude Code if it is installed; the Claude API with `ANTHROPIC_API_KEY` as a last resort (see *What an agent is allowed to do*, below). Pictures are offered only with Claude Code or the API; it draws from them the way the words ask, and redraws rather than copies — for a true likeness use **Pictures**. With none of these about, the card is greyed and says what to install. |
 | **Words** | a word or two | the word drawn as a title card — slanted capitals, lit tops, an extrusion, scanlines — in the theme's colours, previewed on the card as you type; played with the saver animations |
 | **Pictures** | one or several pictures (pasted, or *Choose…*), or *A folder…* | a dot matrix of the whole picture, exactly as the card's preview shows it — nothing is cropped and no agent is asked — or the picture as it is; both are shown on the card before you choose. **Detail** (dot matrix) runs from *bold* — one cut, lit or not, for shapes — through *simple*, *balanced* (the default) and *fine* to *finest*, which dither the picture and keep its shading; it can be changed later in the saver's settings, which draws the dots again. **Motion**: *animated* or *still* (a dot matrix lights up or breathes; a picture pushes in slowly or holds). Several pictures, or a folder, add **Order**: *shuffled* (the default) or *in order*, a new one every 12 seconds. A folder shown as it is is read again each time it comes on: drop a picture in, and it joins. |
 | **A clip** | a video or a GIF | an animation of dots, frame by frame (the first 20 s at 10 fps), at the **Detail** you pick and exactly as the preview shows it — or the clip as it is, as an animated picture |
@@ -308,9 +308,31 @@ by spending frames:
 | an animation | 80 × 28 | 10 |
 | an animation, detailed | 120 × 38 | 6 |
 
-With pictures attached, they go to the agent as they are, and it is
-pointed at them: Claude Code may read them, Codex takes them as images,
-Gemini may read inside their folder, and the API gets them as image blocks.
+With pictures attached, they go to the agent as they are: Claude Code may
+read them, from their own folder and nowhere else, and the API gets them as
+image blocks.
+
+### What an agent is allowed to do
+
+A description is untrusted text — typed, pasted, or read out of an attached
+picture — so the agent that draws it gets no tools: nothing that runs a
+command, writes a file, reads beyond the attached pictures, or fetches from
+the network. Otherwise a description could talk it into doing those things
+with your permissions, and into sending what it read to its provider. Each
+agent was tested with a description that tells it to read a file and run a
+command:
+
+| Agent | Launched with | Result |
+|---|---|---|
+| Claude Code | `--tools ''` (`Read` only with pictures, run inside their folder) | draws; reads and runs nothing |
+| GitHub Copilot | `--available-tools none --deny-tool shell --deny-tool write` | draws; all tools disabled |
+| Pi, Oh My Pi | `--no-tools` | no tools at all |
+
+OpenCode, Codex, Gemini, Grok and Crush are not asked: their one-shot modes
+keep tools (OpenCode's `--pure` leaves its shell, and even its read-only
+*plan* agent ran `cat` on a file when told to; the read-only modes of Codex,
+Gemini and Grok still read files; Crush has no switch). With one of them as
+your default, Claude Code draws if it is installed, then the API.
 
 One honest limit: an agent redraws, it does not copy. For a true likeness
 of a photograph, use **Pictures** instead — the picture is converted
@@ -512,7 +534,7 @@ Defaults:
 ```
 
 `describe` is how a described saver is drawn: `model` names one for the
-agent (`claude -p --model`, `codex -m`, `gemini -m`, or the API's model;
+agent (`claude -p --model`, or the API's model;
 empty means the agent's own default, or Opus 5 on the API) and `effort` is
 `low`, `medium` or `high` where the agent takes it. Low answers in about
 half a minute; high may take minutes and is stopped after ten.

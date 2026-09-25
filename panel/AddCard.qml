@@ -91,7 +91,8 @@ BorderSurface {
     return ""
   }
 
-  readonly property string agentHint: "Needs a coding agent — Claude Code, Codex or another one Omarchy knows — or an Anthropic API key."
+  // Only agents that can be run with no tools are asked (see M.AGENTS).
+  readonly property string agentHint: "Needs Claude Code, GitHub Copilot, Pi or Oh My Pi — or an Anthropic API key."
 
   // What the card holds is restored whenever it comes back: opened afresh,
   // or re-made with the panel while a chooser was up.

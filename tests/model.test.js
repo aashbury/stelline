@@ -292,8 +292,11 @@ test("import scripts: each source produces a self-contained bash pipeline", () =
   assert.match(ai, /agent=\$\(omarchy-default-agent/)
   assert.match(ai, /reason\(\) \{ local r; r=\$\(grep -m1 -iE 'unauthori/)
   assert.match(ai, /claude\) out=\$\(\{ timeout 600 env -u CLAUDECODE claude -p "\$prompt" --output-format text --tools "\$tools" --no-session-persistence --effort "\$effort" \$\{model:\+--model "\$model"\} --system-prompt "\$system"; \} 2>"\$tmp\/err" <\/dev\/null\)/)
-  assert.match(ai, /codex\) out=.*codex exec --skip-git-repo-check/)
-  assert.match(ai, /gemini\) out=.*--approval-mode plan/)
+  // only agents that run with no tools are asked
+  assert.match(ai, /copilot\) out=.*--available-tools none --deny-tool shell --deny-tool write/)
+  assert.match(ai, /pi\) out=.*pi -p --no-tools/)
+  for (const gone of ["codex", "gemini", "opencode", "crush", "grok"]) assert.doesNotMatch(ai, new RegExp("^  " + gone + "\\) ", "m"))
+  assert.deepEqual(Object.keys(M.AGENTS).sort(), ["claude", "copilot", "omp", "pi"])
   for (const id of Object.keys(M.AGENTS)) assert.match(ai, new RegExp("^  " + id + "\\) ", "m"))
   assert.match(ai, /awk -v b====ART=== -v e====END===/)
     assert.match(ai, /output_config:\{effort:\$e\}/)
@@ -746,7 +749,8 @@ test("composeMode: what the card makes follows from the kind picked and what it 
   assert.equal(M.composeMode({ ...empty, kind: "clip" }, "agent:claude"), "")
   assert.equal(M.composeMode({ ...empty, kind: "clock" }, ""), "clock")
   assert.equal(M.composeMode({ ...empty, kind: "blank" }, ""), "blank")
-  assert.equal(M.seesPictures("agent:codex"), true)
+  assert.equal(M.seesPictures("agent:codex"), false)
+  assert.equal(M.seesPictures("agent:claude"), true)
   assert.equal(M.seesPictures("agent:pi"), false)
 })
 
@@ -828,7 +832,9 @@ test("a described saver remembers its pictures, and the script hands them to the
   assert.deepEqual(j.source.paths, ["/p/a.png"])
   const script = M.importScript(spec, "/home/u/savers", "/run/u/stelline-paste")
   assert.ok(script.includes("tools=Read"))
-  assert.ok(script.includes("imgargs+=(-i"))
+  // Claude Code reads them from their own folder; no other agent is handed them
+  assert.ok(script.includes("tools=Read; cd \"$tmp/pics\""))
+  assert.ok(!script.includes("imgargs"))
   // the agent only reads inside its own folder, so it is given a copy there
   assert.ok(script.includes("The picture is at 1-a.png"))
   assert.ok(script.includes("apics+="))
@@ -920,7 +926,6 @@ test("the script draws with the chosen model and effort, the rules as the system
   const s = M.importScript(spec, "/home/u/savers")
   assert.ok(s.includes("model='sonnet'; effort='high'"))
   assert.ok(s.includes('--effort "$effort" ${model:+--model "$model"} --system-prompt "$system"'))
-  assert.ok(s.includes('model_reasoning_effort="$effort"'))
   assert.ok(s.includes('style="$HOME/.config/omarchy/stelline/style.md"'))
   assert.ok(s.includes("House style, from the owner of this screen"))
   assert.ok(s.includes('[[ -n $agent && $agent != claude ]] && prompt="$system"'))

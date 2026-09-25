@@ -1587,7 +1587,7 @@ function importDefaults() {
 
 // Where "Describe it" goes, as the service probes it: "agent:<id>" or "api".
 // Which of those can be handed a picture along with the words.
-var SEES_PICTURES = ["agent:claude", "agent:codex", "agent:gemini", "api"]
+var SEES_PICTURES = ["agent:claude", "api"]
 function seesPictures(ai) { return SEES_PICTURES.indexOf(String(ai || "")) !== -1 }
 
 // A list of picked or pasted paths, sorted into what the card holds: a
@@ -1882,31 +1882,39 @@ function describeSettings(cfg) {
   return { model: String(d.model || "").trim(), effort: DESCRIBE_EFFORTS.indexOf(effort) === -1 ? "medium" : effort }
 }
 
-// Omarchy's default coding agent (`omarchy default agent <name>`), each in
-// its one-shot mode with tools off or read-only where the CLI has a switch
-// for it. The effort is the settings' (medium unless changed) where it can
-// be asked for: left to itself the model deliberates over the grid spec for
-// minutes. The answer goes to stdout —
-// or to a file for codex, which is quieter that way.
-// With pictures attached: Claude Code may Read (only that), Codex takes
-// them as -i, Gemini's plan mode may read inside the picture's folder.
-// `$model` and `$effort` come from the settings; Claude Code alone takes the
-// standing rules as its system prompt (in place of its own, which is about
-// code), the others get them at the top of the message.
-var AGENTS = {
-  claude:   { name: "Claude Code",    argv: "claude -p \"$prompt\" --output-format text --tools \"$tools\" --no-session-persistence --effort \"$effort\" ${model:+--model \"$model\"} --system-prompt \"$system\"" },
-  codex:    { name: "Codex",          argv: "codex exec --skip-git-repo-check --ephemeral -s read-only -c model_reasoning_effort=\"$effort\" ${model:+-m \"$model\"} \"${imgargs[@]}\" -o \"$tmp/last.txt\" \"$prompt\" >/dev/null && cat \"$tmp/last.txt\"" },
-  gemini:   { name: "Gemini",         argv: "gemini -p \"$prompt\" -o text --approval-mode plan ${model:+-m \"$model\"} ${imgdir:+--include-directories \"$imgdir\"}" },
-  opencode: { name: "OpenCode",       argv: "opencode run --pure \"$prompt\"" },
-  copilot:  { name: "GitHub Copilot", argv: "copilot -p \"$prompt\" --output-format text" },
-  crush:    { name: "Crush",          argv: "crush run -q \"$prompt\"" },
-  pi:       { name: "Pi",             argv: "pi -p --no-tools --no-session --no-context-files \"$prompt\"" },
-  omp:      { name: "Oh My Pi",       argv: "omp -p --no-tools --no-session \"$prompt\"" },
-  grok:     { name: "Grok",           argv: "grok -p \"$prompt\" --permission-mode plan" }
+// The coding agents Omarchy knows, by the names they go by — what the agent
+// widget calls a running one.
+var AGENT_NAMES = {
+  claude: "Claude Code", codex: "Codex", gemini: "Gemini", opencode: "OpenCode",
+  copilot: "GitHub Copilot", crush: "Crush", pi: "Pi", omp: "Oh My Pi", grok: "Grok"
 }
 
 function agentName(id) {
-  return AGENTS[id] ? AGENTS[id].name : String(id || "")
+  return AGENT_NAMES[id] || String(id || "")
+}
+
+// The ones "Describe it" may ask: only those that can be run with no tools
+// at all. A description is untrusted text — typed, pasted, or read out of an
+// attached picture — and an agent that can run commands or read files can be
+// talked into doing so with the user's permissions, and into sending what it
+// read to its provider. Each was tested with a description that tells it to
+// read a file and run a command; these did neither:
+//   Claude Code  --tools '' (only Read with pictures attached, and it runs in
+//                the pictures' folder, outside which Read is refused)
+//   Copilot      no tool available, shell and write denied as well
+//   Pi, Oh My Pi --no-tools
+// Not asked, because their one-shot modes keep tools: OpenCode (--pure leaves
+// its shell; its plan agent still runs read-only commands), Codex, Gemini and
+// Grok (read-only modes, which still read files), Crush (no switch at all).
+// With one of those as the default, Claude Code answers if installed, then the
+// API. `$model` and `$effort` come from the settings; Claude Code alone takes
+// the standing rules as its system prompt (in place of its own, which is
+// about code), the others get them at the top of the message.
+var AGENTS = {
+  claude:  { argv: "claude -p \"$prompt\" --output-format text --tools \"$tools\" --no-session-persistence --effort \"$effort\" ${model:+--model \"$model\"} --system-prompt \"$system\"" },
+  copilot: { argv: "copilot -p \"$prompt\" --output-format text --available-tools none --deny-tool shell --deny-tool write" },
+  pi:      { argv: "pi -p --no-tools --no-session --no-context-files \"$prompt\"" },
+  omp:     { argv: "omp -p --no-tools --no-session \"$prompt\"" }
 }
 
 // The bash `case` that runs whichever agent is the default.
@@ -2274,10 +2282,12 @@ function importScript(spec, rootDir, stageDir) {
       "imgs=()",
       pics.length ? "for f in " + pics.map(q).join(" ") + "; do [[ -f $f ]] && imgs+=(\"$f\"); done" : ":",
       keep("imgs"),
-      "tools=''; imgargs=(); imgdir=''",
+      "tools=''",
       pics.length ? "mkdir -p \"$tmp/pics\"" : ":",
       pics.length ? "apics=(); for i in \"${!imgs[@]}\"; do n=\"$((i+1))-$(basename \"${imgs[$i]}\")\"; cp -f \"${imgs[$i]}\" \"$tmp/pics/$n\" 2>/dev/null && apics+=(\"$tmp/pics/$n\"); done" : "apics=()",
-      "if (( ${#apics[@]} )); then tools=Read; for f in \"${apics[@]}\"; do imgargs+=(-i \"$f\"); done; imgdir=$tmp/pics; cd \"$tmp/pics\" || true; fi",
+      // Claude Code may Read, and runs in the pictures' folder: outside it,
+      // Read is refused.
+      "if (( ${#apics[@]} )); then tools=Read; cd \"$tmp/pics\" || true; fi",
       // The first line that explains itself (sign-in, limits, errors), else the tail.
       "reason() { local r; r=$(grep -m1 -iE 'unauthori|not logged|log ?in|sign ?in|limit|quota|denied|error' \"$1\" 2>/dev/null | sed -E 's/^(ERROR|error)[: ]*//' | cut -c1-160); [[ -n $r ]] || r=$(tail -c 160 \"$1\" 2>/dev/null | tr -s '\\n ' ' '); printf %s \"$r\"; }",
       "out=''; why=''",
