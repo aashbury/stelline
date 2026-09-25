@@ -2008,9 +2008,10 @@ function dotStretch(cellAspect) {
 // so faces and texture survive.
 var DETAIL_NAMES = ["bold", "simple", "balanced", "fine", "finest"]
 // How much of the screen a picture or a piece of art may take: S, M, L or
-// Full, each a box centred on the screen that the picture fits inside whole
-// (never stretched), or Fill, which covers the screen and crops what runs
-// past its edges. `fit: "cover"` is how Fill was stored before.
+// XL (stored as "full"), each a box centred on the screen that the picture
+// fits inside whole (never stretched), or Fill, which covers the screen and
+// crops what runs past its edges. The corner widgets sit on top where they
+// meet. `fit: "cover"` is how Fill was stored before.
 // Unset, each keeps what it always did: a picture Full, art in dots L.
 var PICTURE_SIZES = ["s", "m", "l", "full", "fill"]
 var SIZE_BOXES = {

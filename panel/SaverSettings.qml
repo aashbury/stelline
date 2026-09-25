@@ -226,8 +226,16 @@ Column {
     foreground: root.foreground
     fontFamily: root.fontFamily
     ButtonGroup {
-      // Fill covers the screen, cropping what runs past its edges.
-      options: [{ value: "s", label: "S" }, { value: "m", label: "M" }, { value: "l", label: "L" }, { value: "full", label: "Full" }, { value: "fill", label: "Fill" }]
+      // Each a share of the screen, centred: XL is as big as the whole
+      // picture fits; Fill covers the screen, trimming what runs past its
+      // edges. (XL is stored as "full", as it was first called.)
+      options: [
+        { value: "s", label: "S", tooltip: "40% of the screen" },
+        { value: "m", label: "M", tooltip: "60% of the screen" },
+        { value: "l", label: "L", tooltip: "80% of the screen" },
+        { value: "full", label: "XL", tooltip: "As big as the whole picture fits" },
+        { value: "fill", label: "Fill", tooltip: "Covers the screen, trimming the edges" }
+      ]
       value: M.pictureSize(root.settings, root.isImage ? "image" : "ascii").key
       foreground: root.foreground
       fontFamily: root.fontFamily

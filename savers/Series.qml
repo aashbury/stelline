@@ -17,13 +17,8 @@ Item {
   property bool thumbnail: false
   property var service: null
   property var settings: ({})
-  // The share of the width the art may take, set by the scene so it keeps
-  // out from under the corner widgets; the art stays centred.
-  property real artRoom: 1
-  // S, M and L keep clear of the corner widgets; Full and Fill take the
-  // whole screen, and the cards sit on top of it, as they do on a photo.
-  readonly property bool wholeScreen: size.key === "full" || size.key === "fill"
-  readonly property real room: wholeScreen ? 1 : artRoom
+  // Every size is a share of the whole screen, centred on it; the corner
+  // widgets sit on top of the art where they meet, as they do on a photo.
   property var series: ({})
 
   readonly property string kind: series && series.kind === "image" ? "image" : "ascii"
@@ -172,10 +167,7 @@ Item {
     visible: root.kind === "ascii" && !root.animating
     art: visible ? root.frame : ""
     cycleToken: root.token
-    // S, M and L are shares of the centred width the widgets leave, so each
-    // one is bigger than the last whatever sits in the corners; Full is the
-    // screen. Always centred.
-    fitWidth: root.size.w * root.room
+    fitWidth: root.size.w
     fitHeight: root.size.h * (root.thumbnail ? 0.8 : 1)
     cover: root.size.crop
     ambientStyle: root.thumbnail ? "" : root.ambient
@@ -195,7 +187,7 @@ Item {
     visible: root.kind === "ascii" && root.animating
     // A frame at L fills a little more than a still does; the other sizes
     // follow it.
-    fitWidth: Math.min(0.95, root.size.w * 1.125) * root.room
+    fitWidth: Math.min(0.95, root.size.w * 1.125)
     fitHeight: Math.min(0.9, root.size.h * 1.13)
     cover: root.size.crop
     art: visible ? root.dotFrame : ""
