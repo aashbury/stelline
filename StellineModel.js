@@ -2009,22 +2009,21 @@ function dotStretch(cellAspect) {
 var DETAIL_NAMES = ["bold", "simple", "balanced", "fine", "finest"]
 // How much of the screen a picture or a piece of art may take: S, M, L or
 // Full, each a box centred on the screen that the picture fits inside whole
-// (never stretched), or — for pictures shown as they are — Fill, which
-// covers the screen and crops. `fit: "cover"` is how Fill was stored before.
+// (never stretched), or Fill, which covers the screen and crops what runs
+// past its edges. `fit: "cover"` is how Fill was stored before.
 // Unset, each keeps what it always did: a picture Full, art in dots L.
 var PICTURE_SIZES = ["s", "m", "l", "full", "fill"]
 var SIZE_BOXES = {
   image: { s: [0.4, 0.4], m: [0.6, 0.6], l: [0.8, 0.8], full: [1, 1], fill: [1, 1] },
   // Art keeps a margin even at Full: an arrival throws dots in from past the
   // edge of the art.
-  ascii: { s: [0.4, 0.38], m: [0.6, 0.56], l: [0.8, 0.75], full: [0.95, 0.9] }
+  ascii: { s: [0.4, 0.38], m: [0.6, 0.56], l: [0.8, 0.75], full: [0.95, 0.9], fill: [1, 1] }
 }
 function pictureSize(settings, kind) {
   var s = isPlainObject(settings) ? settings : {}
   var image = kind === "image"
   var key = PICTURE_SIZES.indexOf(String(s.size)) !== -1 ? String(s.size)
     : (image && s.fit === "cover" ? "fill" : (image ? "full" : "l"))
-  if (!image && key === "fill") key = "full"
   var box = SIZE_BOXES[image ? "image" : "ascii"][key]
   return { key: key, w: box[0], h: box[1], crop: key === "fill" }
 }

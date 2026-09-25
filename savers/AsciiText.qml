@@ -13,6 +13,8 @@ Item {
   property string fontFamily: Style.font.family
   property real fitWidth: 0.9
   property real fitHeight: 0.85
+  // Cover the screen, cutting off what overflows, instead of fitting in it.
+  property bool cover: false
   property real driftX: 0
   property real driftY: 0
   // An animation lays every frame on one grid (the widest and tallest of
@@ -40,7 +42,7 @@ Item {
     if (root.columns === 0 || root.lines.length === 0 || root.width === 0 || root.height === 0) return 24
     var byWidth = (root.width * root.fitWidth) / (root.fitColumns * Math.max(1, probe.advanceWidth) / 100)
     var byHeight = (root.height * root.fitHeight) / (root.fitRows * Math.max(1, probe.height) / 100)
-    return Math.max(4, Math.floor(Math.min(byWidth, byHeight)))
+    return Math.max(4, root.cover ? Math.ceil(Math.max(byWidth, byHeight)) : Math.floor(Math.min(byWidth, byHeight)))
   }
 
   // The grid's box, centred; the text sits at its top left.
@@ -51,7 +53,7 @@ Item {
     anchors.centerIn: parent
     anchors.horizontalCenterOffset: root.driftX
     anchors.verticalCenterOffset: root.driftY
-    scale: width > 0 && height > 0 ? Math.min(1, (root.width * root.fitWidth) / width, (root.height * root.fitHeight) / height) : 1
+    scale: width > 0 && height > 0 ? Math.min(1, (root.cover ? Math.max : Math.min)((root.width * root.fitWidth) / width, (root.height * root.fitHeight) / height)) : 1
     transformOrigin: Item.Center
     Text {
       id: label

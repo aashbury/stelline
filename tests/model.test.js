@@ -1204,8 +1204,8 @@ test("pictureSize: S, M, L, Full or Fill, and each saver keeps its old size unti
   // a size chosen wins over the old setting
   assert.equal(M.pictureSize({ fit: "cover", size: "m" }, "image").key, "m")
   assert.equal(M.pictureSize({ size: "s" }, "image").w, 0.4)
-  // art has no Fill; it takes Full
-  assert.equal(M.pictureSize({ size: "fill" }, "ascii").key, "full")
+  // art can Fill too: the whole screen, cropped
+  assert.deepEqual(M.pictureSize({ size: "fill" }, "ascii"), { key: "fill", w: 1, h: 1, crop: true })
   assert.equal(M.pictureSize({ size: "nonsense" }, "image").key, "full")
 })
 

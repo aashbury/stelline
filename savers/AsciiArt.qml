@@ -24,6 +24,9 @@ Item {
   // How much of the surface the art may take.
   property real fitWidth: 0.8
   property real fitHeight: 0.6
+  // Cover instead of fit: the art fills both the width and the height it is
+  // given, whichever it overflows is cut off at the edge of the screen.
+  property bool cover: false
   // Progressive: nothing shows until `resolve()` names the cells that have
   // arrived (an entrance effect feeds it a few per frame). Off: everything.
   property bool progressive: false
@@ -69,7 +72,8 @@ Item {
     // rounds to the wrong shape and the art comes out squeezed. At this size
     // a cell is two pixels by four — one pixel to a dot, the dot's true
     // shape — and the art is shrunk to fit as a whole from there.
-    return Math.max(root.minPixelSize, Math.floor(Math.min(byWidth, byHeight)))
+    // Covering, rounded up, so no edge is left short of the screen.
+    return Math.max(root.minPixelSize, root.cover ? Math.ceil(Math.max(byWidth, byHeight)) : Math.floor(Math.min(byWidth, byHeight)))
   }
   readonly property int cellW: Math.max(1, Math.round(root.pixelSize * root.advanceAt100 / 100))
   readonly property int cellH: Math.max(1, Math.round(root.pixelSize * root.lineHeightAt100 / 100))
@@ -275,14 +279,16 @@ Item {
 
   // Cells are whole pixels, so a tall piece in a small box (a tile) can still
   // overflow at the smallest cell; the finished layer is then scaled down.
-  readonly property real shrink: artW > 0 && artH > 0 ? Math.min(1, (root.width * root.fitWidth) / (artW * aspectFix), (root.height * root.fitHeight) / artH) : 1
+  readonly property real shrink: artW > 0 && artH > 0
+    ? Math.min(1, (root.cover ? Math.max : Math.min)((root.width * root.fitWidth) / (artW * aspectFix), (root.height * root.fitHeight) / artH)) : 1
   // Cells are whole pixels, so their shape is only near the font's; small,
   // a cell two by four is well off it and the art comes out wide. Whenever
   // the art is being scaled anyway — small, or shrunk to fit — it is scaled
   // back to the font's own shape, so a thumbnail has the proportions the
   // full-size art has. At full size nothing is resampled: dots stay crisp.
   readonly property real rawFix: cellW > 0 && cellH > 0 ? (advanceAt100 / lineHeightAt100) / (cellW / cellH) : 1
-  readonly property real rawShrink: artW > 0 && artH > 0 ? Math.min(1, (root.width * root.fitWidth) / artW, (root.height * root.fitHeight) / artH) : 1
+  readonly property real rawShrink: artW > 0 && artH > 0
+    ? Math.min(1, (root.cover ? Math.max : Math.min)((root.width * root.fitWidth) / artW, (root.height * root.fitHeight) / artH)) : 1
   readonly property real aspectFix: (pixelSize <= minPixelSize || rawShrink < 1) ? rawFix : 1
 
   Item {

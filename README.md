@@ -23,8 +23,8 @@ the stock screensaver is the Original tile, untouched.
   text, and get ASCII art in your theme's colours (or the pictures as they
   are). Or describe one and a coding agent draws it. **Size** — S, M, L or
   Full — sets how much of the screen it takes, never stretched: S to L keep
-  clear of the widgets, Full takes the whole width with the cards on top;
-  pictures can also Fill.
+  clear of the widgets, Full takes the whole width with the cards on top,
+  and Fill covers the whole screen, trimming what runs past its edges.
 - **Widgets on top.** A clock, the notifications that arrived while you were
   away, and your coding agents acted out by a small figure (Hands, Robot or
   Morty) that shows who is working and who needs you. Each goes in a corner or
@@ -541,7 +541,7 @@ empty means the agent's own default, or Opus 5 on the API) and `effort` is
 half a minute; high may take minutes and is stopped after ten.
 
 A saver's knobs sit under `savers.<id>`: `text`, `play`, `dwellSec`, `fps`,
-`effects`, `order` (`sequence`/`shuffle`), `size` (`s`/`m`/`l`/`full`, and `fill` for pictures; the older `fit: "cover"` reads as `fill`), `motion`
+`effects`, `order` (`sequence`/`shuffle`), `size` (`s`/`m`/`l`/`full`/`fill`; the older `fit: "cover"` reads as `fill`), `motion`
 (`none`/`zoom`), `background`, and `widgets` — `clock` (`on`, `place`,
 `format`, `showDate`, `showSeconds`), `notifications` (`on`, `place`,
 `detail` `counts`/`summaries`), `agent` (`on`, `place`, `detail`

@@ -21,10 +21,11 @@ Item {
   // set by the scene so it keeps out from under the corner widgets.
   property real artRoom: 1
   property real artShift: 0
-  // S, M and L keep clear of the corner widgets; Full takes the whole
-  // screen, and the cards sit on top of it, as they do on a photo.
-  readonly property real room: size.key === "full" ? 1 : artRoom
-  readonly property real shift: size.key === "full" ? 0 : artShift
+  // S, M and L keep clear of the corner widgets; Full and Fill take the
+  // whole screen, and the cards sit on top of it, as they do on a photo.
+  readonly property bool wholeScreen: size.key === "full" || size.key === "fill"
+  readonly property real room: wholeScreen ? 1 : artRoom
+  readonly property real shift: wholeScreen ? 0 : artShift
   property var series: ({})
 
   readonly property string kind: series && series.kind === "image" ? "image" : "ascii"
@@ -176,6 +177,7 @@ Item {
     // bigger than the last whatever sits in the corners; Full is the screen.
     fitWidth: root.size.w * root.room
     fitHeight: root.size.h * (root.thumbnail ? 0.8 : 1)
+    cover: root.size.crop
     ambientStyle: root.thumbnail ? "" : root.ambient
     effect: root.thumbnail ? "none" : root.effect
     active: root.running && visible
@@ -195,6 +197,7 @@ Item {
     // follow it.
     fitWidth: Math.min(0.95, root.size.w * 1.125) * root.room
     fitHeight: Math.min(0.9, root.size.h * 1.13)
+    cover: root.size.crop
     art: visible ? root.dotFrame : ""
     gridColumns: root.grid.columns
     gridRows: root.grid.rows

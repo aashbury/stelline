@@ -24,6 +24,8 @@ Item {
   property string fontFamily: Style.font.family
   property real fitWidth: 0.8
   property real fitHeight: 0.6
+  // Cover the screen, cutting off what overflows, instead of fitting in it.
+  property bool cover: false
   property real driftX: 0
   property real driftY: 0
   property int fps: 15
@@ -168,6 +170,7 @@ Item {
     fontFamily: root.fontFamily
     fitWidth: root.fitWidth
     fitHeight: root.fitHeight
+    cover: root.cover
     driftX: root.driftX
     driftY: root.driftY
     pulse: root.effect === "pulse"

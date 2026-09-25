@@ -226,10 +226,8 @@ Column {
     foreground: root.foreground
     fontFamily: root.fontFamily
     ButtonGroup {
-      // Pictures shown as they are can also fill the screen, cropped; art in
-      // dots is drawn whole, so it stops at Full.
-      options: [{ value: "s", label: "S" }, { value: "m", label: "M" }, { value: "l", label: "L" }, { value: "full", label: "Full" }]
-        .concat(root.isImage ? [{ value: "fill", label: "Fill" }] : [])
+      // Fill covers the screen, cropping what runs past its edges.
+      options: [{ value: "s", label: "S" }, { value: "m", label: "M" }, { value: "l", label: "L" }, { value: "full", label: "Full" }, { value: "fill", label: "Fill" }]
       value: M.pictureSize(root.settings, root.isImage ? "image" : "ascii").key
       foreground: root.foreground
       fontFamily: root.fontFamily
