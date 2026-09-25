@@ -99,16 +99,10 @@ function shufflable(cfg, userSavers) {
 }
 
 // How long the shuffle stays on one saver before moving on while the screen
-// is idle; 0 is only when it starts, as it always was.
-var SHUFFLE_EVERY = [0, 60, 120, 300, 600, 900, 1800]
+// is idle, in seconds; 0 is only when it starts, as it always was.
 function shuffleEvery(cfg) {
   var n = Math.round(Number(cfg && cfg.shuffleEvery))
   return isFinite(n) && n > 0 ? Math.max(30, n) : 0
-}
-function shuffleEveryLabel(sec) {
-  var n = Number(sec) || 0
-  if (n <= 0) return "each time it starts"
-  return n < 60 ? n + " s" : Math.round(n / 60) + " min"
 }
 
 function rotation(cfg, userSavers) {
@@ -2584,7 +2578,7 @@ function forgetSaver(cfg, saverId) {
 if (typeof module !== "undefined") {
   module.exports = {
   timingsSummary: timingsSummary,
-  shufflable: shufflable, SHUFFLE_EVERY: SHUFFLE_EVERY, shuffleEvery: shuffleEvery, shuffleEveryLabel: shuffleEveryLabel,
+  shufflable: shufflable, shuffleEvery: shuffleEvery,
   pictureSize: pictureSize,
   appGlyph: appGlyph, moreLine: moreLine,
   effectLabel: effectLabel, importFailureText: importFailureText,

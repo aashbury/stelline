@@ -1235,8 +1235,6 @@ test("shuffle: every saver can be ticked at once, and it can move on on a timer"
   assert.equal(M.shuffleEvery({ shuffleEvery: 300 }), 300)
   assert.equal(M.shuffleEvery({ shuffleEvery: "120" }), 120)
   assert.equal(M.shuffleEvery({ shuffleEvery: 5 }), 30)
-  assert.equal(M.shuffleEveryLabel(0), "each time it starts")
-  assert.equal(M.shuffleEveryLabel(600), "10 min")
   // settings arriving as text still come out a number
   assert.equal(M.mergeSettings({ shuffleEvery: "300" }).shuffleEvery, 300)
 })

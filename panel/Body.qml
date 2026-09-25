@@ -464,6 +464,19 @@ Column {
       anchors.verticalCenter: parent.verticalCenter
       spacing: Style.space(6)
 
+      // With Shuffle on, every saver into it at once — or, all in, out again
+      // to pick a few.
+      Button {
+        visible: root.cfg.shuffle === true
+        anchors.verticalCenter: parent.verticalCenter
+        text: root.allTicked ? "Clear" : "Select all"
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        fontSize: Style.font.caption
+        tooltipText: root.allTicked ? "Untick every saver, to pick a few" : "Put every saver in the shuffle"
+        onClicked: if (root.svc) root.svc.writeSettings({ shuffleFrom: root.allTicked ? [] : root.shufflable.slice() })
+      }
+
       Button {
         id: shuffleButton
         text: "Shuffle"
@@ -499,51 +512,30 @@ Column {
   // and how long each plays before the next while the screen is up.
   readonly property var shufflable: M.shufflable(cfg, userSavers)
   readonly property bool allTicked: shufflable.length > 0 && shufflable.every(function(id) { return (cfg.shuffleFrom || []).indexOf(id) !== -1 })
-  Item {
+  // How long each saver plays before the shuffle moves on while the screen
+  // is up: the same slider as the timings, its time typed over the same way.
+  // At the far left, only each time the screensaver starts.
+  SliderRow {
+    id: shuffleEveryRow
     visible: root.cfg.shuffle === true
     width: parent.width
     enabled: root.serviceOk
     opacity: root.inertOpacity
-    implicitHeight: Math.max(tickAll.implicitHeight, shuffleEvery.implicitHeight)
-
-    Button {
-      id: tickAll
-      anchors.left: parent.left
-      anchors.verticalCenter: parent.verticalCenter
-      text: root.allTicked ? "Clear" : "Select all"
-      iconText: root.allTicked ? "󰄱" : "󰄲"
-      bordered: true
-      foreground: root.foreground
-      fontFamily: root.fontFamily
-      fontSize: Style.font.caption
-      tooltipText: root.allTicked ? "Untick every saver, to pick a few" : "Put every saver in the shuffle"
-      onClicked: if (root.svc) root.svc.writeSettings({ shuffleFrom: root.allTicked ? [] : root.shufflable.slice() })
-    }
-
-    Row {
-      anchors.right: parent.right
-      anchors.verticalCenter: parent.verticalCenter
-      spacing: Style.space(8)
-      Text {
-        anchors.verticalCenter: parent.verticalCenter
-        textFormat: Text.PlainText
-        text: "Next saver"
-        color: Qt.darker(root.foreground, 1.4)
-        font.family: root.fontFamily
-        font.pixelSize: Style.font.caption
-      }
-      Choice {
-        id: shuffleEvery
-        width: Style.space(190)
-        rowHeight: tickAll.implicitHeight
-        options: M.SHUFFLE_EVERY.map(function(sec) { return { value: String(sec), label: sec > 0 ? "every " + M.shuffleEveryLabel(sec) : M.shuffleEveryLabel(sec) } })
-        value: String(M.shuffleEvery(root.cfg))
-        foreground: root.foreground
-        fontFamily: root.fontFamily
-        onChanged: function(v) { if (root.svc) root.svc.writeSettings({ shuffleEvery: Number(v) }) }
-        onPopupOpenChanged: root.setEditing("shuffleEvery", popupOpen)
-      }
-    }
+    bar: root.bar
+    glyph: "󰒟"
+    label: "Next saver"
+    readoutWidth: Style.space(84)
+    value: M.shuffleEvery(root.cfg)
+    minimum: 0
+    maximum: 3600
+    step: 30
+    format: function(v) { return v < 30 ? "each start" : M.mmss(v) }
+    parse: function(t) { return /^\s*each/i.test(t) ? 0 : root.fromMinutes(t) }
+    foreground: root.foreground
+    fontFamily: root.fontFamily
+    onReleased: function(v) { if (root.svc) root.svc.writeSettings({ shuffleEvery: v < 30 ? 0 : Math.round(v) }) }
+    onWheeled: function(d) { root.scrollBy(d) }
+    onEditingChanged: root.setEditing("shuffleEvery", editing)
   }
 
   // Shuffle on with nothing ticked plays everything; say so where the ticks are.

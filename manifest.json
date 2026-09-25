@@ -57,10 +57,10 @@
         "key": "shuffleEvery",
         "type": "integer",
         "label": "Next saver every (seconds)",
-        "description": "While the screensaver is up, move on to another checked saver this often; 0 only changes it each time it starts.",
+        "description": "While the screensaver is up, move on to another checked saver this often (at least 30); 0 only changes it each time it starts.",
         "min": 0,
         "max": 3600,
-        "step": 60,
+        "step": 30,
         "defaultValue": 0
       },
       {
