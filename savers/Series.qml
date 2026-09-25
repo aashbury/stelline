@@ -32,7 +32,8 @@ Item {
   readonly property int fpsSetting: settings && Number(settings.fps) > 0 ? Number(settings.fps) : (series && Number(series.fps) > 0 ? Number(series.fps) : 10)
   readonly property bool onBattery: service && service.onBattery === true
   readonly property int fps: Math.max(1, Math.min(30, onBattery ? Math.round(fpsSetting / 2) : fpsSetting))
-  readonly property string effectSetting: settings && settings.effect ? String(settings.effect) : "cycle"
+  // One effect pinned; one that has since been retired means cycle again.
+  readonly property string effectSetting: settings && settings.effect && (E.EFFECTS.indexOf(String(settings.effect)) !== -1 || settings.effect === "none") ? String(settings.effect) : "cycle"
   readonly property bool shuffleOrder: settings && settings.order === "shuffle"
   // How much of the screen the picture or the art takes: a box centred on
   // the screen it fits inside whole, or — Fill — the whole screen, cropped.

@@ -14,11 +14,14 @@ Column {
   property var moods: ({})
   property var moodKeys: []
   property var pinned: []
+  // What was saved, less any effect that has since been retired, so an old
+  // list still matches the mood it was.
+  readonly property var kept: pinned.filter(function(e) { return effects.indexOf(e) !== -1 })
   property color foreground: Color.foreground
   property string fontFamily: Style.font.family
 
   property bool expanded: false
-  readonly property string mood: M.moodOf(root.pinned, root.moods)
+  readonly property string mood: M.moodOf(root.kept, root.moods)
   readonly property bool showChips: expanded || mood === "custom"
 
   signal changed(var effects)
@@ -43,7 +46,7 @@ Column {
 
   Button {
     text: root.mood === "custom"
-      ? "Your own — " + root.pinned.length + " of " + root.effects.length
+      ? "Your own — " + root.kept.length + " of " + root.effects.length
       : (root.showChips ? "Choose individually" : "Choose individually…")
     iconText: root.showChips ? "󰅀" : "󰅂"
     foreground: root.foreground
@@ -63,12 +66,12 @@ Column {
         required property var modelData
         text: M.effectLabel(modelData)
         bordered: true
-        selected: root.pinned.indexOf(modelData) !== -1
+        selected: root.kept.indexOf(modelData) !== -1
         foreground: root.foreground
         fontFamily: root.fontFamily
         fontSize: Style.font.caption
         onClicked: {
-          var next = root.pinned.slice()
+          var next = root.kept.slice()
           var at = next.indexOf(modelData)
           if (at === -1) next.push(modelData); else next.splice(at, 1)
           // Every one checked is the same as none: it plays all of them.

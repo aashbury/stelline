@@ -9,7 +9,7 @@
 
 var EFFECTS = ["decrypt", "rain", "beams", "scatter", "wipe", "typewriter", "reveal", "pulse",
                "scanline", "grid", "shockwave", "slit", "glitch", "dust",
-               "spotlight", "cascade", "derez", "collapse", "storm"]
+               "cascade", "derez", "collapse", "storm"]
 
 // How a piece leaves. An arrival on its own is a poster; a screensaver wants
 // the art to go again, so every cycle is arrive, live, depart. Departures are
@@ -29,7 +29,7 @@ var STEADY_AMBIENTS = ["scan", "shimmer"]
 // The ones that animate the whole canvas rather than the letters alone. They
 // are the point of the thing and also most of its cost, so on battery they
 // step aside — the same bargain Series already makes with its frame rate.
-var FIELD_EFFECTS = ["spotlight", "cascade", "shockwave", "beams", "storm"]
+var FIELD_EFFECTS = ["cascade", "shockwave", "beams", "storm"]
 
 // `pulse` is the one entrance that is not an arrival: it shows the piece
 // whole and lets the colour breathe. A piece with nothing else to play has
@@ -53,7 +53,7 @@ function onlyCheap(list) {
 var MOODS = {
   calm:    ["reveal", "wipe", "typewriter", "slit", "pulse"],
   neon:    ["decrypt", "rain", "scanline", "glitch", "grid", "cascade"],
-  kinetic: ["beams", "scatter", "shockwave", "dust", "spotlight", "derez", "collapse", "storm"]
+  kinetic: ["beams", "scatter", "shockwave", "dust", "derez", "collapse", "storm"]
 }
 var CIPHER = "!@#$%&*+=?<>/\\|01アイウエオカキクケコサシスセソタチツテトナニヌネノ"
 
@@ -284,31 +284,6 @@ function plan(effect, lines, seed, field) {
       dcell.c0 = (cols - 1) / 2 + Math.cos(angle) * out * cols / 2
       dcell.start = random() * 1500
       dcell.at = dcell.start + p.travel
-    }
-    break
-  case "spotlight":
-    // A beam crosses the art and leaves the letters lit behind it.
-    p.duration = 3400
-    p.beam = 620
-    if (F) {
-      // The beam crosses the whole screen; a letter lights as it passes.
-      p.fps = 12
-      p.beamWidth = Math.max(5, Math.round(F.cols * 0.09))
-      p.span = F.cols + p.beamWidth * 2
-      p.sweepTime = p.duration - 300
-      for (k = 0; k < n; k++) {
-        var fpc = list[k]
-        fpc.at = ((fieldCol(F, fpc.c) + p.beamWidth) / p.span) * p.sweepTime + (fieldRow(F, fpc.r) / F.rows) * 220
-      }
-      break
-    }
-    p.padR = Math.max(3, Math.round(rows * 0.8))
-    p.padC = Math.max(4, Math.round(cols * 0.06))
-    p.beamWidth = Math.max(5, Math.round(cols * 0.09))
-    p.fps = 12
-    for (k = 0; k < n; k++) {
-      var pcell = list[k]
-      pcell.at = 400 + (pcell.c / Math.max(1, cols)) * 2500 + (pcell.r / Math.max(1, rows)) * 220
     }
     break
   case "cascade":
@@ -614,18 +589,6 @@ function drawOwnField(p, t, g) {
   var F = p.field
   var c, r, k
   switch (p.effect) {
-  case "spotlight":
-    var beamCol = -p.beamWidth + (t / p.sweepTime) * p.span
-    for (c = 0; c < F.cols; c++) {
-      var bd = Math.abs(c - beamCol)
-      if (bd > p.beamWidth) continue
-      var lv = bd < p.beamWidth * 0.22 ? HOT : (bd < p.beamWidth * 0.55 ? MID : DIM)
-      for (r = 0; r < F.rows; r++) {
-        if (noise(c * 7 + r, Math.floor(t / 110)) > 0.42) continue
-        put(g, r, c, bd < p.beamWidth * 0.22 ? "▓" : (bd < p.beamWidth * 0.55 ? "▒" : "░"), lv)
-      }
-    }
-    break
   case "cascade":
     for (c = 0; c < F.cols; c++) {
       var head = (t - p.colStart[c]) / p.fall - 1
@@ -689,22 +652,6 @@ function drawField(p, t, g) {
   if (p.field) { drawOwnField(p, t, g); return }
   var c, r, k
   switch (p.effect) {
-  case "spotlight":
-    // A searchlight: the beam is a column of haze crossing the dark, and the
-    // letters it has passed stay lit behind it.
-    // Enters from off the left and leaves off the right within the effect.
-    var beamSpan = p.cols + p.padC * 2 + p.beamWidth * 2
-    var beamCol = -p.padC - p.beamWidth + (t / p.duration) * beamSpan
-    for (c = -p.padC; c < p.cols + p.padC; c++) {
-      var bd = Math.abs(c - beamCol)
-      if (bd > p.beamWidth) continue
-      var lv = bd < p.beamWidth * 0.22 ? HOT : (bd < p.beamWidth * 0.55 ? MID : DIM)
-      for (r = -p.padR; r < p.rows + p.padR; r++) {
-        if (noise(c * 7 + r, Math.floor(t / 110)) > 0.42) continue
-        put(g, r, c, bd < p.beamWidth * 0.22 ? "▓" : (bd < p.beamWidth * 0.55 ? "▒" : "░"), lv)
-      }
-    }
-    break
   case "cascade":
     // Rain over the whole canvas, not only over the word.
     for (c = -p.padC; c < p.cols + p.padC; c++) {
@@ -900,12 +847,6 @@ function frame(p, t) {
         put(g, Math.round(cell.r0 + (cell.r - cell.r0) * e), Math.round(cell.c0 + (cell.c - cell.c0) * e),
             e < 0.72 ? "·" : cell.ch, e < 0.72 ? DIM : (e < 0.93 ? MID : HOT))
       }
-      break
-    case "spotlight":
-      // The beam is wide and soft, and the letter is lit inside it before it
-      // stays lit — so the light looks like it is doing the revealing.
-      var sd = Math.abs(cell.at - t)
-      if (sd < p.beam) put(g, cell.r, cell.c, cell.ch, sd < p.beam * 0.24 ? HOT : (sd < p.beam * 0.55 ? MID : DIM))
       break
     case "cascade":
       var chead = (t - p.colStart[p.field ? cell.fcol : cell.c]) / p.fall - 1

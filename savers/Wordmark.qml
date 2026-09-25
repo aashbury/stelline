@@ -54,7 +54,8 @@ Item {
   // Unplugged, the whole-canvas ones stand down: a screensaver that costs a
   // third of a core is not what you want running off a battery.
   readonly property var effectList: onBattery ? E.onlyCheap(chosenEffects) : chosenEffects
-  readonly property string effectSetting: settings && settings.effect ? String(settings.effect) : "cycle"
+  // One effect pinned; one that has since been retired means cycle again.
+  readonly property string effectSetting: settings && settings.effect && (E.EFFECTS.indexOf(String(settings.effect)) !== -1 || settings.effect === "none") ? String(settings.effect) : "cycle"
   readonly property int holdSec: settings && settings.holdSec !== undefined && Number(settings.holdSec) >= 0 ? Number(settings.holdSec) : 4
   readonly property bool cycling: active && !thumbnail && effectSetting === "cycle"
   property string cycled: ""

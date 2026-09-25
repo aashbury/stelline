@@ -156,7 +156,7 @@ test("moods still partition every effect after the new ones", () => {
 
 test("the field draws outside the word, and never outlives its effect", () => {
   const art = ["  ████  ", " ██  ██ ", "████████", "██    ██"]
-  const field = ["spotlight", "cascade", "shockwave", "beams", "storm"]
+  const field = ["cascade", "shockwave", "beams", "storm"]
   for (const fx of field) {
     const p = E.plan(fx, art, 6)
     assert.ok(p.padR > 0 || p.padC > 0, fx + " has no margin")
@@ -276,15 +276,11 @@ test("weather on a field of its own covers the screen, whatever size the art is"
   }
 })
 
-test("the spotlight lights each letter while its beam is over it", () => {
-  const art = ["#".repeat(10)]
-  const F = { cols: 100, rows: 30, r0: 14, c0: 45, sc: 1, sr: 1 }
-  const p = E.plan("spotlight", art, 1, F)
-  for (const cell of p.cells) {
-    const beamCol = -p.beamWidth + (cell.at / p.sweepTime) * p.span
-    const col = F.c0 + cell.c + 0.5
-    assert.ok(Math.abs(beamCol - col) <= p.beamWidth, "letter " + cell.c + " lit with the beam " + (beamCol - col).toFixed(1) + " away")
-  }
+test("spotlight is retired: gone from every list, and a saved one is simply skipped", () => {
+  for (const list of [E.EFFECTS, E.FIELD_EFFECTS, ...Object.values(E.MOODS)]) assert.ok(!list.includes("spotlight"))
+  // the random pick never lands on a name that is no longer an effect
+  for (let i = 0; i < 20; i++) assert.notEqual(E.pick(["spotlight", "beams"], i / 20), "spotlight")
+  assert.ok(E.EFFECTS.includes(E.pick(["spotlight"], 0.5)))
 })
 
 test("an arrival lasts until its last letter lands", () => {
