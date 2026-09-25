@@ -438,7 +438,7 @@ Item {
   // (files or a folder) or "" — the Add card only offers Paste when there is
   // something to paste, so the button never disappoints.
   property string clipboardHas: ""
-  readonly property string pasteStageDir: runtimeDir + "/stelline-paste"
+  readonly property string pasteStageDir: runtimeDir + "/stelline-pastes"
   function refreshClipboard() {
     if (clipProbe.running) return
     clipProbe.command = ["bash", "-c", M.clipboardProbeScript()]
@@ -462,7 +462,7 @@ Item {
     d.step = "start"
     root.importDraft = d
     root.draftPreview = { path: "", detail: M.DEFAULT_DETAIL, image: "", art: "", error: "" }
-    Quickshell.execDetached(["rm", "-rf", "--", root.pasteStageDir])
+    Quickshell.execDetached(["bash", "-c", M.clearPastedScript(root.pasteStageDir)])
     refreshClipboard()
     return "ok"
   }
@@ -503,7 +503,7 @@ Item {
     if (wordPreviewer.running) { root.wordPending = t; return }
     wordPreviewer.forText = t
     var out = root.previewStageDir + "/word.txt"
-    wordPreviewer.command = ["bash", "-c", "command -v magick >/dev/null 2>&1 || { echo 'needs ImageMagick (magick)' >&2; exit 1; }\n" + M.wordmarkScript(t, out) + "\ncat " + M.shellQuote(out)]
+    wordPreviewer.command = ["bash", "-c", "command -v magick >/dev/null 2>&1 || { echo 'needs ImageMagick (magick)' >&2; exit 1; }\nstage=" + M.shellQuote(root.previewStageDir) + "\n" + M.claimStageBash() + " || { echo 'no room to make a preview' >&2; exit 1; }\n" + M.wordmarkScript(t, out) + "\ncat " + M.shellQuote(out)]
     wordPreviewer.running = true
   }
   Process {
@@ -530,7 +530,7 @@ Item {
   // through the same conversion the import uses, and the picture itself.
   // `draftPreview.path` names what it was made from, so a stale one is
   // never shown for a newer attachment; `error` says why there is none.
-  readonly property string previewStageDir: runtimeDir + "/stelline-preview"
+  readonly property string previewStageDir: runtimeDir + "/stelline-previews"
   property var draftPreview: ({ path: "", image: "", art: "", error: "" })
   property string previewPending: ""
   readonly property string draftFirstPath: M.isPlainObject(importDraft) && Array.isArray(importDraft.paths) && importDraft.paths.length ? String(importDraft.paths[0]) : ""

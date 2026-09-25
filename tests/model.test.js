@@ -372,11 +372,52 @@ test("the clipboard scripts are one self-contained bash script each", () => {
   assert.match(probe, /wl-paste --list-types/)
   assert.match(probe, /echo paths/)
   const paste = M.clipboardPasteScript("/run/user/1000/stelline-paste")
-  assert.match(paste, /mkdir -p "\$stage"/)
+  assert.match(paste, /mkdir -m 700 -- "\$stage"/)
+  assert.doesNotMatch(paste, /mkdir -p/)
   assert.match(paste, /pasted-\$\(date \+%s%N\)/)
   assert.match(paste, /'\/run\/user\/1000\/stelline-paste'/)
   // Nothing outside the staging folder is ever removed.
   assert.equal(paste.split("rm -rf").length - 1, 0)
+})
+
+test("staging folders are claimed, never borrowed, and clearing removes only pasted files", () => {
+  const { execFileSync } = require("node:child_process")
+  const fs = require("node:fs"), os = require("node:os"), path = require("node:path")
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), "stelline-stage-"))
+  const run = (script) => { try { execFileSync("bash", ["-c", script]); return 0 } catch (e) { return e.status } }
+  const claim = (dir) => run("stage=" + M.shellQuote(dir) + "\n" + M.claimStageBash())
+  try {
+    // A fresh path is made private and marked, and claimed again after.
+    const mine = path.join(base, "mine")
+    assert.equal(claim(mine), 0)
+    assert.equal(fs.statSync(mine).mode & 0o777, 0o700)
+    assert.equal(claim(mine), 0)
+    fs.writeFileSync(path.join(mine, "pasted-1.png"), "x")
+    fs.writeFileSync(path.join(mine, "notes.txt"), "keep")
+    assert.equal(run(M.clearPastedScript(mine)), 0)
+    assert.deepEqual(fs.readdirSync(mine).sort(), [".stelline-stage", "notes.txt"])
+    // A folder that was already there, a symlink, a file: refused, untouched.
+    const foreign = path.join(base, "foreign")
+    fs.mkdirSync(foreign); fs.writeFileSync(path.join(foreign, "pasted-2.png"), "theirs")
+    assert.notEqual(claim(foreign), 0)
+    assert.equal(run(M.clearPastedScript(foreign)), 0)
+    assert.deepEqual(fs.readdirSync(foreign), ["pasted-2.png"])
+    const link = path.join(base, "link")
+    fs.symlinkSync(mine, link)
+    assert.notEqual(claim(link), 0)
+    run(M.clearPastedScript(link))
+    fs.writeFileSync(path.join(mine, "pasted-3.png"), "x")
+    run(M.clearPastedScript(link))
+    assert.ok(fs.existsSync(path.join(mine, "pasted-3.png")))
+    const file = path.join(base, "file")
+    fs.writeFileSync(file, "plain")
+    assert.notEqual(claim(file), 0)
+    assert.equal(fs.readFileSync(file, "utf8"), "plain")
+    // The previews claim their folder the same way.
+    assert.match(M.previewScript("/x", 0.5, "medium"), /mkdir -m 700 -- "\$stage"/)
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true })
+  }
 })
 
 test("saverType decides how a saver is configured; shipped tiles are instances of types anyone can add", () => {

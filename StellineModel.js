@@ -2001,12 +2001,33 @@ function clipboardProbeScript() {
   ]).join("\n")
 }
 
+// A staging folder Stelline writes into (and later clears) must be one it
+// made itself: private to the user, with a marker inside. A path that is
+// already there without the marker — someone else's folder, a symlink, a
+// file — is left exactly as it is and the step fails instead. `$stage` must
+// be set; the line returns non-zero when the folder cannot be claimed.
+var STAGE_MARKER = ".stelline-stage"
+function claimStageBash() {
+  return "if [[ -e $stage || -L $stage ]]; then [[ -d $stage && ! -L $stage && -O $stage && -f $stage/" + STAGE_MARKER + " ]]; " +
+    "else mkdir -m 700 -- \"$stage\" && : > \"$stage/" + STAGE_MARKER + "\"; fi"
+}
+
+// Clearing the pasted pictures when a new Add starts: only files Stelline
+// named itself (pasted-*), only in a folder it claimed; nothing else is
+// touched, and the folder stays.
+function clearPastedScript(stageDir) {
+  return ["set -u", "stage=" + shellQuote(stageDir),
+    "[[ -d $stage && ! -L $stage && -O $stage && -f $stage/" + STAGE_MARKER + " ]] || exit 0",
+    "find \"$stage\" -maxdepth 1 -type f -name 'pasted-*' -delete"
+  ].join("\n")
+}
+
 // Pasted bytes need a file of their own; they go in a staging folder under the
 // runtime directory, one file per paste, cleared when a new Add starts.
 function clipboardPasteScript(stageDir) {
   return ["set -u", "shopt -s extglob nocasematch",
     "stage=" + shellQuote(stageDir),
-    "mkdir -p \"$stage\" || exit 1"].concat(CLIPBOARD_BASH, [
+    claimStageBash() + " || exit 1"].concat(CLIPBOARD_BASH, [
     "if [[ -n $pick ]]; then",
     "  ext=${pick#image/}; [[ $ext == jpeg ]] && ext=jpg",
     "  out=$stage/pasted-$(date +%s%N).$ext",
@@ -2134,7 +2155,7 @@ function previewScript(stageDir, cellAspect, detail) {
     "die() { printf '%s\\n' \"$1\" >&2; exit 1; }",
     "command -v magick >/dev/null 2>&1 || die 'needs ImageMagick (magick)'",
     "stage=" + shellQuote(stageDir),
-    "mkdir -p \"$stage\" || die 'no room to make a preview'",
+    claimStageBash() + " || die 'no room to make a preview'",
     "rm -f \"$stage\"/frame-*.png",
     "src=$1; extra=''",
     "if [[ -d $src ]]; then src=$(" + findPicturesBash("\"$src\"") + " | head -n1); [[ -n $src ]] || die 'no pictures in that folder'; fi",
@@ -2697,6 +2718,8 @@ if (typeof module !== "undefined") {
     describeSettings: describeSettings,
     clipboardProbeScript: clipboardProbeScript,
     clipboardPasteScript: clipboardPasteScript,
+    claimStageBash: claimStageBash,
+    clearPastedScript: clearPastedScript,
     parseClipboard: parseClipboard,
     parsePicked: parsePicked,
     previewScript: previewScript,
