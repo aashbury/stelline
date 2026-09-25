@@ -22,8 +22,9 @@ the stock screensaver is the Original tile, untouched.
 - **Make your own.** Paste or pick pictures, a folder, a video clip or some
   text, and get ASCII art in your theme's colours (or the pictures as they
   are). Or describe one and a coding agent draws it. **Size** — S, M, L or
-  Full — sets how much of the screen it takes, never stretched; pictures can
-  also Fill.
+  Full — sets how much of the screen it takes, never stretched: S to L keep
+  clear of the widgets, Full takes the whole width with the cards on top;
+  pictures can also Fill.
 - **Widgets on top.** A clock, the notifications that arrived while you were
   away, and your coding agents acted out by a small figure (Hands, Robot or
   Morty) that shows who is working and who needs you. Each goes in a corner or

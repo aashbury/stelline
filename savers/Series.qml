@@ -21,6 +21,10 @@ Item {
   // set by the scene so it keeps out from under the corner widgets.
   property real artRoom: 1
   property real artShift: 0
+  // S, M and L keep clear of the corner widgets; Full takes the whole
+  // screen, and the cards sit on top of it, as they do on a photo.
+  readonly property real room: size.key === "full" ? 1 : artRoom
+  readonly property real shift: size.key === "full" ? 0 : artShift
   property var series: ({})
 
   readonly property string kind: series && series.kind === "image" ? "image" : "ascii"
@@ -168,16 +172,16 @@ Item {
     visible: root.kind === "ascii" && !root.animating
     art: visible ? root.frame : ""
     cycleToken: root.token
-    // S, M, L and Full are shares of the width the widgets leave, so each
-    // one is bigger than the last whatever sits in the corners.
-    fitWidth: root.size.w * root.artRoom
+    // S, M and L are shares of the width the widgets leave, so each one is
+    // bigger than the last whatever sits in the corners; Full is the screen.
+    fitWidth: root.size.w * root.room
     fitHeight: root.size.h * (root.thumbnail ? 0.8 : 1)
     ambientStyle: root.thumbnail ? "" : root.ambient
     effect: root.thumbnail ? "none" : root.effect
     active: root.running && visible
     fg: root.fg
     accent: root.accent
-    driftX: root.driftX + root.artShift
+    driftX: root.driftX + root.shift
     driftY: root.driftY
   }
 
@@ -189,13 +193,13 @@ Item {
     visible: root.kind === "ascii" && root.animating
     // A frame at L fills a little more than a still does; the other sizes
     // follow it.
-    fitWidth: Math.min(0.95, root.size.w * 1.125) * root.artRoom
+    fitWidth: Math.min(0.95, root.size.w * 1.125) * root.room
     fitHeight: Math.min(0.9, root.size.h * 1.13)
     art: visible ? root.dotFrame : ""
     gridColumns: root.grid.columns
     gridRows: root.grid.rows
     fg: root.fg
-    driftX: root.driftX + root.artShift
+    driftX: root.driftX + root.shift
     driftY: root.driftY
   }
 
