@@ -1188,6 +1188,22 @@ test("timingsSummary reads the two times, then only the exceptions that are on",
   assert.equal(M.timingsSummary({ screensaver: 300, lock: 600, battery: { screensaver: 90, lock: 180 } }), "5:00 · lock 10:00 · on battery 1:30")
 })
 
+test("pictureSize: S, M, L, Full or Fill, and each saver keeps its old size until asked", () => {
+  // unset: a picture as it was (whole, full screen), art in dots as it was (L)
+  assert.deepEqual(M.pictureSize({}, "image"), { key: "full", w: 1, h: 1, crop: false })
+  assert.equal(M.pictureSize({}, "ascii").key, "l")
+  assert.deepEqual([M.pictureSize({}, "ascii").w, M.pictureSize({}, "ascii").h], [0.8, 0.75])
+  // the old "fill the screen" setting reads as Fill
+  assert.equal(M.pictureSize({ fit: "cover" }, "image").key, "fill")
+  assert.equal(M.pictureSize({ fit: "cover" }, "image").crop, true)
+  // a size chosen wins over the old setting
+  assert.equal(M.pictureSize({ fit: "cover", size: "m" }, "image").key, "m")
+  assert.equal(M.pictureSize({ size: "s" }, "image").w, 0.4)
+  // art has no Fill; it takes Full
+  assert.equal(M.pictureSize({ size: "fill" }, "ascii").key, "full")
+  assert.equal(M.pictureSize({ size: "nonsense" }, "image").key, "full")
+})
+
 test("timingsSummary says when the screensaver itself is off", () => {
   assert.equal(M.timingsSummary({ screensaver: 300, screensaverOn: false, lock: 600, lockOn: true }), "screensaver off · lock 10:00")
 })

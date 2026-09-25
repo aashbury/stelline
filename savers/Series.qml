@@ -30,7 +30,9 @@ Item {
   readonly property int fps: Math.max(1, Math.min(30, onBattery ? Math.round(fpsSetting / 2) : fpsSetting))
   readonly property string effectSetting: settings && settings.effect ? String(settings.effect) : "cycle"
   readonly property bool shuffleOrder: settings && settings.order === "shuffle"
-  readonly property string fit: settings && settings.fit ? String(settings.fit) : "contain"
+  // How much of the screen the picture or the art takes: a box centred on
+  // the screen it fits inside whole, or — Fill — the whole screen, cropped.
+  readonly property var size: M.pictureSize(settings, kind)
   // A slow push-in on stills is opt-in: it re-renders the screen every frame.
   readonly property bool motion: !!settings && settings.motion === "zoom"
   readonly property string background: settings && settings.background ? String(settings.background) : (kind === "image" ? "black" : "theme")
@@ -165,8 +167,8 @@ Item {
     visible: root.kind === "ascii" && !root.animating
     art: visible ? root.frame : ""
     cycleToken: root.token
-    fitWidth: Math.min(0.8, root.artRoom * 0.95)
-    fitHeight: root.thumbnail ? 0.6 : 0.75
+    fitWidth: Math.min(root.size.w, root.artRoom * 0.95)
+    fitHeight: root.size.h * (root.thumbnail ? 0.8 : 1)
     ambientStyle: root.thumbnail ? "" : root.ambient
     effect: root.thumbnail ? "none" : root.effect
     active: root.running && visible
@@ -182,6 +184,10 @@ Item {
   AsciiText {
     anchors.fill: parent
     visible: root.kind === "ascii" && root.animating
+    // A frame at L fills a little more than a still does; the other sizes
+    // follow it.
+    fitWidth: Math.min(0.95, root.size.w * 1.125)
+    fitHeight: Math.min(0.9, root.size.h * 1.13)
     art: visible ? root.dotFrame : ""
     gridColumns: root.grid.columns
     gridRows: root.grid.rows
@@ -252,13 +258,13 @@ Item {
     readonly property bool animated: M.extensionOf(String(source)) === "gif"
     Image {
       anchors.centerIn: parent
-      width: parent.width
-      height: parent.height
+      width: parent.width * root.size.w
+      height: parent.height * root.size.h
       visible: !slot.animated
       source: slot.animated ? "" : picture.source
       sourceSize: Qt.size(Math.round(root.width * 1.2), Math.round(root.height * 1.2))
       scale: slot.zoom
-      fillMode: root.fit === "cover" ? Image.PreserveAspectCrop : Image.PreserveAspectFit
+      fillMode: root.size.crop ? Image.PreserveAspectCrop : Image.PreserveAspectFit
       asynchronous: true
       cache: false
       smooth: true
@@ -267,11 +273,11 @@ Item {
     AnimatedImage {
       id: picture
       anchors.centerIn: parent
-      width: parent.width
-      height: parent.height
+      width: parent.width * root.size.w
+      height: parent.height * root.size.h
       visible: slot.animated
       scale: slot.zoom
-      fillMode: root.fit === "cover" ? Image.PreserveAspectCrop : Image.PreserveAspectFit
+      fillMode: root.size.crop ? Image.PreserveAspectCrop : Image.PreserveAspectFit
       asynchronous: true
       cache: false
       smooth: true
@@ -282,13 +288,16 @@ Item {
   Slot { id: slotA }
   Slot { id: slotB }
 
-  // The tile: one picture, decoded small, never animated.
+  // The tile: one picture, decoded small, never animated — at the size it
+  // plays, so the tile shows what the screen will.
   Image {
-    anchors.fill: parent
+    anchors.centerIn: parent
+    width: parent.width * root.size.w
+    height: parent.height * root.size.h
     visible: root.thumbnail && root.kind === "image"
     source: visible && root.series && root.series.thumbImage ? "file://" + root.series.thumbImage : ""
     sourceSize: Qt.size(320, 180)
-    fillMode: Image.PreserveAspectCrop
+    fillMode: root.size.crop ? Image.PreserveAspectCrop : Image.PreserveAspectFit
     asynchronous: true
     smooth: true
   }

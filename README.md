@@ -21,7 +21,9 @@ the stock screensaver is the Original tile, untouched.
   through the ones you tick, and **Preview** plays any of them now.
 - **Make your own.** Paste or pick pictures, a folder, a video clip or some
   text, and get ASCII art in your theme's colours (or the pictures as they
-  are). Or describe one and a coding agent draws it.
+  are). Or describe one and a coding agent draws it. **Size** — S, M, L or
+  Full — sets how much of the screen it takes, never stretched; pictures can
+  also Fill.
 - **Widgets on top.** A clock, the notifications that arrived while you were
   away, and your coding agents acted out by a small figure (Hands, Robot or
   Morty) that shows who is working and who needs you. Each goes in a corner or
@@ -184,8 +186,8 @@ animation always reads as an animation. The font is the shell's monospace font.
 configured the same way whether they shipped with Stelline or you made them,
 and every ⚙ has the same three blocks. **LOOK** holds the type's knobs: a
 **text** saver — the built-in Wordmark, or a Words saver from the Add card —
-has a **Text** field and Stelline's animations; **pictures** get a fit and a
-crossfade; **art** gets the animations and a dwell; an **animation** gets a
+has a **Text** field and Stelline's animations; **pictures** get a **Size** and a
+crossfade; **art** gets the animations, a dwell and a **Size**; an **animation** gets a
 frame rate; an **empty** screen has only its background; the **Original** has
 Omarchy's effects and the artwork. Nothing is hardcoded; the built-in wordmark
 is simply defaulted to `stelline` so there is something to look at on day one.
@@ -341,7 +343,7 @@ setting that named it; pictures shown as-is are never touched.
 
 `kind` is `ascii`, `image` or `empty`; `play` is `slideshow` or `animation`
 (with `fps`); `folder` instead of `pieces` means "every picture in that folder,
-live". The per-saver knobs — dwell, speed, effects, order, fit, motion,
+live". The per-saver knobs — dwell, speed, effects, order, size, motion,
 background, the widgets — live with the plugin's other settings, not in the
 folder.
 
@@ -516,7 +518,7 @@ empty means the agent's own default, or Opus 5 on the API) and `effort` is
 half a minute; high may take minutes and is stopped after ten.
 
 A saver's knobs sit under `savers.<id>`: `text`, `play`, `dwellSec`, `fps`,
-`effects`, `order` (`sequence`/`shuffle`), `fit` (`contain`/`cover`), `motion`
+`effects`, `order` (`sequence`/`shuffle`), `size` (`s`/`m`/`l`/`full`, and `fill` for pictures; the older `fit: "cover"` reads as `fill`), `motion`
 (`none`/`zoom`), `background`, and `widgets` — `clock` (`on`, `place`,
 `format`, `showDate`, `showSeconds`), `notifications` (`on`, `place`,
 `detail` `counts`/`summaries`), `agent` (`on`, `place`, `detail`

@@ -216,25 +216,30 @@ Column {
     onClicked: root.patched({ order: checked ? "sequence" : "shuffle" })
   }
 
-  // ---- pictures shown as they are ----
+  // ---- size: how much of the screen it takes, never stretched ----
   FieldRow {
-    visible: root.isImage
+    visible: (root.isImage || root.isAscii) && !root.isWordmark
     width: parent.width
     glyph: "󰊓"
-    label: "Fit"
+    label: "Size"
     labelWidth: root.labelWidth
     foreground: root.foreground
     fontFamily: root.fontFamily
     ButtonGroup {
-      options: [{ value: "contain", label: "whole picture" }, { value: "cover", label: "fill the screen" }]
-      value: root.settings.fit || "contain"
+      // Pictures shown as they are can also fill the screen, cropped; art in
+      // dots is drawn whole, so it stops at Full.
+      options: [{ value: "s", label: "S" }, { value: "m", label: "M" }, { value: "l", label: "L" }, { value: "full", label: "Full" }]
+        .concat(root.isImage ? [{ value: "fill", label: "Fill" }] : [])
+      value: M.pictureSize(root.settings, root.isImage ? "image" : "ascii").key
       foreground: root.foreground
       fontFamily: root.fontFamily
       fontSize: Style.font.caption
       focusable: false
-      onChanged: function(v) { root.patched({ fit: v }) }
+      onChanged: function(v) { root.patched({ size: v }) }
     }
   }
+
+  // ---- pictures shown as they are ----
   FieldRow {
     visible: root.isImage
     width: parent.width
