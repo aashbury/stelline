@@ -1067,6 +1067,26 @@ function pickSaver(cfg, situation, last, random, userSavers) {
   return pool[Math.min(pool.length - 1, Math.floor(r * pool.length))]
 }
 
+// The shuffle as a bag: every saver in the set comes up once, in a random
+// order, before any comes round again. `bag` is what is left of this round;
+// it is trimmed to the set as it is now (ticked since, untick since), and
+// refilled when empty — the first of a new round never the one just shown.
+// Hands back the pick and the bag to keep.
+function drawFromBag(ids, bag, last, random) {
+  var set = Array.isArray(ids) ? ids : []
+  if (set.length === 0) return { id: last || "", bag: [] }
+  var rnd = typeof random === "function" ? random : Math.random
+  var left = (Array.isArray(bag) ? bag : []).filter(function(id) { return set.indexOf(id) !== -1 })
+  if (left.length === 0) left = set.slice()
+  // Never the one just shown, if there is anything else to show; it stays in
+  // the bag for later in the round.
+  var choices = left.filter(function(id) { return id !== last })
+  if (choices.length === 0) choices = left
+  var id = choices[Math.min(choices.length - 1, Math.floor(rnd() * choices.length))]
+  left.splice(left.indexOf(id), 1)
+  return { id: id, bag: left }
+}
+
 // ---- widgets ------------------------------------------------------------------
 //
 // What sits on top of any saver: a clock, what arrived while you were away,
@@ -2603,6 +2623,7 @@ if (typeof module !== "undefined") {
     effectiveTimeouts: effectiveTimeouts,
     firstTimeout: firstTimeout,
     pickSaver: pickSaver,
+    drawFromBag: drawFromBag,
     DEFAULT_SAVER: DEFAULT_SAVER,
     TTFX_EFFECTS: TTFX_EFFECTS,
     TTFX_MOODS: TTFX_MOODS,

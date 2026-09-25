@@ -987,7 +987,7 @@ Item {
     screensaverLaunchGraceTimer.restart()
     if (root.locked) { logEvent("screensaver-skip", "session locked"); return }
     if (root.screensaverOff) { logEvent("screensaver-skip", "screensaver-off toggle"); return }
-    var id = M.pickSaver(root.cfg, root.situation, root.lastSaver, undefined, root.userSavers)
+    var id = root.pickShuffled(root.lastSaver)
     if (id === "terminal") { startTerminalSaver(false); return }
     showOverlay(id, "idle")
   }
@@ -1087,7 +1087,7 @@ Item {
   // What Preview shows is what idle would start: the rule's saver, one from
   // the shuffle, or the chosen one — never a saver the shuffle would skip.
   function previewSaver(id, reason) {
-    var want = id && id !== "" ? id : M.pickSaver(root.cfg, root.situation, root.lastSaver, undefined, root.userSavers)
+    var want = id && id !== "" ? id : root.pickShuffled(root.lastSaver)
     return showOverlay(want, reason || "preview")
   }
 
@@ -1136,8 +1136,19 @@ Item {
   }
   // Whatever brought a new saver up — the timer, or → — the wait starts over.
   onOverlaySaverChanged: if (shuffleTimer.running) shuffleTimer.restart()
+  // Which saver comes up: a rule's, the chosen one, or — shuffling — the next
+  // from the bag, so every saver in the set plays once before any repeats.
+  property var shuffleBag: []
+  function pickShuffled(last) {
+    var id = M.pickSaver(root.cfg, root.situation, last, undefined, root.userSavers)
+    var ruled = M.isPlainObject(root.situation) && root.situation.saver === id
+    if (!root.cfg.shuffle || ruled) return id
+    var r = M.drawFromBag(M.rotation(root.cfg, root.userSavers), root.shuffleBag, last)
+    root.shuffleBag = r.bag
+    return r.id || id
+  }
   function shuffleNext() {
-    var next = M.pickSaver(root.cfg, root.situation, root.overlaySaver, undefined, root.userSavers)
+    var next = root.pickShuffled(root.overlaySaver)
     var saver = M.saverById(next, root.userSavers)
     if (!saver || next === root.overlaySaver || !M.isNativeSaver(saver)) return
     root.overlaySaver = next

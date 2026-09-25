@@ -1238,3 +1238,37 @@ test("shuffle: every saver can be ticked at once, and it can move on on a timer"
   // settings arriving as text still come out a number
   assert.equal(M.mergeSettings({ shuffleEvery: "300" }).shuffleEvery, 300)
 })
+
+test("the shuffle plays every saver once before any repeats, in a random order", () => {
+  const ids = ["a", "b", "c", "d", "e"]
+  let bag = [], last = "", seen = []
+  const rnd = (() => { let s = 7; return () => (s = (s * 16807) % 2147483647) / 2147483647 })()
+  for (let round = 0; round < 6; round++) {
+    const played = []
+    for (let i = 0; i < ids.length; i++) {
+      const r = M.drawFromBag(ids, bag, last, rnd)
+      assert.notEqual(r.id, last, "the same saver twice in a row")
+      played.push(r.id); bag = r.bag; last = r.id; seen.push(r.id)
+    }
+    // each round is every saver, exactly once
+    assert.deepEqual([...played].sort(), ids, "round " + round + " was " + played.join(","))
+  }
+  // and the rounds are not all in the same order
+  const orders = new Set(); for (let k = 0; k < seen.length; k += 5) orders.add(seen.slice(k, k + 5).join(""))
+  assert.ok(orders.size > 1)
+})
+
+test("the shuffle bag follows the set as it changes, and copes with one saver", () => {
+  // unticked mid-round: it drops out of what is left; ticked: it joins the next round
+  let r = M.drawFromBag(["a", "b", "c"], ["b", "c"], "a", () => 0)
+  assert.equal(r.id, "b")
+  r = M.drawFromBag(["a", "c", "d"], r.bag, "b", () => 0)   // b unticked, d ticked
+  assert.equal(r.id, "c")
+  assert.deepEqual(r.bag, [])
+  const next = M.drawFromBag(["a", "c", "d"], r.bag, "c", () => 0.99)
+  assert.ok(["a", "d"].includes(next.id))
+  // one saver: it just plays
+  assert.equal(M.drawFromBag(["only"], [], "only").id, "only")
+  // none: stays on what it had
+  assert.equal(M.drawFromBag([], [], "x").id, "x")
+})
