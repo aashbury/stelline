@@ -17,10 +17,9 @@ Item {
   property bool thumbnail: false
   property var service: null
   property var settings: ({})
-  // The share of the width the art may take, and how far its centre moves,
-  // set by the scene so it keeps out from under the corner widgets.
+  // The share of the width the art may take, set by the scene so it keeps
+  // out from under the corner widgets; the art stays centred.
   property real artRoom: 1
-  property real artShift: 0
 
   readonly property color fg: Color.foreground
   readonly property color bg: settings && settings.background === "black" ? "black" : Color.background
@@ -137,7 +136,7 @@ Item {
     active: root.active && !root.thumbnail
     fg: root.fg
     accent: root.accent
-    driftX: root.driftX + root.artShift
+    driftX: root.driftX
     driftY: root.driftY
   }
 }

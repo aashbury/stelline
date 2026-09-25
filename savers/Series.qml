@@ -17,15 +17,13 @@ Item {
   property bool thumbnail: false
   property var service: null
   property var settings: ({})
-  // The share of the width the art may take, and how far its centre moves,
-  // set by the scene so it keeps out from under the corner widgets.
+  // The share of the width the art may take, set by the scene so it keeps
+  // out from under the corner widgets; the art stays centred.
   property real artRoom: 1
-  property real artShift: 0
   // S, M and L keep clear of the corner widgets; Full and Fill take the
   // whole screen, and the cards sit on top of it, as they do on a photo.
   readonly property bool wholeScreen: size.key === "full" || size.key === "fill"
   readonly property real room: wholeScreen ? 1 : artRoom
-  readonly property real shift: wholeScreen ? 0 : artShift
   property var series: ({})
 
   readonly property string kind: series && series.kind === "image" ? "image" : "ascii"
@@ -173,8 +171,9 @@ Item {
     visible: root.kind === "ascii" && !root.animating
     art: visible ? root.frame : ""
     cycleToken: root.token
-    // S, M and L are shares of the width the widgets leave, so each one is
-    // bigger than the last whatever sits in the corners; Full is the screen.
+    // S, M and L are shares of the centred width the widgets leave, so each
+    // one is bigger than the last whatever sits in the corners; Full is the
+    // screen. Always centred.
     fitWidth: root.size.w * root.room
     fitHeight: root.size.h * (root.thumbnail ? 0.8 : 1)
     cover: root.size.crop
@@ -183,7 +182,7 @@ Item {
     active: root.running && visible
     fg: root.fg
     accent: root.accent
-    driftX: root.driftX + root.shift
+    driftX: root.driftX
     driftY: root.driftY
   }
 
@@ -202,7 +201,7 @@ Item {
     gridColumns: root.grid.columns
     gridRows: root.grid.rows
     fg: root.fg
-    driftX: root.driftX + root.shift
+    driftX: root.driftX
     driftY: root.driftY
   }
 
