@@ -1131,7 +1131,7 @@ Item {
     id: shuffleTimer
     interval: Math.max(30, M.shuffleEvery(root.cfg)) * 1000
     repeat: true
-    running: root.overlayVisible && root.cfg.shuffle === true && M.shuffleEvery(root.cfg) > 0
+    running: root.overlayVisible && root.cfg.shuffle === true && M.shuffleEvery(root.cfg) > 0 && !root.ruledSaver
     onTriggered: root.shuffleNext()
   }
   // Whatever brought a new saver up — the timer, or → — the wait starts over.
@@ -1139,6 +1139,15 @@ Item {
   // Which saver comes up: a rule's, the chosen one, or — shuffling — the next
   // from the bag, so every saver in the set plays once before any repeats.
   property var shuffleBag: []
+  // The saver a rule in force names, if it is ready to show; it beats the
+  // shuffle, so while it holds the timer does not jump anywhere — not even
+  // from a saver previewed by hand to the rule's.
+  readonly property string ruledSaver: {
+    var s = root.situation
+    if (!M.isPlainObject(s) || !s.saver) return ""
+    var saver = M.saverById(s.saver, root.userSavers)
+    return saver && !(saver.series && saver.series.importing) ? s.saver : ""
+  }
   function pickShuffled(last) {
     var id = M.pickSaver(root.cfg, root.situation, last, undefined, root.userSavers)
     var ruled = M.isPlainObject(root.situation) && root.situation.saver === id

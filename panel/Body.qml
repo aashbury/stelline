@@ -538,6 +538,21 @@ Column {
     onEditingChanged: root.setEditing("shuffleEvery", editing)
   }
 
+  // A rule in force names its own saver, and that beats the shuffle — say
+  // so, or Preview and idle look like they ignore the ticks.
+  Text {
+    visible: root.cfg.shuffle === true && root.svc !== null && root.svc.ruledSaver !== ""
+    width: parent.width
+    textFormat: Text.PlainText
+    wrapMode: Text.WordWrap
+    // The rule that named the saver, not every rule in force merged.
+    readonly property var rule: visible ? (root.cfg.situations || []).filter(function(r) { return r.saver === root.svc.ruledSaver && M.situationMatches(r, root.svc.situationContext) })[0] : null
+    text: visible ? "Right now " + (rule ? M.situationLabel(rule).toLowerCase() : "a rule") + " → " + root.playingName + " plays instead of the shuffle. That rule is under its ⚙ › When it plays." : ""
+    color: Qt.darker(root.foreground, 1.4)
+    font.family: root.fontFamily
+    font.pixelSize: Style.font.caption
+  }
+
   // Shuffle on with nothing ticked plays everything; say so where the ticks are.
   Text {
     visible: root.shuffleUnticked
