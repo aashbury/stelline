@@ -45,11 +45,11 @@ Item {
   readonly property real centreCardWidth: Math.round(Math.min(Style.space(300) * 1.6, root.width * 0.3))
 
   // How much of each side the corner widgets hold, so art drawn in dots can
-  // keep out from under them: a card's width and its margins, the same on
-  // both sides whichever side it is on, so the art stays in the middle. What
-  // is switched on counts — not what happens to be showing — so the art
-  // does not jump when a card comes or goes; notifications under Do Not
-  // Disturb never show, so they hold nothing.
+  // keep out from under them: a card's width and its margins, on the side
+  // it is on. The art is drawn in what is left, centred there. What is
+  // switched on counts — not what happens to be showing — so the art does
+  // not jump when a card comes or goes; notifications under Do Not Disturb
+  // never show, so they hold nothing.
   function sideUsed(side) {
     var spots = ["top-" + side, "bottom-" + side]
     for (var i = 0; i < spots.length; i++) {
@@ -58,8 +58,8 @@ Item {
     }
     return false
   }
-  readonly property real reserve: thumbnail || !showCards ? 0
-    : ((sideUsed("left") || sideUsed("right")) ? cardWidth + margin * 2 : 0)
+  readonly property real reserveLeft: thumbnail || !showCards || !sideUsed("left") ? 0 : cardWidth + margin * 2
+  readonly property real reserveRight: thumbnail || !showCards || !sideUsed("right") ? 0 : cardWidth + margin * 2
 
   Timer {
     interval: 45000

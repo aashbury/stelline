@@ -17,9 +17,10 @@ Item {
   property bool thumbnail: false
   property var service: null
   property var settings: ({})
-  // The share of the width the art may take, set by the scene so it keeps
-  // out from under the corner widgets.
+  // The share of the width the art may take, and how far its centre moves,
+  // set by the scene so it keeps out from under the corner widgets.
   property real artRoom: 1
+  property real artShift: 0
   property var series: ({})
 
   readonly property string kind: series && series.kind === "image" ? "image" : "ascii"
@@ -167,14 +168,16 @@ Item {
     visible: root.kind === "ascii" && !root.animating
     art: visible ? root.frame : ""
     cycleToken: root.token
-    fitWidth: Math.min(root.size.w, root.artRoom * 0.95)
+    // S, M, L and Full are shares of the width the widgets leave, so each
+    // one is bigger than the last whatever sits in the corners.
+    fitWidth: root.size.w * root.artRoom
     fitHeight: root.size.h * (root.thumbnail ? 0.8 : 1)
     ambientStyle: root.thumbnail ? "" : root.ambient
     effect: root.thumbnail ? "none" : root.effect
     active: root.running && visible
     fg: root.fg
     accent: root.accent
-    driftX: root.driftX
+    driftX: root.driftX + root.artShift
     driftY: root.driftY
   }
 
@@ -186,13 +189,13 @@ Item {
     visible: root.kind === "ascii" && root.animating
     // A frame at L fills a little more than a still does; the other sizes
     // follow it.
-    fitWidth: Math.min(0.95, root.size.w * 1.125)
+    fitWidth: Math.min(0.95, root.size.w * 1.125) * root.artRoom
     fitHeight: Math.min(0.9, root.size.h * 1.13)
     art: visible ? root.dotFrame : ""
     gridColumns: root.grid.columns
     gridRows: root.grid.rows
     fg: root.fg
-    driftX: root.driftX
+    driftX: root.driftX + root.artShift
     driftY: root.driftY
   }
 
