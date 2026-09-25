@@ -1224,3 +1224,19 @@ test("timingsSummary says when the screensaver itself is off", () => {
 test("timingsSummary drops lock-only exceptions while the lock is off", () => {
   assert.equal(M.timingsSummary({ screensaver: 600, lock: 600, lockOn: false, dockedNoLock: true, battery: { screensaver: 90, lock: "never" } }), "10:00 · no lock · on battery 1:30")
 })
+
+test("shuffle: every saver can be ticked at once, and it can move on on a timer", () => {
+  const cfg = M.mergeSettings({ shuffle: true, shuffleFrom: ["wordmark"] })
+  const all = M.shufflable(cfg, [])
+  assert.ok(all.includes("wordmark") && all.includes("clock") && all.includes("blank"))
+  assert.ok(!all.includes("terminal"), "the Original runs in its own window and cannot be in the rotation")
+  // off unless set, and never faster than half a minute
+  assert.equal(M.shuffleEvery(M.defaults()), 0)
+  assert.equal(M.shuffleEvery({ shuffleEvery: 300 }), 300)
+  assert.equal(M.shuffleEvery({ shuffleEvery: "120" }), 120)
+  assert.equal(M.shuffleEvery({ shuffleEvery: 5 }), 30)
+  assert.equal(M.shuffleEveryLabel(0), "each time it starts")
+  assert.equal(M.shuffleEveryLabel(600), "10 min")
+  // settings arriving as text still come out a number
+  assert.equal(M.mergeSettings({ shuffleEvery: "300" }).shuffleEvery, 300)
+})

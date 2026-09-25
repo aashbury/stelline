@@ -35,6 +35,7 @@
     "defaults": {
       "saver": "wordmark",
       "shuffle": false,
+      "shuffleEvery": 0,
       "screensaverEnabled": true,
       "lockEnabled": true,
       "holdFullscreen": false
@@ -51,6 +52,16 @@
         "type": "boolean",
         "label": "Shuffle",
         "description": "Pick a different saver each time from the checked ones."
+      },
+      {
+        "key": "shuffleEvery",
+        "type": "integer",
+        "label": "Next saver every (seconds)",
+        "description": "While the screensaver is up, move on to another checked saver this often; 0 only changes it each time it starts.",
+        "min": 0,
+        "max": 3600,
+        "step": 60,
+        "defaultValue": 0
       },
       {
         "key": "screensaverEnabled",

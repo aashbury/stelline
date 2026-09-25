@@ -495,6 +495,57 @@ Column {
     }
   }
 
+  // With Shuffle on: tick every saver at once (or clear them to pick a few),
+  // and how long each plays before the next while the screen is up.
+  readonly property var shufflable: M.shufflable(cfg, userSavers)
+  readonly property bool allTicked: shufflable.length > 0 && shufflable.every(function(id) { return (cfg.shuffleFrom || []).indexOf(id) !== -1 })
+  Item {
+    visible: root.cfg.shuffle === true
+    width: parent.width
+    enabled: root.serviceOk
+    opacity: root.inertOpacity
+    implicitHeight: Math.max(tickAll.implicitHeight, shuffleEvery.implicitHeight)
+
+    Button {
+      id: tickAll
+      anchors.left: parent.left
+      anchors.verticalCenter: parent.verticalCenter
+      text: root.allTicked ? "Clear" : "Select all"
+      iconText: root.allTicked ? "󰄱" : "󰄲"
+      bordered: true
+      foreground: root.foreground
+      fontFamily: root.fontFamily
+      fontSize: Style.font.caption
+      tooltipText: root.allTicked ? "Untick every saver, to pick a few" : "Put every saver in the shuffle"
+      onClicked: if (root.svc) root.svc.writeSettings({ shuffleFrom: root.allTicked ? [] : root.shufflable.slice() })
+    }
+
+    Row {
+      anchors.right: parent.right
+      anchors.verticalCenter: parent.verticalCenter
+      spacing: Style.space(8)
+      Text {
+        anchors.verticalCenter: parent.verticalCenter
+        textFormat: Text.PlainText
+        text: "Next saver"
+        color: Qt.darker(root.foreground, 1.4)
+        font.family: root.fontFamily
+        font.pixelSize: Style.font.caption
+      }
+      Choice {
+        id: shuffleEvery
+        width: Style.space(190)
+        rowHeight: tickAll.implicitHeight
+        options: M.SHUFFLE_EVERY.map(function(sec) { return { value: String(sec), label: sec > 0 ? "every " + M.shuffleEveryLabel(sec) : M.shuffleEveryLabel(sec) } })
+        value: String(M.shuffleEvery(root.cfg))
+        foreground: root.foreground
+        fontFamily: root.fontFamily
+        onChanged: function(v) { if (root.svc) root.svc.writeSettings({ shuffleEvery: Number(v) }) }
+        onPopupOpenChanged: root.setEditing("shuffleEvery", popupOpen)
+      }
+    }
+  }
+
   // Shuffle on with nothing ticked plays everything; say so where the ticks are.
   Text {
     visible: root.shuffleUnticked

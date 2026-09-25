@@ -1125,6 +1125,26 @@ Item {
     else logEvent("overlay-hide", reason || "requested")
   }
 
+  // Shuffle, timed: while the screen is up, move on to another saver from the
+  // set every so often. A rule in force names its own saver, so it stays.
+  Timer {
+    id: shuffleTimer
+    interval: Math.max(30, M.shuffleEvery(root.cfg)) * 1000
+    repeat: true
+    running: root.overlayVisible && root.cfg.shuffle === true && M.shuffleEvery(root.cfg) > 0
+    onTriggered: root.shuffleNext()
+  }
+  // Whatever brought a new saver up — the timer, or → — the wait starts over.
+  onOverlaySaverChanged: if (shuffleTimer.running) shuffleTimer.restart()
+  function shuffleNext() {
+    var next = M.pickSaver(root.cfg, root.situation, root.overlaySaver, undefined, root.userSavers)
+    var saver = M.saverById(next, root.userSavers)
+    if (!saver || next === root.overlaySaver || !M.isNativeSaver(saver)) return
+    root.overlaySaver = next
+    root.lastSaver = next
+    logEvent("overlay-shuffle", next)
+  }
+
   function nextSaver() {
     if (!root.overlayVisible) return
     root.overlaySaver = M.nextSaver(root.cfg, root.overlaySaver, root.userSavers)

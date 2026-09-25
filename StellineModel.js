@@ -92,8 +92,27 @@ function isNativeSaver(s) {
 // The savers the overlay may step through with Right / `n`: the shuffle set
 // when shuffle is on, otherwise every native saver. Terminal is never in the
 // rotation — it lives in its own window. Savers still importing are skipped.
+// Every saver the shuffle could play: native, finished, not hidden. "Select
+// all" ticks exactly these.
+function shufflable(cfg, userSavers) {
+  return allSavers(userSavers, cfg && cfg.hidden).filter(function(s) { return isNativeSaver(s) && !(s.series && s.series.importing) }).map(function(s) { return s.id })
+}
+
+// How long the shuffle stays on one saver before moving on while the screen
+// is idle; 0 is only when it starts, as it always was.
+var SHUFFLE_EVERY = [0, 60, 120, 300, 600, 900, 1800]
+function shuffleEvery(cfg) {
+  var n = Math.round(Number(cfg && cfg.shuffleEvery))
+  return isFinite(n) && n > 0 ? Math.max(30, n) : 0
+}
+function shuffleEveryLabel(sec) {
+  var n = Number(sec) || 0
+  if (n <= 0) return "each time it starts"
+  return n < 60 ? n + " s" : Math.round(n / 60) + " min"
+}
+
 function rotation(cfg, userSavers) {
-  var natives = allSavers(userSavers, cfg && cfg.hidden).filter(function(s) { return isNativeSaver(s) && !(s.series && s.series.importing) }).map(function(s) { return s.id })
+  var natives = shufflable(cfg, userSavers)
   if (cfg && cfg.shuffle && Array.isArray(cfg.shuffleFrom)) {
     var picked = cfg.shuffleFrom.filter(function(id) { return natives.indexOf(id) !== -1 })
     if (picked.length) return picked
@@ -114,6 +133,7 @@ function defaults() {
     saver: DEFAULT_SAVER,
     shuffle: false,
     shuffleFrom: ["wordmark", "clock"],
+    shuffleEvery: 0,
     screensaverEnabled: true,
     lockEnabled: true,
     // Hold the saver and the lock off while the active window is fullscreen
@@ -2564,6 +2584,7 @@ function forgetSaver(cfg, saverId) {
 if (typeof module !== "undefined") {
   module.exports = {
   timingsSummary: timingsSummary,
+  shufflable: shufflable, SHUFFLE_EVERY: SHUFFLE_EVERY, shuffleEvery: shuffleEvery, shuffleEveryLabel: shuffleEveryLabel,
   pictureSize: pictureSize,
   appGlyph: appGlyph, moreLine: moreLine,
   effectLabel: effectLabel, importFailureText: importFailureText,
