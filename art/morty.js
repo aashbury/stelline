@@ -107,6 +107,15 @@ function calm() {
   return s
 }
 
+// Busy: the mouth shut, and the tip of his tongue poked out between his lips
+// the way a dog's is when he is concentrating on something.
+function blep() {
+  var s = calm()
+  s += path("M 316 494 C 318 512 344 512 346 494 Z", 3, 6)
+  s += stroke("M 331 496 L 331 506", 2, 5)
+  return s
+}
+
 // ---- the head -------------------------------------------------------------------
 //
 // Broad and square-skulled, with an abrupt stop, big for his slim body.
@@ -140,7 +149,7 @@ function head(mood, droop, mouthOpen) {
   s += ellipse([318, 412], 13, 5, 2)
   s += ellipse([314, 436], 7, 5, 0) + ellipse([348, 436], 7, 5, 0)
   s += line([331, 454], [331, 472], 0, 7)
-  s += mouthOpen ? pant() : calm()
+  s += mouthOpen === "blep" ? blep() : (mouthOpen ? pant() : calm())
   // whisker spots either side of the nose
   var SPOTS = [[272, 440], [262, 454], [278, 458], [390, 440], [400, 454], [384, 458]]
   for (var i = 0; i < SPOTS.length; i++) s += ellipse(SPOTS[i], 4, 4, 1)
@@ -154,7 +163,7 @@ function head(mood, droop, mouthOpen) {
 // white hind foot either side. Lit from the left; the right side of each
 // form turns away.
 
-function body() {
+function body(typing) {
   var s = ""
   // his sides, red, behind the chest, a touch darker down the right
   s += path("M 206 548 C 150 620 128 760 128 880 L 132 1000 L 530 1000 L 534 880 C 534 760 512 620 456 548 Z", 2, LINE * 1.8)
@@ -165,6 +174,8 @@ function body() {
   s += ellipse([168, 988], 44, 26, 3, LINE * 1.2) + ellipse([494, 988], 44, 26, 3, LINE * 1.2)
   s += line([156, 974], [156, 1002], 0, 6) + line([178, 972], [178, 1002], 0, 6)
   s += line([484, 972], [484, 1002], 0, 6) + line([506, 974], [506, 1002], 0, 6)
+  // Typing, his front legs are up on the keyboard instead: drawn over it.
+  if (!typing) {
   // the floor, showing between the front legs under the chest
   s += '<polygon points="290,800 372,800 378,1004 284,1004" fill="#000"/>'
   // the front legs: slim and straight
@@ -179,6 +190,7 @@ function body() {
   s += path("M 442 1006 C 464 1012 470 1030 460 1046 C 450 1052 438 1052 428 1052 C 452 1040 456 1022 442 1006 Z", 2)
   var TOES = [228, 248, 268, 398, 418, 438]
   for (var t = 0; t < TOES.length; t++) s += line([TOES[t], 1016], [TOES[t], 1044], 0, 6)
+  }
   // the white throat and chest, narrow and deep, outlined only down its
   // sides so it runs on into the legs below
   s += path("M 196 520 L 466 520 C 478 600 474 700 450 780 C 430 830 400 856 362 860 L 300 860 C 262 856 232 830 212 780 C 188 700 184 600 196 520 Z", 3)
@@ -197,6 +209,68 @@ function body() {
   return { svg: s, tag: [331, 614] }
 }
 
+// ---- at the keyboard --------------------------------------------------------------
+//
+// A keyboard across the bottom of the frame, seen from above and in front,
+// its far edge narrower than its near one. The keys are the mid tone on the
+// dark body, so the one under a paw can light.
+
+// No wider than he is, so he reads as a dog at a desk rather than a shape.
+var KB_TOP = 872, KB_BOTTOM = 1090, KB_L = 128, KB_R = 534, KB_FLARE = 26
+function kbEdges(y) {
+  var t = (y - KB_TOP) / (KB_BOTTOM - KB_TOP)
+  return [KB_L - KB_FLARE * t, KB_R + KB_FLARE * t]
+}
+function keyboard() {
+  var s = ""
+  s += path("M " + KB_L + " " + KB_TOP + " L " + KB_R + " " + KB_TOP + " L " + (KB_R + KB_FLARE) + " " + KB_BOTTOM + " L " + (KB_L - KB_FLARE) + " " + KB_BOTTOM + " Z", 1, LINE * 1.6)
+  // a lit near edge, where the light catches the case
+  s += stroke("M " + (KB_L - KB_FLARE + 8) + " " + (KB_BOTTOM - 14) + " L " + (KB_R + KB_FLARE - 8) + " " + (KB_BOTTOM - 14), 2, 8)
+  var ROWS = [[896, 7], [938, 8], [982, 8], [1028, 6]]
+  for (var r = 0; r < ROWS.length; r++) {
+    var y = ROWS[r][0], n = ROWS[r][1], e = kbEdges(y), gap = 10
+    var inset = r === 3 ? 50 : 14
+    var x0 = e[0] + inset, x1 = e[1] - inset, w = (x1 - x0 - gap * (n - 1)) / n
+    var h = 30 + r * 2
+    for (var k = 0; k < n; k++) {
+      var x = x0 + k * (w + gap)
+      s += '<rect x="' + D.f(x) + '" y="' + D.f(y) + '" width="' + D.f(w) + '" height="' + h + '" rx="5" fill="' + T[2] + '" stroke="#000" stroke-width="5"/>'
+    }
+  }
+  return s
+}
+
+// A front leg from the shoulder down to its paw on the keys: white, slim,
+// shaded down the side turned from the light and furred like his chest, the
+// paw rounded with its toes marked. `up` lifts the paw well clear of the
+// keys and tips it back at the toes, so the tapping reads at a glance.
+var PAWS = { L: [240, 952], R: [422, 952] }
+var SHOULDERS = { L: [248, 690], R: [414, 690] }
+function frontLeg(side, up) {
+  var s = "", sh = SHOULDERS[side], p = PAWS[side], out = side === "L" ? -1 : 1
+  var paw = [p[0] + out * 8 * up, p[1] - 96 * up]
+  var knee = D.lerp(sh, paw, 0.55)
+  var d = "M " + pt(sh) + " Q " + pt([knee[0] + out * 14, knee[1]]) + " " + pt(paw)
+  s += stroke(d, 0, 76) + stroke(d, 3, 60)
+  // the side away from the light (his right, and the outer edge of each)
+  var shade = "M " + pt([sh[0] + 20, sh[1] + 10]) + " Q " + pt([knee[0] + out * 14 + 20, knee[1]]) + " " + pt([paw[0] + 20, paw[1] - 16])
+  s += stroke(shade, 2, 16)
+  // a few strokes of fur down the front, as on his chest
+  for (var k = 1; k <= 3; k++) {
+    var q = D.lerp(sh, paw, k / 4.2)
+    s += stroke("M " + pt([q[0] - 8, q[1]]) + " q " + (out * 2) + " 14 " + (-out * 2) + " 26", 2, 5)
+  }
+  // the paw, and its toes; lifted, it tips back so the pads show
+  var rot = up ? out * -14 : 0
+  s += ellipse(paw, 50, up ? 34 : 30, 3, LINE * 1.2, rot)
+  for (var t = -1; t <= 1; t++) {
+    var a = D.rotate([paw[0] + t * 18, paw[1] - 8], rot, paw), b = D.rotate([paw[0] + t * 18, paw[1] + 20], rot, paw)
+    s += line(a, b, 0, 6)
+  }
+  if (up) s += ellipse(D.rotate([paw[0], paw[1] + 10], rot, paw), 16, 9, 1)
+  return { svg: s, at: paw }
+}
+
 // He is drawn a little over the frame — ear tips at the top, paws past the
 // bottom — and round a middle a touch left of the canvas's. The whole of him
 // is brought in to fit with a margin, and centred.
@@ -207,11 +281,20 @@ var FIT_T = "translate(" + D.W / 2 + "," + MARGIN + ") scale(" + FIT + ") transl
 // A whole pose: how the eyes are, whether the mouth is open, how far the
 // ears are laid back, and how far the head is tipped and dropped.
 function pose(o) {
-  var b = body()
+  var b = body(!!o.typing)
   var tilt = o.tilt || 0, dy = o.head || 0
-  var h = D.group(head(o.eyes || "open", o.droop || 0, !!o.pant), "translate(0," + dy + ") rotate(" + tilt + " " + NECK[0] + " " + NECK[1] + ")")
+  var h = D.group(head(o.eyes || "open", o.droop || 0, o.blep ? "blep" : !!o.pant), "translate(0," + dy + ") rotate(" + tilt + " " + NECK[0] + " " + NECK[1] + ")")
   var move = function (p) { var r = D.rotate(p, tilt, NECK); return fit([r[0], r[1] + dy]) }
-  return { svg: D.svg(D.group(b.svg + h, FIT_T), null), marks: { eyes: EYES.map(move), tag: fit(b.tag) } }
+  var marks = { eyes: EYES.map(move), tag: fit(b.tag) }
+  var front = ""
+  if (o.typing) {
+    // the keyboard over his lap, then his front legs over the keyboard; the
+    // paw that is down marks the key it lights
+    var L = frontLeg("L", o.typing === "R" ? 1 : 0), R = frontLeg("R", o.typing === "L" ? 1 : 0)
+    front = keyboard() + L.svg + R.svg
+    marks.keys = [o.typing === "R" ? null : fit(L.at), o.typing === "L" ? null : fit(R.at)].filter(function (p) { return p })
+  }
+  return { svg: D.svg(D.group(b.svg + h + front, FIT_T), null), marks: marks }
 }
 
 // Mouth shut while he works, sleeps or has come to grief; open, grinning,
@@ -227,7 +310,13 @@ function poses() {
     tiltR: pose({ pant: true, tilt: 12, head: -4 }),
     dizzy: pose({ eyes: "dizzy", tilt: 5 }),
     // asleep sitting up: head dropped, eyes shut, ears laid back
-    sleep: pose({ eyes: "shut", head: 40, tilt: 4, droop: 0.6 })
+    sleep: pose({ eyes: "shut", head: 40, tilt: 4, droop: 0.6 }),
+    // at the keyboard, head down over it, tongue out, one paw on the keys and
+    // the other up — and both down, and a blink
+    typeL: pose({ typing: "L", head: 16, blep: true }),
+    typeR: pose({ typing: "R", head: 16, blep: true, tilt: 2 }),
+    typeBoth: pose({ typing: "both", head: 16, blep: true }),
+    typeBlink: pose({ typing: "both", head: 16, blep: true, eyes: "shut" })
   }
 }
 

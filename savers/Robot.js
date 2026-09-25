@@ -367,32 +367,27 @@ function visor(state, n, art) {
   return finish(f)
 }
 
-// Morty. Watching the screen while it works, its light in his eyes; head
-// cocked one way and the other when he wants you; out cold on standby.
+// Morty. At the keyboard while it works, tongue out, a paw on the keys at a
+// time and the key under it lit; head cocked one way and the other when he
+// wants you; out cold on standby.
 function morty(state, n, art) {
   var f = newFrame()
   if (!art || !art.ART || !art.ART.morty) return finish(f)
   var fd = field()
   // mouth shut while he works; open, grinning, when he is waiting on you
   var pose = blinking(n) ? "calmBlink" : "calm", dx = 0, dy = 0
-  if (state === "working") dy = cycle([0, 1, 1, 0, 0, 1, 1, 0], n)
+  if (state === "working") pose = cycle(["typeL", "typeR", "typeL", "typeR", "typeBoth", "typeL", "typeBlink", "typeR"], n)
   else if (state === "needs") { pose = cycle(["tiltL", "tiltL", "tiltL", "pant", "tiltR", "tiltR", "tiltR", "pant"], n) }
   else if (state === "waiting") { pose = blinking(n) ? "pantBlink" : "pant"; dy = -cycle(BREATH, n) }
   else if (state === "error") { pose = "dizzy"; dx = cycle([-2, 2, -2, 2, -1, 1], n) }
   else { pose = "sleep"; dy = cycle(BREATH, n) }
   var at = lay2(fd, art, "morty", pose, dx, dy)
-  var eyes = at.marks.eyes
   stateLight(fd, state, n)
   f.body = dither(fd)
-  var open = pose !== "calmBlink" && pose !== "pantBlink" && pose !== "sleep"
-  if (state === "working" && open) {
-    // the screen, reflected in each eye: a few lines of it, scrolling
-    for (var i = 0; i < 2; i++) {
-      var ex = eyes[i][0] + dx, ey = eyes[i][1] + dy
-      fillDark(f, at.seen, ex - 1, ey + 1, ex + 5, ey + 5, function (x, y) {
-        return (y - ey) % 2 === 1 && (x + n + y) % 5 < 3
-      })
-    }
+  if (state === "working") {
+    // the key under each paw that is down, lit where the paw meets it
+    var keys = at.marks.keys || []
+    for (var i = 0; i < keys.length; i++) rect(f.glow, keys[i][0] - 4 + dx, keys[i][1] + 4 + dy, 9, 3, 1)
   } else if (state === "needs") {
     beacon(f, Math.floor(n / 2), 100, 10)
   } else if (state === "waiting") {
