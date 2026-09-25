@@ -83,13 +83,29 @@ function rng(seed) {
 
 // plan(effect, lines, seed) → { effect, rows, cols, cells, duration (ms), ... }
 // Each cell gets `at`, the time it resolves; effects add what they need.
-function plan(effect, lines, seed) {
+// The weather of a field effect can have a grid of its own: the whole screen,
+// at the dot size the art would have at Full, so a small picture still gets
+// rain across the screen, in drops the same size as ever. `field` says where
+// the art sits on that grid: its top left cell (r0, c0) and how big one of
+// the art's cells is in field cells (sr, sc). Without one — a tile, a test —
+// the weather is drawn in the art's own grid, a margin round it, as before.
+function fieldOf(effect, field) {
+  if (FIELD_EFFECTS.indexOf(effect) === -1 || !field) return null
+  if (!(field.cols > 0 && field.rows > 0 && field.sc > 0 && field.sr > 0)) return null
+  return field
+}
+// Where an art cell's middle lies on the field.
+function fieldRow(F, r) { return F.r0 + (r + 0.5) * F.sr }
+function fieldCol(F, c) { return F.c0 + (c + 0.5) * F.sc }
+
+function plan(effect, lines, seed, field) {
   var rows = lines.length
   var cols = 0
   for (var i = 0; i < rows; i++) cols = Math.max(cols, lines[i].length)
   var list = cells(lines)
   var random = rng(seed)
-  var p = { effect: effect, rows: rows, cols: cols, cells: list, duration: 3500, random: random, padR: 0, padC: 0, clearsField: false }
+  var F = fieldOf(effect, field)
+  var p = { effect: effect, rows: rows, cols: cols, cells: list, duration: 3500, random: random, padR: 0, padC: 0, clearsField: false, field: F }
   var n = list.length
   var k
   switch (effect) {
@@ -109,6 +125,22 @@ function plan(effect, lines, seed) {
   case "beams":
     p.duration = 3200
     p.sweep = 500
+    if (F) {
+      // A beam per field row the art spans, each crossing the whole screen.
+      p.sweep = Math.min(1400, 500 * F.cols / Math.max(1, cols * F.sc))
+      p.fieldRowOf = []
+      var frows = [], seen = {}
+      for (k = 0; k < rows; k++) {
+        var fr = Math.floor(fieldRow(F, k))
+        p.fieldRowOf.push(fr)
+        if (!seen[fr]) { seen[fr] = true; frows.push(fr) }
+      }
+      for (k = frows.length - 1; k > 0; k--) { var fj = Math.floor(random() * (k + 1)); var ft = frows[k]; frows[k] = frows[fj]; frows[fj] = ft }
+      p.fieldRowStart = {}
+      for (k = 0; k < frows.length; k++) p.fieldRowStart[frows[k]] = k * (2600 / Math.max(1, frows.length))
+      for (k = 0; k < n; k++) list[k].at = p.fieldRowStart[p.fieldRowOf[list[k].r]] + (fieldCol(F, list[k].c) / F.cols) * p.sweep
+      break
+    }
     p.padC = Math.max(6, Math.round(cols * 0.1))
     p.rowStart = []
     var order = []
@@ -167,6 +199,22 @@ function plan(effect, lines, seed) {
     // An expanding ring. Rows count double: a character cell is about twice
     // as tall as it is wide, so equal steps in each make a circle.
     p.duration = 3000
+    if (F) {
+      // From the middle of the art out to the furthest corner of the screen.
+      p.fps = 12
+      p.centreRow = F.r0 + rows * F.sr / 2
+      p.centreCol = F.c0 + cols * F.sc / 2
+      p.reach = 1
+      var corners = [[0, 0], [0, F.cols], [F.rows, 0], [F.rows, F.cols]]
+      for (k = 0; k < 4; k++) p.reach = Math.max(p.reach, Math.sqrt(Math.pow((corners[k][0] - p.centreRow) * 2, 2) + Math.pow(corners[k][1] - p.centreCol, 2)))
+      for (k = 0; k < n; k++) {
+        var fsc = list[k]
+        var fdr = (fieldRow(F, fsc.r) - p.centreRow) * 2, fdc = fieldCol(F, fsc.c) - p.centreCol
+        fsc.dist = Math.sqrt(fdr * fdr + fdc * fdc)
+        fsc.at = 200 + (fsc.dist / p.reach) * 2400
+      }
+      break
+    }
     p.centreRow = (rows - 1) / 2
     p.centreCol = (cols - 1) / 2
     p.fps = 12
@@ -242,6 +290,18 @@ function plan(effect, lines, seed) {
     // A beam crosses the art and leaves the letters lit behind it.
     p.duration = 3400
     p.beam = 620
+    if (F) {
+      // The beam crosses the whole screen; a letter lights as it passes.
+      p.fps = 12
+      p.beamWidth = Math.max(5, Math.round(F.cols * 0.09))
+      p.span = F.cols + p.beamWidth * 2
+      p.sweepTime = p.duration - 300
+      for (k = 0; k < n; k++) {
+        var fpc = list[k]
+        fpc.at = ((fieldCol(F, fpc.c) + p.beamWidth) / p.span) * p.sweepTime + (fieldRow(F, fpc.r) / F.rows) * 220
+      }
+      break
+    }
     p.padR = Math.max(3, Math.round(rows * 0.8))
     p.padC = Math.max(4, Math.round(cols * 0.06))
     p.beamWidth = Math.max(5, Math.round(cols * 0.09))
@@ -257,6 +317,19 @@ function plan(effect, lines, seed) {
     p.fall = 105
     p.tail = 5
     p.fps = 12
+    if (F) {
+      // Every column of the screen falls, fast enough to reach the bottom.
+      p.fall = Math.max(25, Math.min(105, 1900 / Math.max(1, F.rows)))
+      p.colStart = []
+      for (k = 0; k < F.cols; k++) p.colStart.push(random() * 2000)
+      for (k = 0; k < n; k++) {
+        var fcc = list[k]
+        var col = Math.max(0, Math.min(F.cols - 1, Math.floor(fieldCol(F, fcc.c))))
+        fcc.fcol = col
+        fcc.at = p.colStart[col] + (fieldRow(F, fcc.r) + 1) * p.fall
+      }
+      break
+    }
     p.padR = Math.max(3, Math.round(rows * 0.8))
     p.padC = Math.max(4, Math.round(cols * 0.06))
     p.clearsField = true
@@ -300,9 +373,13 @@ function plan(effect, lines, seed) {
     // Rain in the dark, the sky going off behind it, the word arriving with
     // the light.
     p.duration = 4200
-    p.padR = Math.max(3, rows)
-    p.padC = Math.max(4, Math.round(cols * 0.06))
-    p.clearsField = true
+    // On a field of its own the rain is drawn behind the art, so a settled
+    // letter never needs clearing.
+    if (!F) {
+      p.padR = Math.max(3, rows)
+      p.padC = Math.max(4, Math.round(cols * 0.06))
+      p.clearsField = true
+    }
     p.fps = 12
     p.flashes = [700, 1500, 2100, 3000, 3600]
     for (k = 0; k < n; k++) {
@@ -317,6 +394,9 @@ function plan(effect, lines, seed) {
     p.duration = 0
     for (k = 0; k < n; k++) list[k].at = 0
   }
+  // An arrival lasts until its last letter lands: one still to come when it
+  // ended would never be drawn.
+  for (k = 0; k < n; k++) if (list[k].at + 150 > p.duration) p.duration = list[k].at + 150
   p.next = 0
   return p
 }
@@ -527,12 +607,86 @@ function noise(a, b) {
   return (h % 100000) / 100000
 }
 
+// The weather on a field of its own: the whole screen, in field cells, drawn
+// behind the art. Each is the same weather as below, bounded by the screen
+// instead of a margin round the art.
+function drawOwnField(p, t, g) {
+  var F = p.field
+  var c, r, k
+  switch (p.effect) {
+  case "spotlight":
+    var beamCol = -p.beamWidth + (t / p.sweepTime) * p.span
+    for (c = 0; c < F.cols; c++) {
+      var bd = Math.abs(c - beamCol)
+      if (bd > p.beamWidth) continue
+      var lv = bd < p.beamWidth * 0.22 ? HOT : (bd < p.beamWidth * 0.55 ? MID : DIM)
+      for (r = 0; r < F.rows; r++) {
+        if (noise(c * 7 + r, Math.floor(t / 110)) > 0.42) continue
+        put(g, r, c, bd < p.beamWidth * 0.22 ? "▓" : (bd < p.beamWidth * 0.55 ? "▒" : "░"), lv)
+      }
+    }
+    break
+  case "cascade":
+    for (c = 0; c < F.cols; c++) {
+      var head = (t - p.colStart[c]) / p.fall - 1
+      if (head < 0) continue
+      for (k = 0; k < p.tail; k++) {
+        r = Math.round(head - k)
+        if (r < 0 || r >= F.rows) continue
+        put(g, r, c, CIPHER.charAt(Math.floor(noise(c, r + Math.floor(t / 70)) * CIPHER.length)),
+            k === 0 ? HOT : (k < 3 ? MID : DIM))
+      }
+    }
+    break
+  case "shockwave":
+    var reach = (t - 200) / 2400 * p.reach
+    if (reach <= 0) break
+    for (r = 0; r < F.rows; r++) {
+      for (c = 0; c < F.cols; c++) {
+        var dr = (r - p.centreRow) * 2, dc = c - p.centreCol
+        var off = Math.abs(Math.sqrt(dr * dr + dc * dc) - reach)
+        if (off > 2.2) continue
+        if (noise(c, r) > 0.62) continue
+        put(g, r, c, off < 0.8 ? "▓" : "░", off < 0.8 ? MID : DIM)
+      }
+    }
+    break
+  case "beams":
+    for (var key in p.fieldRowStart) {
+      var rs = p.fieldRowStart[key]
+      if (t < rs || t >= rs + p.sweep) continue
+      var bhead = ((t - rs) / p.sweep) * (F.cols + 6)
+      for (k = 0; k < 6; k++) put(g, Number(key), Math.round(bhead - k), k === 0 ? "█" : (k < 2 ? "▓" : (k < 4 ? "▒" : "░")), k === 0 ? HOT : (k < 3 ? MID : DIM))
+    }
+    break
+  case "storm":
+    var lit = false
+    for (k = 0; k < p.flashes.length; k++) if (t >= p.flashes[k] && t < p.flashes[k] + 140) lit = true
+    for (c = 0; c < F.cols; c += 2) {
+      var sh = ((t / 2.2) + noise(c, 1) * 900) % (F.rows * 14)
+      r = Math.round(sh / 14)
+      put(g, r, c, "╲", DIM)
+      put(g, r + 1, c + 1, "╲", DIM)
+    }
+    if (lit) {
+      for (r = 0; r < F.rows; r += 2) {
+        for (c = 0; c < F.cols; c += 3) {
+          if (noise(c, r + Math.floor(t / 40)) > 0.5) continue
+          put(g, r, c, "░", DIM)
+        }
+      }
+    }
+    break
+  }
+}
+
 // What an effect draws in the empty space. Called before the letters, so the
 // word always reads on top of its own weather.
 function drawField(p, t, g) {
   // Once the arrival is over the letters are on the canvas and the screen
   // belongs to them: no weather may outlive its own effect.
   if (t >= p.duration) return
+  if (p.field) { drawOwnField(p, t, g); return }
   var c, r, k
   switch (p.effect) {
   case "spotlight":
@@ -669,7 +823,10 @@ function frame(p, t) {
   var list = p.cells
   var random = p.random
   var cursor = p.effect === "typewriter" ? firstPending(p, t) : -1
-  drawField(p, t, g)
+  // Weather with a field of its own goes in its own frame, drawn behind the
+  // art; otherwise under the letters in this one.
+  var fg = p.field ? blankFrame(p.field.rows, p.field.cols, 0, 0) : null
+  drawField(p, t, fg || g)
   for (var k = 0; k < list.length; k++) {
     var cell = list[k]
     if (cell.at <= t) {
@@ -689,10 +846,12 @@ function frame(p, t) {
       }
       break
     case "beams":
-      var rs = p.rowStart[cell.r]
+      var rs = p.field ? p.fieldRowStart[p.fieldRowOf[cell.r]] : p.rowStart[cell.r]
       if (t >= rs && t < rs + p.sweep) {
-        var head = (t - rs) / p.sweep * p.cols
-        var d = cell.c - head
+        // In art cells behind the head, wherever the head is measured.
+        var d = p.field
+          ? (fieldCol(p.field, cell.c) - (t - rs) / p.sweep * p.field.cols) / p.field.sc
+          : cell.c - (t - rs) / p.sweep * p.cols
         if (d >= 0 && d < 5) put(g, cell.r, cell.c, d < 1 ? "█" : (d < 2 ? "▓" : (d < 3.5 ? "▒" : "░")), d < 1 ? HOT : (d < 2.5 ? MID : DIM))
       }
       break
@@ -749,8 +908,8 @@ function frame(p, t) {
       if (sd < p.beam) put(g, cell.r, cell.c, cell.ch, sd < p.beam * 0.24 ? HOT : (sd < p.beam * 0.55 ? MID : DIM))
       break
     case "cascade":
-      var chead = (t - p.colStart[cell.c]) / p.fall - 1
-      var dr = cell.r - chead
+      var chead = (t - p.colStart[p.field ? cell.fcol : cell.c]) / p.fall - 1
+      var dr = p.field ? (fieldRow(p.field, cell.r) - chead) / p.field.sr : cell.r - chead
       if (dr >= 0 && dr < 5) {
         put(g, cell.r, cell.c, CIPHER.charAt(Math.floor(random() * CIPHER.length)), dr < 1 ? HOT : (dr < 2.5 ? MID : DIM))
       }
@@ -775,7 +934,12 @@ function frame(p, t) {
     }
   }
   var out = layersOf(g)
-  return { resolved: resolved, overlay: out.overlay, hot: out.hot, dim: out.dim, offset: out.offset, done: t >= p.duration }
+  var res = { resolved: resolved, overlay: out.overlay, hot: out.hot, dim: out.dim, offset: out.offset, done: t >= p.duration }
+  if (fg) {
+    var fo = layersOf(fg)
+    res.field = { overlay: fo.overlay, hot: fo.hot, dim: fo.dim, offset: fo.offset }
+  }
+  return res
 }
 
 // A departure draws every cell that has not gone yet, so the canvas is

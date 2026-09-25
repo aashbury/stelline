@@ -65,13 +65,36 @@ Item {
   // Planned from this item's own art: when `art` changes, the painter's copy
   // of it may not have updated yet.
   function artLines() { return root.art === "" ? [] : root.art.replace(/\s+$/, "").split("\n") }
-  function clearOverlays() { root.overlay = ""; root.hotOverlay = ""; root.dimOverlay = ""; root.offsets = [0, 0, 0] }
+  function clearOverlays() {
+    root.overlay = ""; root.hotOverlay = ""; root.dimOverlay = ""; root.offsets = [0, 0, 0]
+    root.fieldLayers = null
+  }
   // Each level carries its own left edge in columns, so a narrow effect lays
   // out narrow text wherever it happens to be on screen.
   property var offsets: [0, 0, 0]
   function show(f) {
     root.overlay = f.overlay; root.hotOverlay = f.hot; root.dimOverlay = f.dim
     root.offsets = f.offset ? f.offset : [0, 0, 0]
+    root.fieldLayers = f.field ? f.field : null
+  }
+
+  // Weather has a grid of its own: the whole of this item, at the text size
+  // the art would have at Full, so a small piece still gets rain across the
+  // screen in drops of the usual size. The plan is told where the art sits on
+  // it, measured off the painter — scale and all — so the letters it lights
+  // or drops land on their own dots.
+  property var fieldGeo: null
+  property var fieldLayers: null
+  function fieldGeometry() {
+    if (root.width <= 0 || root.height <= 0 || view.columns === 0) return null
+    var px = view.fullPixelSize
+    var cw = Math.max(1, Math.round(px * view.advanceAt100 / 100))
+    var ch = Math.max(1, Math.round(px * view.lineHeightAt100 / 100))
+    var sx = view.shrink * view.aspectFix, sy = view.shrink
+    var ax = view.artX + view.artW * (1 - sx) / 2
+    var ay = view.artY + view.artH * (1 - sy) / 2
+    return { cols: Math.ceil(root.width / cw), rows: Math.ceil(root.height / ch), c0: ax / cw, r0: ay / ch,
+             sc: view.cellW * sx / cw, sr: view.cellH * sy / ch, cellW: cw, cellH: ch, pixelSize: px }
   }
 
   function restart() {
@@ -87,9 +110,13 @@ Item {
       beginAmbient()
       return
     }
+    // The painter lays the art out from its own copy; the field is measured
+    // off that, so wait for it to catch up with a new piece.
+    if (view.art !== root.art) { Qt.callLater(root.restart); return }
     view.progressive = true
     view.reset()
-    root.plan = E.plan(root.effect, lines, Date.now() % 100000)
+    root.fieldGeo = E.FIELD_EFFECTS.indexOf(root.effect) !== -1 ? fieldGeometry() : null
+    root.plan = E.plan(root.effect, lines, Date.now() % 100000, root.fieldGeo)
     root.startedAt = Date.now()
     root.running = true
     step()
@@ -159,6 +186,31 @@ Item {
     loops: Animation.Infinite
     NumberAnimation { to: 1; duration: 3000; easing.type: Easing.InOutSine }
     NumberAnimation { to: 0; duration: 3000; easing.type: Easing.InOutSine }
+  }
+
+  // The weather, behind the art: rain passes behind a letter that has landed.
+  Item {
+    visible: root.fieldLayers !== null && root.fieldGeo !== null
+    Repeater {
+      model: 3
+      Text {
+        required property int index
+        readonly property var g: root.fieldGeo
+        readonly property string body: !root.fieldLayers ? "" : (index === 0 ? root.fieldLayers.dim : (index === 1 ? root.fieldLayers.overlay : root.fieldLayers.hot))
+        x: g && root.fieldLayers ? (root.fieldLayers.offset[index] || 0) * g.cellW : 0
+        y: 0
+        visible: body !== "" && !!g
+        textFormat: Text.PlainText
+        renderType: Text.NativeRendering
+        text: body
+        color: index === 0 ? Qt.darker(root.trail, 1.9) : (index === 1 ? root.trail : Qt.lighter(root.fg, 1.25))
+        font.family: root.fontFamily
+        font.pixelSize: g ? g.pixelSize : 12
+        font.letterSpacing: g ? g.cellW - g.pixelSize * view.advanceAt100 / 100 : 0
+        lineHeightMode: Text.FixedHeight
+        lineHeight: g ? g.cellH : 12
+      }
+    }
   }
 
   AsciiArt {

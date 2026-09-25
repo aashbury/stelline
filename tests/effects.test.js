@@ -242,3 +242,55 @@ test("a dot matrix rests with the ambients that light it rather than scramble it
   // both are wrong over braille, so neither is offered for one
   for (const a of ["flicker", "interference"]) assert.equal(E.STEADY_AMBIENTS.indexOf(a), -1)
 })
+
+test("weather on a field of its own covers the screen, whatever size the art is", () => {
+  const art = ["####  ####", "#  #  #  #", "####  ####"]
+  // a small piece in the middle of a 120 x 40 screen, its cells half a field cell
+  const small = { cols: 120, rows: 40, r0: 18, c0: 55, sc: 0.5, sr: 0.5 }
+  for (const fx of E.FIELD_EFFECTS) {
+    const p = E.plan(fx, art, 3, small)
+    assert.equal(p.padR, 0, fx + " still pads the art")
+    let minR = Infinity, maxR = -1, minC = Infinity, maxC = -1
+    for (let t = 0; t < p.duration; t += 40) {
+      const f = E.frame(p, t)
+      assert.ok(f.field, fx + " drew no field at " + t)
+      for (const [i, layer] of [f.field.dim, f.field.overlay, f.field.hot].entries()) {
+        layer.split("\n").forEach((line, r) => {
+          for (let j = 0; j < line.length; j++) {
+            if (line[j] === " ") continue
+            const c = f.field.offset[i] + j
+            // never off the field
+            assert.ok(r >= 0 && r < small.rows && c >= 0 && c < small.cols, fx + " drew off the field at " + r + "," + c)
+            minR = Math.min(minR, r); maxR = Math.max(maxR, r); minC = Math.min(minC, c); maxC = Math.max(maxC, c)
+          }
+        })
+      }
+    }
+    // it reaches both sides of the screen, far past the art (columns 55-60)
+    assert.ok(minC < 10 && maxC > 110, fx + " stayed near the art: columns " + minC + "-" + maxC)
+    // and every field effect but the row-bound beams reaches top and bottom too
+    if (fx !== "beams") assert.ok(minR < 5 && maxR > 34, fx + " stayed near the art: rows " + minR + "-" + maxR)
+    // every letter lands before the arrival ends
+    E.frame(p, p.duration)
+    assert.ok(p.cells.every((c) => c.done), fx + " left letters unlanded")
+  }
+})
+
+test("the spotlight lights each letter while its beam is over it", () => {
+  const art = ["#".repeat(10)]
+  const F = { cols: 100, rows: 30, r0: 14, c0: 45, sc: 1, sr: 1 }
+  const p = E.plan("spotlight", art, 1, F)
+  for (const cell of p.cells) {
+    const beamCol = -p.beamWidth + (cell.at / p.sweepTime) * p.span
+    const col = F.c0 + cell.c + 0.5
+    assert.ok(Math.abs(beamCol - col) <= p.beamWidth, "letter " + cell.c + " lit with the beam " + (beamCol - col).toFixed(1) + " away")
+  }
+})
+
+test("an arrival lasts until its last letter lands", () => {
+  // a tall piece: the cascade's bottom rows land late
+  const tall = Array.from({ length: 60 }, () => "##########")
+  const p = E.plan("cascade", tall, 5)
+  E.frame(p, p.duration)
+  assert.ok(p.cells.every((c) => c.done))
+})

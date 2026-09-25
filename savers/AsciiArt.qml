@@ -75,6 +75,14 @@ Item {
     // Covering, rounded up, so no edge is left short of the screen.
     return Math.max(root.minPixelSize, root.cover ? Math.ceil(Math.max(byWidth, byHeight)) : Math.floor(Math.min(byWidth, byHeight)))
   }
+  // The size this art's text would be at Full — what weather is drawn at, so
+  // its drops are the same size whatever size the art is.
+  readonly property int fullPixelSize: {
+    if (root.columns === 0 || root.rows === 0 || root.width === 0 || root.height === 0) return 24
+    var byWidth = (root.width * 0.95) / (root.columns * root.advanceAt100 / 100)
+    var byHeight = (root.height * 0.9) / (root.rows * root.lineHeightAt100 / 100)
+    return Math.max(root.minPixelSize, Math.floor(Math.min(byWidth, byHeight)))
+  }
   readonly property int cellW: Math.max(1, Math.round(root.pixelSize * root.advanceAt100 / 100))
   readonly property int cellH: Math.max(1, Math.round(root.pixelSize * root.lineHeightAt100 / 100))
   readonly property int artW: root.columns * root.cellW
