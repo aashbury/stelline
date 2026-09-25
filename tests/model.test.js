@@ -1209,6 +1209,14 @@ test("pictureSize: S, M, L, Full or Fill, and each saver keeps its old size unti
   assert.equal(M.pictureSize({ size: "nonsense" }, "image").key, "full")
 })
 
+test("pictureSize for words: S to XL, never Fill, and unset fits between the widgets", () => {
+  assert.equal(M.pictureSize({}, "text").key, "")
+  assert.equal(M.pictureSize({ size: "l" }, "text").w, 0.8)
+  assert.equal(M.pictureSize({ size: "full" }, "text").key, "full")
+  // Fill on a word would cut letters off: it reads as no size chosen
+  assert.equal(M.pictureSize({ size: "fill" }, "text").key, "")
+})
+
 test("timingsSummary says when the screensaver itself is off", () => {
   assert.equal(M.timingsSummary({ screensaver: 300, screensaverOn: false, lock: 600, lockOn: true }), "screensaver off · lock 10:00")
 })

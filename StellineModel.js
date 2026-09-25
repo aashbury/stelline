@@ -2022,6 +2022,14 @@ var SIZE_BOXES = {
 }
 function pictureSize(settings, kind) {
   var s = isPlainObject(settings) ? settings : {}
+  // Words: S to XL like art (never Fill, which would cut letters off). Unset,
+  // the key is "" and a word fits between the corner widgets, centred.
+  if (kind === "text") {
+    var t = ["s", "m", "l", "full"].indexOf(String(s.size)) !== -1 ? String(s.size) : ""
+    if (t === "") return { key: "", w: 0, h: 0, crop: false }
+    var tb = SIZE_BOXES.ascii[t]
+    return { key: t, w: tb[0], h: tb[1], crop: false }
+  }
   var image = kind === "image"
   var key = PICTURE_SIZES.indexOf(String(s.size)) !== -1 ? String(s.size)
     : (image && s.fit === "cover" ? "fill" : (image ? "full" : "l"))

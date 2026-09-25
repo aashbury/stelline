@@ -27,7 +27,8 @@ Column {
   readonly property int frameCount: isSeries && Number(series.frameCount) > 0 ? Number(series.frameCount) : 1
   readonly property string play: settings && settings.play ? String(settings.play) : (series && series.play ? String(series.play) : "slideshow")
   readonly property bool animation: isAscii && play === "animation" && frameCount > 1
-  readonly property bool hasKnobs: saverId !== "" && !(isImage && frameCount === 1 && M.extensionOf(series.pieces[0] || "") === "gif")
+  // Everything has a size to set now, a single GIF or clip included.
+  readonly property bool hasKnobs: saverId !== ""
   // What this saver is decides what it is configured with. A text saver has
   // a word, whether it shipped with Stelline or you typed it into Add.
   readonly property string type: M.saverType(root.saver)
@@ -218,7 +219,7 @@ Column {
 
   // ---- size: how much of the screen it takes, never stretched ----
   FieldRow {
-    visible: (root.isImage || root.isAscii) && !root.isWordmark
+    visible: root.isImage || root.isAscii || root.isWordmark
     width: parent.width
     glyph: "󰊓"
     label: "Size"
@@ -229,14 +230,15 @@ Column {
       // Each a share of the screen, centred: XL is as big as the whole
       // picture fits; Fill covers the screen, trimming what runs past its
       // edges. (XL is stored as "full", as it was first called.)
+      // Words stop at XL: Fill would cut letters off. With no size chosen a
+      // word fits between the corner widgets, and no button is lit.
       options: [
         { value: "s", label: "S", tooltip: "40% of the screen" },
         { value: "m", label: "M", tooltip: "60% of the screen" },
         { value: "l", label: "L", tooltip: "80% of the screen" },
-        { value: "full", label: "XL", tooltip: "As big as the whole picture fits" },
-        { value: "fill", label: "Fill", tooltip: "Covers the screen, trimming the edges" }
-      ]
-      value: M.pictureSize(root.settings, root.isImage ? "image" : "ascii").key
+        { value: "full", label: "XL", tooltip: root.isWordmark ? "As big as the whole word fits" : "As big as the whole picture fits" }
+      ].concat(root.isWordmark ? [] : [{ value: "fill", label: "Fill", tooltip: "Covers the screen, trimming the edges" }])
+      value: M.pictureSize(root.settings, root.isWordmark ? "text" : (root.isImage ? "image" : "ascii")).key
       foreground: root.foreground
       fontFamily: root.fontFamily
       fontSize: Style.font.caption

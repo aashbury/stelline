@@ -25,7 +25,10 @@ the stock screensaver is the Original tile, untouched.
   XL — sets how much of the screen it takes, centred and never stretched
   (40, 60 and 80% of it, then as big as the whole picture fits); Fill covers
   the whole screen, trimming what runs past its edges. The widget cards sit
-  on top where they meet.
+  on top where they meet. The same **Size** is on every saver with a picture
+  — a single GIF or clip included — and on the Wordmark and Words savers,
+  which stop at XL (Fill would cut letters off) and, left unset, fit between
+  the widget cards.
 - **Widgets on top.** A clock, the notifications that arrived while you were
   away, and your coding agents acted out by a small figure (Hands, Robot or
   Morty) that shows who is working and who needs you. Each goes in a corner or

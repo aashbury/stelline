@@ -20,6 +20,7 @@ Item {
   // The share of the width the art may take, set by the scene so it keeps
   // out from under the corner widgets; the art stays centred.
   property real artRoom: 1
+  readonly property var size: M.pictureSize(settings, "text")
 
   readonly property color fg: Color.foreground
   readonly property color bg: settings && settings.background === "black" ? "black" : Color.background
@@ -125,9 +126,11 @@ Item {
   AsciiShow {
     id: show
     anchors.fill: parent
-    // The canvas stays the whole screen — the effects that use it do — but
-    // the word fits between the corner widgets.
-    fitWidth: 0.8 * root.artRoom
+    // The canvas stays the whole screen — the effects that use it do. A size
+    // chosen is a centred share of it, as for pictures; none chosen, the
+    // word fits between the corner widgets.
+    fitWidth: root.size.key !== "" ? root.size.w : 0.8 * root.artRoom
+    fitHeight: root.size.key !== "" ? root.size.h : 0.6
     ambientStyle: root.thumbnail ? "" : root.ambient
     cycleToken: root.token
     onPhaseChanged: if (phase === "live") root.scheduleNext()
