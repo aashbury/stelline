@@ -289,15 +289,13 @@ Item {
   // overflow at the smallest cell; the finished layer is then scaled down.
   readonly property real shrink: artW > 0 && artH > 0
     ? Math.min(1, (root.cover ? Math.max : Math.min)((root.width * root.fitWidth) / (artW * aspectFix), (root.height * root.fitHeight) / artH)) : 1
-  // Cells are whole pixels, so their shape is only near the font's; small,
-  // a cell two by four is well off it and the art comes out wide. Whenever
-  // the art is being scaled anyway — small, or shrunk to fit — it is scaled
-  // back to the font's own shape, so a thumbnail has the proportions the
-  // full-size art has. At full size nothing is resampled: dots stay crisp.
+  // Cells are whole pixels, so their shape is only near the font's — a few
+  // per cent off at most sizes, well off when small. The art is always scaled
+  // back to the font's own shape, the one it was converted for, so a picture
+  // keeps its proportions at every size: never squashed or stretched, even
+  // if that means its dots are resampled a touch.
   readonly property real rawFix: cellW > 0 && cellH > 0 ? (advanceAt100 / lineHeightAt100) / (cellW / cellH) : 1
-  readonly property real rawShrink: artW > 0 && artH > 0
-    ? Math.min(1, (root.cover ? Math.max : Math.min)((root.width * root.fitWidth) / artW, (root.height * root.fitHeight) / artH)) : 1
-  readonly property real aspectFix: (pixelSize <= minPixelSize || rawShrink < 1) ? rawFix : 1
+  readonly property real aspectFix: rawFix
 
   Item {
     id: canvasHost
