@@ -59,7 +59,8 @@ Column {
   // or the chosen one — the same answer the screensaver itself gives.
   readonly property var situationNow: svc ? svc.situation : null
   readonly property string playingName: M.playingName(cfg, situationNow, userSavers)
-  readonly property bool shuffling: cfg.shuffle && !(situationNow && situationNow.saver)
+  readonly property var ruledSavers: svc ? svc.ruledSavers : []
+  readonly property bool shuffling: ruledSavers.length ? ruledSavers.length > 1 : cfg.shuffle
   // Shuffle on with nothing ticked plays everything; the row says so.
   readonly property bool shuffleUnticked: cfg.shuffle && M.rotation(cfg, userSavers).length === savers.filter(function(s) { return s.kind !== "external" }).length && (cfg.shuffleFrom || []).filter(function(id) { return savers.some(function(s) { return s.id === id && s.kind !== "external" }) }).length === 0
   readonly property real inertOpacity: serviceOk ? 1 : 0.45
@@ -380,7 +381,7 @@ Column {
         : root.svc.inhibited ? "held off · " + M.inhibitorLabel(root.svc.inhibitors)
         : root.svc.heldByFullscreen ? "held off · a window is fullscreen"
         : (!root.screensaverOn ? "screensaver off" + (root.svc.lockStageEnabled ? ", still locks at " + M.mmss(root.lockNow) : ", no lock")
-        : root.playingName.toLowerCase() + " after " + M.mmss(root.screensaverNow)
+        : (root.ruledSavers.length > 1 ? root.ruledSavers.length + " savers" : root.playingName.toLowerCase()) + " after " + M.mmss(root.screensaverNow)
           + (root.svc.lockStageEnabled ? ", lock at " + M.mmss(root.lockNow) : ", no lock")
           + (root.svc.situation ? " · " + M.situationLabel(root.svc.situation).toLowerCase() : "")))
       : "not running yet — restart the shell"
@@ -517,7 +518,7 @@ Column {
   // At the far left, only each time the screensaver starts.
   SliderRow {
     id: shuffleEveryRow
-    visible: root.cfg.shuffle === true
+    visible: root.cfg.shuffle === true || root.ruledSavers.length > 1
     width: parent.width
     enabled: root.serviceOk
     opacity: root.inertOpacity
@@ -538,16 +539,14 @@ Column {
     onEditingChanged: root.setEditing("shuffleEvery", editing)
   }
 
-  // A rule in force names its own saver, and that beats the shuffle — say
-  // so, or Preview and idle look like they ignore the ticks.
+  // Rules in force pick the savers, and beat the shuffle; name them, or
+  // Preview and idle look like they ignore the ticks.
   Text {
-    visible: root.cfg.shuffle === true && root.svc !== null && root.svc.ruledSaver !== ""
+    visible: root.ruledSavers.length > 0 && (root.cfg.shuffle === true || root.ruledSavers.length > 1)
     width: parent.width
     textFormat: Text.PlainText
-    wrapMode: Text.WordWrap
-    // The rule that named the saver, not every rule in force merged.
-    readonly property var rule: visible ? (root.cfg.situations || []).filter(function(r) { return r.saver === root.svc.ruledSaver && M.situationMatches(r, root.svc.situationContext) })[0] : null
-    text: visible ? "Right now " + (rule ? M.situationLabel(rule).toLowerCase() : "a rule") + " → " + root.playingName + " plays instead of the shuffle. That rule is under its ⚙ › When it plays." : ""
+    elide: Text.ElideRight
+    text: "Playing by rule: " + root.playingName
     color: Qt.darker(root.foreground, 1.4)
     font.family: root.fontFamily
     font.pixelSize: Style.font.caption

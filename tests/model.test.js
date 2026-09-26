@@ -83,6 +83,27 @@ test("pickSaver: situation wins, then the chosen saver, then a shuffle that avoi
   assert.equal(M.pickSaver(one, null, "clock", 0.5), "clock")
 })
 
+test("rules pick a set, not a winner: every fitting rule's saver takes turns, ahead of the shuffle", () => {
+  const list = [
+    { id: "w", enabled: true, when: { docked: {} }, saver: "wordmark" },
+    { id: "h", enabled: true, when: { docked: {}, theme: { name: "jessica4" } }, saver: "clock" },
+    { id: "t", enabled: true, when: { docked: {} }, lock: "never" }
+  ]
+  const both = M.activeSituation(list, { docked: true, themeName: "jessica4" })
+  assert.deepEqual(M.ruledSavers(both, []), ["wordmark", "clock"])
+  assert.equal(both.lock, "never")
+  // Either order of the rules gives the same set: nothing outranks.
+  assert.deepEqual(M.ruledSavers(M.activeSituation(list.slice().reverse(), { docked: true, themeName: "jessica4" }), []).sort(), ["clock", "wordmark"])
+  assert.deepEqual(M.ruledSavers(M.activeSituation(list, { docked: true, themeName: "nord" }), []), ["wordmark"])
+  assert.deepEqual(M.ruledSavers(M.activeSituation(list, { docked: false }), []), [])
+  assert.deepEqual(M.ruledSavers({ saver: "no-such" }, []), [])
+  // The ticks are not consulted while rules pick; never the last one twice.
+  const sh = M.mergeSettings({ shuffle: true, shuffleFrom: ["blank"] })
+  assert.equal(M.pickSaver(sh, both, "wordmark", 0), "clock")
+  assert.equal(M.pickSaver(M.defaults(), both, "clock", 0.99), "wordmark")
+  assert.equal(M.playingName(sh, both, []), "Wordmark + Clock")
+})
+
 test("situations: battery, night (wrapping midnight) and theme; every fit applies, the first names the saver; unknown keys never match", () => {
   const ctx = { onBattery: true, batteryPercent: 42, minuteOfDay: 23 * 60, themeName: "hackerman" }
   const list = [
@@ -91,9 +112,9 @@ test("situations: battery, night (wrapping midnight) and theme; every fit applie
     { id: "c", enabled: true, when: { night: { from: "22:00", to: "07:00" } }, saver: "clock" },
     { id: "d", enabled: true, when: { theme: { name: "Hackerman" } }, saver: "blank" }
   ]
-  // night and theme both hold: one merged situation, the saver from the earlier rule
+  // night and theme both hold: one merged situation, both savers in play
   assert.equal(M.activeSituation(list, ctx).id, "c+d")
-  assert.equal(M.activeSituation(list, ctx).saver, "clock")
+  assert.deepEqual(M.activeSituation(list, ctx).savers, ["clock", "blank"])
   assert.equal(M.activeSituation(list, { ...ctx, minuteOfDay: 12 * 60 }).id, "d")
   assert.equal(M.activeSituation(list, { ...ctx, minuteOfDay: 12 * 60, themeName: "nord", batteryPercent: 10 }).id, "b")
   assert.equal(M.activeSituation(list, { onBattery: false, minuteOfDay: 12 * 60, themeName: "nord" }), null)

@@ -369,10 +369,9 @@ function situationMatches(s, ctx) {
 
 function hasTiming(v) { return v !== undefined && v !== null && v !== "" }
 
-// Every enabled rule that fits applies at once: the saver comes from the
-// first that names one, each timing from the first that sets it. A saver
-// rule and a timings rule for the same moment therefore never fight; order
-// only matters between two rules that set the same thing. Null when nothing
+// Every enabled rule that fits applies at once. Each saver a fitting rule
+// names is in play (`savers`, and they take turns — no rule outranks
+// another); each timing comes from the first that sets it. Null when nothing
 // applies.
 function activeSituation(list, ctx) {
   if (!Array.isArray(list)) return null
@@ -380,17 +379,26 @@ function activeSituation(list, ctx) {
   for (var i = 0; i < list.length; i++) if (situationMatches(list[i], ctx)) hits.push(list[i])
   if (hits.length === 0) return null
   if (hits.length === 1) return hits[0]
-  var merged = { id: hits.map(function(s) { return s.id }).join("+"), enabled: true, when: {} }
+  var merged = { id: hits.map(function(s) { return s.id }).join("+"), enabled: true, when: {}, savers: [] }
   for (var j = 0; j < hits.length; j++) {
     var s = hits[j]
     for (var k in s.when) if (!(k in merged.when)) merged.when[k] = s.when[k]
     if (s.saver && !merged.saver) merged.saver = s.saver
+    if (s.saver && merged.savers.indexOf(s.saver) === -1) merged.savers.push(s.saver)
     if (hasTiming(s.screensaver) && !hasTiming(merged.screensaver)) merged.screensaver = s.screensaver
     // "Never lock" is a promise, so it beats any number another rule sets.
     if (s.lock === "never") merged.lock = "never"
     else if (hasTiming(s.lock) && !hasTiming(merged.lock)) merged.lock = s.lock
   }
   return merged
+}
+
+// The savers the rules in force pick, ready to show: one plays, several take
+// turns. Empty when no rule names a saver right now.
+function ruledSavers(situation, userSavers) {
+  if (!isPlainObject(situation)) return []
+  var ids = Array.isArray(situation.savers) ? situation.savers : (situation.saver ? [situation.saver] : [])
+  return ids.filter(function(id) { var s = saverById(id, userSavers); return !!s && !(s.series && s.series.importing) })
 }
 
 function conditionLabel(key, c) {
@@ -1052,14 +1060,15 @@ function firstTimeout(eff) {
   return Math.min.apply(null, candidates)
 }
 
-// Which saver comes up for this activation. A situation override wins; with
-// shuffle on, a random member of the rotation other than the last one shown.
+// Which saver comes up for this activation: one of the savers the rules in
+// force pick, if any; else with shuffle on, one of the rotation; else the
+// chosen one. From a set, never the last one shown if there is another.
 function pickSaver(cfg, situation, last, random, userSavers) {
   var c = cfg || defaults()
   var ready = function(id) { var s = saverById(id, userSavers); return !!s && !(s.series && s.series.importing) }
-  if (isPlainObject(situation) && situation.saver && ready(situation.saver)) return situation.saver
-  if (!c.shuffle) return ready(c.saver) ? c.saver : fallbackSaver(c)
-  var ids = rotation(c, userSavers)
+  var ruled = ruledSavers(situation, userSavers)
+  if (!ruled.length && !c.shuffle) return ready(c.saver) ? c.saver : fallbackSaver(c)
+  var ids = ruled.length ? ruled : rotation(c, userSavers)
   if (ids.length === 0) return fallbackSaver(c)
   var pool = ids.filter(function(id) { return id !== last })
   if (pool.length === 0) pool = ids
@@ -2434,8 +2443,8 @@ function defaultCondition(key, ctx) {
 }
 
 // Turn one condition on or off for a saver. Turning the last one off removes
-// the rule; turning one on for a saver without a rule appends one (later
-// rules yield to earlier ones — first match wins).
+// the rule; turning one on for a saver without a rule appends one (savers
+// whose rules fit together take turns; order only matters for timings).
 function setRuleCondition(situations, saverId, key, on, ctx) {
   var list = Array.isArray(situations) ? cloneJson(situations) : []
   var at = ruleIndexFor(list, saverId)
@@ -2490,10 +2499,8 @@ function playsLabel(cfg, saverId, userSavers) {
 // read this, so they cannot disagree with the screensaver.
 function playingName(cfg, situation, userSavers) {
   var c = cfg || defaults()
-  if (isPlainObject(situation) && situation.saver) {
-    var ruled = saverById(situation.saver, userSavers)
-    if (ruled) return ruled.name
-  }
+  var ruled = ruledSavers(situation, userSavers)
+  if (ruled.length) return ruled.map(function(id) { return saverById(id, userSavers).name }).join(" + ")
   if (c.shuffle) return "shuffle"
   var chosen = saverById(c.saver, userSavers) || SAVERS[0]
   return chosen.name
@@ -2653,6 +2660,7 @@ if (typeof module !== "undefined") {
     inWindow: inWindow,
     situationMatches: situationMatches,
     activeSituation: activeSituation,
+    ruledSavers: ruledSavers,
     situationLabel: situationLabel,
     hasTiming: hasTiming,
     timingsRuleIndex: timingsRuleIndex,

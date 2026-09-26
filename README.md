@@ -118,7 +118,7 @@ all** tile.
 | panel | ⚙ on a tile | the same three blocks on every tile: **LOOK** (its words or artwork, and the knobs of its type), **ON TOP** (its widgets), and **When it plays** (its rule, folded to what it says), plus Delete; the Original has no widgets. ▶ and ⚙ appear while the pointer or the keyboard cursor is on a tile |
 | panel | click another tile while a ⚙ panel is open | the panel follows to that tile |
 | panel | **Timings** | the screensaver and lock sliders, **Not while a window is fullscreen**, and on laptops **Different timings on battery** and **Never lock while docked** — each exception an ordinary rule underneath |
-| panel | **Shuffle** in the gallery's header | the tiles become checkboxes; the shuffle plays the ticked ones (none ticked: all of them), each once in a random order before any comes round again. **Select all**, beside it, ticks every saver (then **Clear** unticks them), and the **Next saver** slider under the header sets how long each one plays before the next while the screen is up — at the far left *each start* (the default: one saver per session), otherwise anything from 30 seconds to an hour, typed over its readout like the timings (`1:30`, or `5` for five minutes). A rule in force beats the shuffle — docked → Wordmark, say, plays Wordmark and the timer holds — and a line under the header names the rule while it does. |
+| panel | **Shuffle** in the gallery's header | the tiles become checkboxes; the shuffle plays the ticked ones (none ticked: all of them), each once in a random order before any comes round again. **Select all**, beside it, ticks every saver (then **Clear** unticks them), and the **Next saver** slider under the header sets how long each one plays before the next while the screen is up — at the far left *each start* (the default: one saver per session), otherwise anything from 30 seconds to an hour, typed over its readout like the timings (`1:30`, or `5` for five minutes). Savers picked by a rule in force play instead of the ticks; a line under the header names them. |
 | panel | 󰅶 Stay awake | the coffee cup — top of the panel, same as Super+Ctrl+I |
 | panel | ▶ on a tile | preview it |
 | panel | the **Add** tile | a new saver of any kind: *Describe it*, *Words*, *Pictures*, *A clip*, *Clock* or *Blank*, each with only the settings it needs; pasting a picture or a clip picks the kind for you |
@@ -427,9 +427,10 @@ moment the monitor is unplugged). Whether the lid closing sends the machine
 to sleep is logind's decision, not the screensaver's — see
 `HandleLidSwitchExternalPower` in `logind.conf(5)`.
 
-Every rule that fits applies at once: the saver comes from the first rule
-that names one, each timing from the first rule that sets it, and *never
-lock* beats any number another rule sets. So a clip for the evenings and a
+Every rule that fits applies at once. Each saver it picks is in play — give
+three savers the Docked condition and they take turns while docked, one per
+**Next saver** — and no rule outranks another. Each timing comes from the
+first rule that sets it, and *never lock* beats any number another rule sets. So a clip for the evenings and a
 set of company logos for the working day is two tiles — give the clip a night
 rule from 17:00 to 08:30 and click the logos — and the battery timings still
 apply when the clip is playing. Nothing in the package is anyone's content:

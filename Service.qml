@@ -1126,12 +1126,12 @@ Item {
   }
 
   // Shuffle, timed: while the screen is up, move on to another saver from the
-  // set every so often. A rule in force names its own saver, so it stays.
+  // set every so often — the ruled savers when rules are in force.
   Timer {
     id: shuffleTimer
     interval: Math.max(30, M.shuffleEvery(root.cfg)) * 1000
     repeat: true
-    running: root.overlayVisible && root.cfg.shuffle === true && M.shuffleEvery(root.cfg) > 0 && !root.ruledSaver
+    running: root.overlayVisible && root.turnSet.length > 1 && M.shuffleEvery(root.cfg) > 0
     onTriggered: root.shuffleNext()
   }
   // Whatever brought a new saver up — the timer, or → — the wait starts over.
@@ -1139,20 +1139,16 @@ Item {
   // Which saver comes up: a rule's, the chosen one, or — shuffling — the next
   // from the bag, so every saver in the set plays once before any repeats.
   property var shuffleBag: []
-  // The saver a rule in force names, if it is ready to show; it beats the
-  // shuffle, so while it holds the timer does not jump anywhere — not even
-  // from a saver previewed by hand to the rule's.
-  readonly property string ruledSaver: {
-    var s = root.situation
-    if (!M.isPlainObject(s) || !s.saver) return ""
-    var saver = M.saverById(s.saver, root.userSavers)
-    return saver && !(saver.series && saver.series.importing) ? s.saver : ""
-  }
+  // The savers the rules in force pick, ready to show. They beat the shuffle;
+  // one plays alone, several take turns just as the shuffle does.
+  readonly property var ruledSavers: M.ruledSavers(root.situation, root.userSavers)
+  // What the screen draws from right now: the ruled savers, else the shuffle,
+  // else nothing to turn through.
+  readonly property var turnSet: root.ruledSavers.length ? root.ruledSavers : (root.cfg.shuffle === true ? M.rotation(root.cfg, root.userSavers) : [])
   function pickShuffled(last) {
     var id = M.pickSaver(root.cfg, root.situation, last, undefined, root.userSavers)
-    var ruled = M.isPlainObject(root.situation) && root.situation.saver === id
-    if (!root.cfg.shuffle || ruled) return id
-    var r = M.drawFromBag(M.rotation(root.cfg, root.userSavers), root.shuffleBag, last)
+    if (root.turnSet.length < 2) return id
+    var r = M.drawFromBag(root.turnSet, root.shuffleBag, last)
     root.shuffleBag = r.bag
     return r.id || id
   }
@@ -1167,7 +1163,8 @@ Item {
 
   function nextSaver() {
     if (!root.overlayVisible) return
-    root.overlaySaver = M.nextSaver(root.cfg, root.overlaySaver, root.userSavers)
+    var set = root.ruledSavers
+    root.overlaySaver = set.length > 1 ? set[(set.indexOf(root.overlaySaver) + 1) % set.length] : M.nextSaver(root.cfg, root.overlaySaver, root.userSavers)
     root.lastSaver = root.overlaySaver
     logEvent("overlay-next", root.overlaySaver)
   }
@@ -1315,6 +1312,7 @@ Item {
       draft: root.importDraft ? (root.importDraft.step || "start") : null,
       situation: root.situation ? root.situation.id : null,
       situationSaver: root.situation && root.situation.saver ? root.situation.saver : null,
+      ruledSavers: root.ruledSavers,
       context: root.situationContext,
       enabled: root.idleEnabled,
       stayAwake: root.stayAwake,
